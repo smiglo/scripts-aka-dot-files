@@ -1,0 +1,10 @@
+# vim: ts=4 list
+
+# TARGETS = 
+# TARGET ?= 
+
+include $(MAKEFILE_COMMON)/Common.mk
+
+# target-i-th: target-i-th.o
+# 		@$(CC) $(CFLAGS_C) $< $(LIBS) -o $@.out
+

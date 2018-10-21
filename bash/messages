@@ -1,0 +1,66 @@
+#!/bin/bash
+
+MEM_PATH=${TMP_MEM_PATH:-$HOME/.tmp/.mem}
+: ${MSG_RECEIVER_DIR:=$MEM_PATH/msg_receiver}
+: ${MSG_RECEIVER_SEND_METHOD:="_msg_default_sender_"}
+
+if [ "$MSG_RECEIVER_SEND_METHOD" == '_msg_ssh_sender_' ]; then
+  [ -z "$MSG_RECEIVER_SSH_HOST" ] && echo "MSG_RECEIVER_SSH_HOST not defined" && exit 1
+  [ -z "$MSG_RECEIVER_SSH_USER" ] && echo "MSG_RECEIVER_SSH_USER not defined" && exit 1
+fi
+
+msg_receiver_file=$MSG_RECEIVER_DIR/messages.txt
+
+if [ "$1" == 'login' ]; then
+  debug=false
+  $debug && log_file=$TMP_PATH/msg_receiver.log
+
+  log() {
+    $debug && echo "$($BASH_PATH/aliases date): $1" >>$log_file
+  }
+
+  _msg_receiver_() {
+    MSG_USE_MEMFS=true
+    if $MSG_USE_MEMFS; then
+      while [ ! -f $MEM_PATH/mounted.txt ]; do
+        log "Waiting for memfs"
+        sleep 1
+      done
+      log "Memfs mounted"
+    fi
+    rm -rf $MSG_RECEIVER_DIR
+    command mkdir -p $MSG_RECEIVER_DIR 1>/dev/null 2>&1
+    touch $msg_receiver_file
+    log "Waiting"
+    tail -F $msg_receiver_file | while read line; do
+      log "New Msg [$line]"
+      [ -z "$line" ] && log "Skipped-1" && continue
+      local title=$(echo $line|cut -d'"' -f 2)
+      [ -z "$title" ] && log "Skipped-2" && continue
+      local msg=$(echo $line|cut -d'"' -f 4)
+      [ -z "$msg" ] && log "Skipped-3" && continue
+      terminal-notifier -title "$title" -message "$msg" 1>/dev/null 2>&1
+      log "Message [$title, $msg] has been sent"
+    done
+    log "Exiting"
+  }
+  log "Starting"
+  _msg_receiver_
+else
+  _msg_default_sender_() {
+    echo "\"$1\" \"$2\"" >> $msg_receiver_file
+  }
+
+  _msg_ssh_sender_() {
+    echo "\"$1\" \"$2\"" | ssh $MSG_RECEIVER_SSH_USER@$MSG_RECEIVER_SSH_HOST cat ">>" $msg_receiver_file
+  }
+
+  _msg_sender_() {
+    [ -z "$1" ] && return
+    local title=$1
+    local msg=${2-$title}
+    $MSG_RECEIVER_SEND_METHOD "$title" "$msg"
+  }
+  alias sendMsg='_msg_sender_ $@'
+fi
+

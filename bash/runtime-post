@@ -1,0 +1,93 @@
+#!/bin/bash
+# vim: fdl=0
+
+# Is installed # {{{
+${RCSTUFF_RUNTIME_POST_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
+export RCSTUFF_RUNTIME_POST_INSTALLED=true
+[[ $1 == '--force' ]] && shift
+# }}}
+# Runtime file # {{{
+RUNTIME_POST_FILE=$RUNTIME_PATH/runtime-post.bash
+[[ -e $RUNTIME_POST_FILE ]] && source $RUNTIME_POST_FILE
+for i in $BASH_PROFILES; do
+  [[ -e $RUNTIME_POST_FILE.$i ]] && source $RUNTIME_POST_FILE.$i
+done
+unset RUNTIME_POST_FILE
+# }}}
+# TMUX_STATUS_RIGHT_EXTRA # {{{
+TMUX_STATUS_RIGHT_EXTRA_SORTED=
+while read l; do
+  l=${l#*:}
+  l=$(echo $l)
+  [[ -z $l ]] && continue
+  export TMUX_STATUS_RIGHT_EXTRA_SORTED+="$l "
+done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
+unset l TMUX_STATUS_RIGHT_EXTRA
+# }}}
+# Source profiles' runtimes {{{
+for i in $BASH_PROFILES; do
+  [[ -e $BASH_PATH/profiles/$i/runtime-post ]] && source $BASH_PATH/profiles/$i/runtime-post
+done # }}}
+if ${CHANGE_UTILS_PATHS:-false}; then # {{{
+  [[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
+  [[ ! -e $VIM_UNDOES_PATH ]] && command mkdir -p $VIM_UNDOES_PATH
+  [[ ! -e $VIM_SESSIONS_PATH ]] && command mkdir -p $VIM_SESSIONS_PATH
+fi
+unset CHANGE_UTILS_PATHS
+# }}}
+# Remote changes # {{{
+src_dir="$SHARED_BASH_PATH/to-apply"
+if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]; then
+  now="$(command date +'%s')" rmt_chngs_file="$TMP_MEM_PATH/.remote.changes"
+  [[ -z $REMOTE_CHANGES_LAST ]] && REMOTE_CHANGES_LAST=0
+  if [[ $REMOTE_CHANGES_LAST != -1 && $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
+    [[ -e "$rmt_chngs_file" ]] && source "$rmt_chngs_file"
+  fi # }}}
+  if [[ $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then
+    export REMOTE_CHANGES_LAST="$now"
+    echo "export REMOTE_CHANGES_LAST=\"$REMOTE_CHANGES_LAST\"" > $rmt_chngs_file
+    i= sum= h_sum= file= p= found=
+    for i in $src_dir/*; do # {{{
+      file="${i##*/}"
+      # To apply or not to apply # {{{
+      [[ -d $i ]] && continue
+      [[ $i != *.sh && $i != *.enc ]] && continue
+      [[ $i == *.sh && ! -x $i ]] && continue
+      [[ $i == *.sh ]] && ! ${REMOTE_CHANGES_ALLOW_PLAIN:-true} && continue
+      [[ $i == *.enc && -z $REMOTE_CHANGES_PWD ]] && continue
+      if [[ $file != all* ]]; then # {{{
+        found=false
+        for p in $BASH_PROFILES; do
+          [[ $file == ${p}* ]] && found=true && break
+        done
+        ! $found && continue
+      fi # }}} # }}}
+      sum="$(shasum $i | cut -d\  -f1)"
+      h_sum="$(echo -n ${HOSTNAME%%.*} | shasum | cut -d\  -f1)"
+      [[ -e "$src_dir/.applied" ]] && command grep -q "^$h_sum $sum" "$src_dir/.applied" && continue
+      echo "Applying remote changes [$file]..." >/dev/stderr
+      if [[ $file == *.enc ]]; then # {{{
+        j="$TMP_MEM_PATH/${file%.enc}"
+        $BASH_PATH/aliases encryptor \
+          --pass "$($BASH_PATH/profiles/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")" "$i" "$j" 1>/dev/null 2>&1 \
+          || { echo "Cannot decrypt [$file]"; continue; }
+        command chmod +x "$j"
+        i="$j"
+        unset j
+      fi # }}}
+      $i && echo "$h_sum $sum $file $(command date +'%Y%m%d')" >>"$src_dir/.applied"
+      [[ $file == *.enc ]] && rm -f "$i"
+    done # }}}
+    unset i sum h_sum file p found
+  fi
+  unset now rmt_chngs_file
+fi
+unset REMOTE_CHANGES_APPLY REMOTE_CHANGES_ALLOW_PLAIN REMOTE_CHANGES_PWD src_dir
+# }}}
+# Check personalities # {{{
+[[ -z $PERS_USERS ]] && echo "Personalities not found!!!" >/dev/stderr && sleep 2
+# }}}
+if $IS_MAC; then # {{{
+  [[ -z $PS1_CURSOR_COLOR ]] && PS1_CURSOR_COLOR=false
+fi # }}}
+

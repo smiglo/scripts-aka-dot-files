@@ -1,0 +1,177 @@
+#!/bin/bash
+# vim: fdl=0
+
+# Check arguments and do really basics # {{{
+what_to_do='full'
+verbose=false
+[[ -z "$PS1" ]] && what_to_do="min"
+while [[ ! -z $1 ]]; do
+  case $1 in
+  --force)    unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs);;
+  -v)         verbose=true;;
+  --do-full)  what_to_do='full';;
+  --do-basic) what_to_do='basic';;
+  --do-min)   what_to_do='min';;
+  --no-rc)    what_to_do='nothing';;
+  *)          break;;
+  esac
+  shift
+done
+if ${RCSTUFF_BASHRC_INSTALLING:-false}; then
+  $verbose && echo "Already being installed [$0, params=($@), tree=(${BASH_SOURCE[*]})]" >/dev/stderr
+  unset what_to_do verbose
+  return
+fi
+# Really nothing # {{{
+if [[ "$what_to_do" == 'nothing' ]]; then
+  export PS1='\w $ '
+  unset PROMPT_COMMAND what_to_do verbose
+  return
+fi # }}}
+export RCSTUFF_BASHRC_INSTALLING=true
+if [[ ! -z "$PS1" ]] && ! declare -f ___rcstuff_bashrc_markup >/dev/null 2>&1; then
+  $verbose && echo "Unsetting RCSTUFF_*" >/dev/stderr
+  unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs)
+  ___rcstuff_bashrc_markup() { : ; }
+fi
+# }}}
+# If not running interactively and not forced, don't do anything # {{{
+if [[ "$what_to_do" == 'min' ]]; then
+  [[ -e $BASH_PATH/colors ]] && source $BASH_PATH/colors ''
+  unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
+  return
+fi # }}}
+# Set paths # {{{
+export BIN_PATH=~/.bin
+export BASH_PATH=$BIN_PATH/bash
+# }}}
+# Source basics # {{{
+[[ -e $BASH_PATH/runtime ]] && source $BASH_PATH/runtime ''
+if ${IS_IN_MC:-false}; then
+  unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
+  return
+else
+  unset IS_IN_MC
+fi
+[[ -e $BASH_PATH/colors ]] && source $BASH_PATH/colors ''
+[[ -e $BASH_PATH/cfg ]] && source $BASH_PATH/cfg ''
+[[ -e $BASH_PATH/runtime-post ]] && source $BASH_PATH/runtime-post ''
+[[ -e $BASH_PATH/aliases ]] && source $BASH_PATH/aliases ''
+if [[ $what_to_do == 'full' ]]; then
+  [[ -x $BASH_PATH/completion ]] && source $BASH_PATH/completion ''
+fi
+[[ "$TERM" == 'cygwin' ]]        && source $BASH_PATH/cygwin ''
+# }}}
+# Remove duplicates from PATH # {{{
+export PATH="${PATH//@END@:}"
+export PATH="${PATH//::/:}"
+export PATH="${PATH//:.:/:}"
+export PATH="${PATH%:}"
+export PATH="$(printf "%s" "${PATH}" | /usr/bin/awk -v RS=: -v ORS=: '!($0 in a) {a[$0]; print}')"
+export PATH
+# }}}
+# Clean # {{{
+if [[ "$what_to_do" == 'full' ]]; then # {{{
+  if [[ ! -z $TMUX_USE_NICE_PRIO ]]; then # {{{
+    renice -n 0 $$ >/dev/null 2>&1
+    command ps -U $USER -o pid,nice,comm,cmd | command grep -e "^[^\s]\+\s\+$TMUX_USE_NICE_PRIO" | command grep -v "tmux: server" | while read i; do
+      pid="${i/ *}"
+      $verbose && echo "Renicing process $(echo $i | awk '{print $3, "[", $4, "]"}') [pid=$pid]" >/dev/stderr
+      sudo renice -n 0 $pid >/dev/null 2>&1
+    done
+    unset i
+  fi # }}}
+  # }}}
+else # {{{
+  unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
+  return
+fi # }}}
+# }}}
+# Only in interactive mode # {{{
+# Do not start extra features if root and BASH_START_EXTRA_FEATURES was not defined explicity # {{{
+if [[ $(id -u) == 0 && ! -n $BASH_START_EXTRA_FEATURES ]]; then
+  export BASH_EXTRA_FEATURES='tmux-startup'
+  export TMUX_INIT_SESSIONS='ROOT'
+  export TMUX_STATUS_RIGHT_EXTRA_SORTED='tmux_info time'
+  export TMUX_DEFAULT_SESSION="$TMUX_INIT_SESSIONS"
+fi # }}}
+# Start extra features # {{{
+if ${BASH_START_EXTRA_FEATURES:-true}; then
+  [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES='ssh-agent update-repo tmux-startup knowledge-base-dir'
+  # Set up ssh-agent # {{{
+  if [[ $BASH_EXTRA_FEATURES == *ssh-agent* ]]; then
+    if [[ ! -n "$SSH_CLIENT" ]]; then
+      source $BIN_PATH/fix_ssh_agent.sh start_if_needed
+    else
+      source $BIN_PATH/fix_ssh_agent.sh fix_ssh_agent
+    fi
+  fi # }}}
+  # Start TMUX # {{{
+  if [[ ! -n $TMUX ]]; then
+    # Update repo # {{{
+    if [[ $BASH_EXTRA_FEATURES == *update-repo* ]]; then
+      $BIN_PATH/setup_updater.sh && exec bash
+    fi # }}}
+    # Start tmux if not started or not attached # {{{
+    if ! $IS_MAC; then
+      export TERMNAME="$(command ps -o 'cmd=' -p $(command ps -o 'ppid=' -p $$))"
+    else
+      export TERMNAME="$(command ps -o 'command=' -p $(command ps -o 'ppid=' -p $$))"
+    fi
+    if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]]; then
+      if ! tmux ls 2>/dev/null | command grep -q "attached"; then
+        unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING
+        $BIN_PATH/tmux-startup.sh --lock --attach
+      fi
+    fi # }}}
+  fi # }}}
+  # Knowledge Base dir # {{{
+  if [[ $BASH_EXTRA_FEATURES == *knowledge-base-dir* ]]; then
+    if [[ -d $TICKET_TOOL_PATH ]] && ! declare -f j >/dev/null 2>&1; then # {{{
+      if ! ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
+        [[ -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] && DEFINE_TICKET_TOOL_HELPER=true
+      fi # }}}
+      if ! ${DEFINE_TICKET_TOOL_HELPER:-false} && [[ $PWD == $HOME* ]]; then # {{{
+        p="$PWD" ticket_data=".ticket-data.sh"
+        while true; do # {{{
+          if [[ -e "$p/$ticket_data" ]]; then # {{{
+            unset $(echo ${!TICKET_*} | sed 's/TICKET_TOOL_PATH//')
+            export TICKET_PATH="$p"
+            source "$p/$ticket_data" ''
+            DEFINE_TICKET_TOOL_HELPER=true
+            break
+          fi # }}}
+          [[ $p == $HOME || $p == "/" ]] && break
+          p="$(command cd "$p/.."; pwd)"
+        done # }}}
+        unset p ticket_data
+      fi # }}}
+      if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
+          function j() {
+            case $1 in
+            --env)  shift; eval $($TICKET_TOOL_PATH/j-cmd.sh "$@");;
+            @@)     [[ $2 == 1 ]] &&  echo '--env'
+                    [[ $3 == '--env' && $4 == '--env' ]] && set -- '@@' 1
+                    ;;&
+            *)      $TICKET_TOOL_PATH/j-cmd.sh "$@" ;;
+            esac
+          }
+          complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic j
+      fi # }}}
+    fi # }}}
+  fi
+  unset DEFINE_TICKET_TOOL_HELPER
+  # }}}
+fi # }}}
+# ZFZ # {{{
+if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
+  set -o vi
+  source $HOME/.fzf.bash ''
+  export RCSTUFF_FZF_INSTALLED=true
+fi # }}}
+# }}}
+
+unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
+
+true
+

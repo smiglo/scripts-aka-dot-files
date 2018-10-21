@@ -1,0 +1,24 @@
+Session*.vim
+.DS_Store
+*.out
+*.pyc
+*.swo
+*.swp
+*~
+nohup.out
+
+*.adoc.html
+
+/build/
+tmp-tb
+
+cscope.*
+tags
+
+.gitbranches
+
+# ------------------------------------------------------------------------
+# Could be quite controversial, let's see:
+.*-data.txt
+# ------------------------------------------------------------------------
+

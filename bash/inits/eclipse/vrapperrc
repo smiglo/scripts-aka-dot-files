@@ -1,0 +1,11 @@
+set autoindent
+set ignorecase
+set smartcase
+
+noremap tn gt
+noremap tp gT
+noremap L gt
+noremap H gT
+
+noremap <Tab> %
+

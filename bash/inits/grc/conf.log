@@ -1,0 +1,52 @@
+
+# Banner
+regexp=^[ _\-//|\\()']+$
+colours=red
+count=stop
+======
+# Msg: error
+regexp=^!.*
+colours=bold red
+count=once
+======
+# Msg: warning
+regexp=^\?
+colours=bold yellow
+count=once
+======
+# Msg: dbg
+regexp=^#
+colours=bold green
+count=once
+======
+# Timestamp
+regexp=\d\d:\d\d:\d\d.\d\d\d 
+colours="\033[38;5;190m"
+count=once
+======
+# Module
+regexp=[\|\w+]+\|
+colours="\033[38;5;33m"
+count=once
+======
+# Thread ID
+regexp=0x[\dA-F]{8}\|
+colours="\033[38;5;237m"
+count=once
+======
+# TB]
+regexp=TB\].*
+colours="\033[38;5;220m"
+count=once
+======
+# Location
+regexp=\[line.*\]$
+colours="\033[38;5;240m"
+count=once
+
+# ======
+# Exception
+# regexp=Exception
+# colours="\033[38;5;15m\033[48;5;9m"
+# count=once
+

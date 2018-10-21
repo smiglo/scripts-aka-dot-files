@@ -1,0 +1,146 @@
+#!/bin/bash
+# vim: fdl=0
+
+# Is installed # {{{
+${RCSTUFF_COMPLETION_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
+export RCSTUFF_COMPLETION_INSTALLED=true
+[[ $1 == '--force' ]] && shift
+# }}}
+_completion_generic() { # {{{
+  local cur= prev= opts= cmd= _alias= param= i=
+  cur=${COMP_WORDS[COMP_CWORD]}
+  prev=${COMP_WORDS[COMP_CWORD-1]}
+  cmd=${COMP_WORDS[0]}
+  param="@@"
+  if [[ $cmd == 'git' ]]; then
+    cmd="git-cmds.sh"
+    param+="${COMP_WORDS[1]}"
+  else
+    _alias=$(alias | command grep "alias $cmd=")
+    if [[ $? == 0 ]]; then
+      _alias=$(echo $_alias | sed "s/alias $cmd=//")
+      cmd=${_alias//\'} #' //Vim formatting fixing}
+      cmd=${cmd/*;}
+      cmd=${cmd/ *}
+    fi
+  fi
+  opts=$($cmd $param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})
+  set -- $opts
+  opts=''
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    @@*) case ${1:2} in # {{{
+         -f) while read i; do # {{{
+               opts+=" ${i// /\\ }"
+               [[ -d $i ]] && opts+='/'
+             done < <(compgen -f -- "$cur");; # }}}
+         -d) while read i; do # {{{
+               opts+=" ${i// /\\ }/"
+             done < <(compgen -d -- "$cur");; # }}}
+         *)  while read i; do # {{{
+               opts+=" ${i// /\\ }"
+             done < <(compgen ${1:2} -- "$cur");; # }}}
+         esac;; # }}}
+    *) opts+=" $1";;
+    esac
+    shift
+  done # }}}
+  COMPREPLY=()
+  i=0
+  while read opts; do # {{{
+    COMPREPLY[$i]="${opts// /\\ }"
+    i=$(($i+1))
+  done < <(compgen -W "$opts" -- "$cur") # }}}
+}
+# }}}
+_completion_git_cmds() { # {{{
+  local cur opts
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+  opts=
+
+  if [ "$COMP_CWORD" == '1' ]; then
+    opts="backup remote-rm rbb"
+  else
+    local dir=$PWD
+    while [ ! -d "$dir/.git" ]; do
+      [ "$dir" == '/' ] && break
+      dir=$(cd $dir/.. && pwd)
+    done
+
+    case "${COMP_WORDS[1]}" in
+    "backup") ;;
+    "remote-rm") [ -d $dir/.git/refs/heads ] && opts=$(ls $dir/.git/refs/heads);;
+    "rbb") [ -d $dir/.git/refs/heads ] && opts=$(ls $dir/.git/refs/heads);;
+    esac
+  fi
+  COMPREPLY=( $(compgen -W "$opts" -- $cur) )
+}
+# }}}
+_completion_vim() { # {{{
+  COMPREPLY=()
+  local cmd=${COMP_WORDS[0]}
+  [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
+  _completion_generic
+}
+# }}}
+_do_vim_completion() { # {{{
+  local i
+  for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
+    complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim $i
+  done
+ complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim vim-session
+}
+# }}}
+# Completion for git aliases defined in git-cmds.sh {{{
+_git_sync()     { _completion_generic; }
+_git_backup()   { _completion_generic; }
+_git_gitst()    { _completion_generic; }
+_git_ch_pick()  { _completion_generic; }
+_git_userset()  { _completion_generic; }
+# }}}
+# Set generic completion {{{
+COMPLETION_GENERIC_UTILS+=" mk_tar.sh asciidoc2html.sh gitst do_sync.sh tmux-startup.sh"
+for i in $COMPLETION_GENERIC_UTILS $TO_INSTALL_BIN_MISC; do
+  type $i >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i # || echo "Util [$i] not found" >/dev/stderr
+done
+unset COMPLETION_GENERIC_UTILS
+for i in $COMPLETION_GENERIC_FUNCTIONS; do
+  type $i >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i || echo "Function [$i] not found" >/dev/stderr
+done
+unset COMPLETION_GENERIC_FUNCTIONS
+# }}}
+# Git-cmds # {{{
+complete $COMPLETE_DEFAULT_PARAMS -F _completion_git_cmds git_cmds.sh
+# }}}
+# Hosts # {{{
+if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command grep -vq "^|1|"; then
+  complete -W "$( echo `cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
+fi # }}}
+# Vim # {{{
+_do_vim_completion
+# }}}
+# tldr # {{{
+complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
+# }}}
+# Brew & Mac-Ports # {{{
+if $IS_MAC; then
+  if type brew 2&>/dev/null; then
+    for cf in $(brew --prefix)/etc/bash_completion.d/*; do
+      source "$cf"
+    done
+    unset cf
+  fi
+  [[ -e /opt/local/etc/profile.d/bash_completion.sh ]] && source /opt/local/etc/profile.d/bash_completion.sh
+fi # }}}
+# Source additional completions {{{
+for i in $(ls $BASH_PATH/completion.d); do
+  [[ -f $BASH_PATH/completion.d/$i ]] && source $BASH_PATH/completion.d/$i
+done
+# }}}
+# Source profile specic completions {{{
+for i in $BASH_PROFILES; do
+  [[ -e $BASH_PATH/profiles/$i/completion ]] && source $BASH_PATH/profiles/$i/completion
+done
+# }}}
+

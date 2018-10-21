@@ -1,0 +1,7 @@
+
+local tmp
+tmp = config("mode2", "hex");
+tmp = config("mode",  "default");
+tmp = config("prompt", "# ");
+tmp = config("display", 6);
+

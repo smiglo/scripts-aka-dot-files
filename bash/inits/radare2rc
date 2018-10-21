@@ -1,0 +1,9 @@
+#eco solarized
+eco onedark
+
+# e asm.describe = true
+e asm.syntax = intel
+e cfg.fortunes.type = tips, fun, nsfw
+e dbg.funcarg = true
+e scr.utf8 = true
+

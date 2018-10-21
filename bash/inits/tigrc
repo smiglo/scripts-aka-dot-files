@@ -1,0 +1,4 @@
+set vertical-split = auto
+bind generic K previous
+bind generic J next
+

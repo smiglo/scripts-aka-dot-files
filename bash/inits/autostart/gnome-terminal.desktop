@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Exec=\sgnome-terminal --maximize
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name[en_US]=Terminal
+Name=Terminal
+Comment[en_US]=
+Comment=

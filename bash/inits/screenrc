@@ -1,0 +1,85 @@
+escape ^@^@
+#activity "In [%n]"
+activity "activity in %n (%t) [%w:%s]~"
+altscreen on
+autodetach on
+defbce on
+deflogin on
+defflow off
+defscrollback 5000
+defutf8 on
+nethack on
+nonblock on
+startup_message off
+vbell off
+vbell_msg ""
+
+shell /bin/bash
+sorendition Yb
+
+blankerprg cmatrix -u8 -abs
+idle 180
+
+# Let's remove some dangerous key bindings ...
+bind k  # kill
+bind ^K # kill
+bind .  # dumptermcap
+bind \\ # quit
+bind ^H # next
+bind h  # hardcopy
+bind ^? # prev
+bind ,  # licence
+bind [  # copy
+bind ]  # paste
+bind x  # lockscreen
+bind ^X # lockscreen
+bind z  # suspend
+bind ^Z # suspend
+bind ^T # time
+bind v  # version
+bind w  # windows
+bind r  # wrap
+bind s  # xon
+bind q  # xoff
+bind b  # break
+bind ^B # break
+bind f  # flow
+
+# ... and make them better.
+bind a  title
+bind ^A title
+bind B  break
+bind Z  suspend
+bind K  kill
+bind I  login on
+bind O  login off
+bind }  history
+bind X  lockscreen
+bind  screen
+bind l  lastmsg # ^M takes enter, but also C-M
+bind j  meta
+bind ^J meta
+
+bind m  silence
+bind ^@ other
+
+bind ^] paste .
+bind ^\ quit
+
+bind ^B blanker
+
+bind h  focus left
+bind j  focus down
+bind k  focus up
+bind l  focus right
+
+bind =  resize =
+bind +  resize +3
+bind -  resize -3
+bind _  resize max
+
+termcapinfo xterm* 'ti@:te@:hs:ts=\E]0;:fs=\007:ds=\E]0;\007'
+
+hardstatus alwayslastline
+hardstatus string '%{= kG}[ %{B}%H %{G}][ %{w}%-Lw%{y}%n+%f %t%{w}%+Lw%= %{G}][ %{B}%S %{w}%c %{G}]'
+

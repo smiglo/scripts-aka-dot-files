@@ -1,0 +1,11 @@
+ENTRY "Desktop" URL "/$HOME/Desktop"
+ENTRY "Documents" URL "/$HOME/Documents/work"
+ENTRY "Downloads" URL "/$HOME/Downloads"
+GROUP "Misc"
+  ENTRY "TOM-WORK" URL "/media/$USER/TOM-data"
+ENDGROUP
+GROUP "My"
+  ENTRY "Documents" URL "/$HOME/Documents/priv"
+  ENTRY "Scripts" URL "/$MY_PROJ_PATH/scripts"
+  ENTRY "Vim" URL "/$MY_PROJ_PATH/vim"
+ENDGROUP

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Exec=$HOME/projects/my/scripts/bash/inits/keepboard/keepboard-start.sh
+Hidden=false
+NoDisplay=false
+Name[en_US]=Keepboard
+Name=Keepboard

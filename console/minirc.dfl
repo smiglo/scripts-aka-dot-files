@@ -1,0 +1,23 @@
+# Machine-generated file - use setup menu in minicom to change parameters.
+pu port /dev/ttyUSB0
+pu mdialpre         
+pu mdialsuf         
+pu mdialpre2        
+pu mdialsuf2        
+pu mdialpre3        
+pu mdialsuf3        
+pu mconnect         
+pu mnocon1          
+pu mnocon2          
+pu mnocon3          
+pu mnocon4          
+pu mhangup          
+pu mdialcan         
+pu statusline       enabled
+pu rtscts           No
+pu mfcolor          WHITE
+pu mbcolor          BLUE
+pu tfcolor          WHITE
+pu sfcolor          WHITE
+pu sbcolor          BLUE
+pu sound            No 

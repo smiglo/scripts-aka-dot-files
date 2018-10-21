@@ -1,0 +1,11 @@
+# vim: ts=4 list
+
+# Board specifics:
+BOARD_TAG    ?= uno
+
+# Project specifics:
+ARDUINO_LIBS  =
+
+# Common
+include $(ARDUINO_COMMON)/Common.mk
+

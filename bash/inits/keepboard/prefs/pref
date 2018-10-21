@@ -1,0 +1,33 @@
+<list>
+  <item>
+    <autosaveImages>false</autosaveImages>
+    <autopasteKeyModifiers>2</autopasteKeyModifiers>
+    <autopasteKeyCode>86</autopasteKeyCode>
+    <autostart>true</autostart>
+    <lookAndFeel>SYSTEM</lookAndFeel>
+    <mainFrameWidth>1318</mainFrameWidth>
+    <mainFrameHeight>476</mainFrameHeight>
+    <paused>false</paused>
+    <itemPreviewHidden>false</itemPreviewHidden>
+    <pasteMode>PASTE</pasteMode>
+    <showNameSearchColumn>false</showNameSearchColumn>
+    <showGroupSearchColumn>false</showGroupSearchColumn>
+    <tabsHidden>false</tabsHidden>
+    <buttonsHidden>false</buttonsHidden>
+    <groupComboBoxHidden>false</groupComboBoxHidden>
+    <toolbarHidden>false</toolbarHidden>
+    <trayIconHidden>false</trayIconHidden>
+    <allGroupsManuallyDeleted>false</allGroupsManuallyDeleted>
+    <dividerLocation>315</dividerLocation>
+    <previewAreaPosition>BOTTOM</previewAreaPosition>
+    <clipboardHistoryPreviewDialogLineWrap>false</clipboardHistoryPreviewDialogLineWrap>
+    <namedItemsPreviewDialogLineWrap>false</namedItemsPreviewDialogLineWrap>
+    <previewAreaLineWrap>false</previewAreaLineWrap>
+    <clipboardHistoryPreviewDialogWidth>600</clipboardHistoryPreviewDialogWidth>
+    <clipboardHistoryPreviewDialogHeight>400</clipboardHistoryPreviewDialogHeight>
+    <namedItemsPreviewDialogWidth>600</namedItemsPreviewDialogWidth>
+    <namedItemsPreviewDialogHeight>400</namedItemsPreviewDialogHeight>
+    <maxHistorySize>10000</maxHistorySize>
+    <autopaste>false</autopaste>
+  </item>
+</list>

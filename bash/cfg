@@ -1,0 +1,297 @@
+#!/bin/bash
+# vim: fdl=0
+
+# Is installed # {{{
+${RCSTUFF_CFG_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
+export RCSTUFF_CFG_INSTALLED=true
+[[ $1 == '--force' ]] && shift
+# }}}
+# Exports {{{
+# Term {{{
+if [[ ! -n $TMUX ]]; then
+  export TERM="xterm-256color"
+else
+  export TERM="screen-256color"
+fi
+# }}}
+# Git {{{
+export GIT_PS1_SHOWDIRTYSTATE=true
+export GIT_PS1_SHOWSTASHSTATE=true
+export GIT_PS1_SHOWUNTRACKEDFILES=true
+export GIT_PS1_SHOWUPSTREAM="auto"
+export GIT_PS1_DESCRIBE_STYLE="branch"
+export GIT_PS1_SHOWCOLORHINTS=true
+export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
+# }}}
+# Ack {{{
+export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match yellow"
+export ACK_PAGER="less"
+export ACK_PAGER_COLOR="less"
+# }}}
+# Ag {{{
+export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match 38;5;214"
+# }}}
+# FZF {{{
+export FZF_INSTALLED=false
+if [[ -f ~/.fzf.bash ]]; then
+  if which ag >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS -g ""'
+  fi
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+  if [[ -e $TMP_MEM_PATH/.fzf.alt-c-cmd.env ]]; then
+    export FZF_ALT_C_COMMAND="$(cat $TMP_MEM_PATH/.fzf.alt-c-cmd.env)"
+  else
+    export FZF_ALT_C_COMMAND="$(cat <<-EOF
+				command find \${dir:-.}
+					-mindepth 1
+					-type d
+					-a \(
+						\( -name .\* $( [[ -e ~/.agignore ]] && cat ~/.agignore | command grep -v '^\s*#\|^\s*$' | sed -e 's/^/-o -name /' -e 's/\*/\\\*/g' | tr '\n' ' ') \) -prune -o
+					-print \)
+					2>/dev/null | sed 's#^\./##'
+			EOF
+    )"
+    export FZF_ALT_C_COMMAND="$(echo $FZF_ALT_C_COMMAND)"
+    echo "$FZF_ALT_C_COMMAND" >$TMP_MEM_PATH/.fzf.alt-c-cmd.env
+  fi
+  fzf_exe="$BASH_PATH/aliases fzf_exe"
+  if [[ -e $TMP_MEM_PATH/.fzf.def-opts.env ]]; then
+    export FZF_DEFAULT_OPTS="$(cat $TMP_MEM_PATH/.fzf.def-opts.env)"
+  else
+    export FZF_DEFAULT_OPTS="$(cat <<-EOF
+				-m -x --algo=v2 -e +s --no-mouse --height 80% --border --tabstop=2 --exit-0
+				--color=dark,fg:15,fg+:15,bg+:238,hl:214,hl+:208,marker:3,pointer:2
+				--preview '$fzf_exe -c prev --prev 20 -f {1}'
+				--preview-window 'hidden'
+				--bind 'f1:execute($fzf_exe -c less -f {1})'
+				--bind 'f2:execute($fzf_exe -c vim  -f {1})'
+				--bind 'f3:execute($fzf_exe -c pane -f {1})'
+				--bind 'ctrl-a:select-all'
+				--bind '?:toggle-preview'
+				--bind 'ctrl-s:toggle-sort'
+				--bind 'ctrl-y:preview-up'
+				--bind 'ctrl-e:preview-down'
+			EOF
+    )"
+    export FZF_DEFAULT_OPTS="$(echo $FZF_DEFAULT_OPTS)"
+    echo "$FZF_DEFAULT_OPTS" >$TMP_MEM_PATH/.fzf.def-opts.env
+    export FZF_ALT_C_OPTS="-x --algo=v2"
+  fi
+  unset fzf_exe
+  export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
+  export FZF_INSTALLED=true
+fi
+# }}}
+# Default values for functions and scripts {{{
+export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
+export GREP_DEFAULT_PARAMS="--color --binary-files=binary"
+export GREP_COLORS='mt=38;5;214:ne:fn=36'
+export HL_DEFAULTS="+cC \<TB]"
+export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
+export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
+export HIGHLIGHT_DEFAULT="warning\|diagnostic\|"
+export TMUX_INIT_SESSIONS="MAIN"
+export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
+export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
+export TMUX_SMART_BLACKLIST="EMPTY_VALUE\|gitlab\.com\|github\.com"
+export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 025:time"
+export TMUX_PREFIX_2='C-q'
+[[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
+[[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
+export DATE_FMT="%Y%m%d-%H%M%S"
+export TERMINAL_HAS_EXTRA_CHARS=true
+export CD_LAST_DIRS=($PWD)
+[[ -e $HOME/Downloads ]] && export CD_LAST_DIRS_STORED+=":Dw@$HOME/Downloads"
+[[ -e $HOME/Desktop   ]] && export CD_LAST_DIRS_STORED+=":De@$HOME/Desktop"
+export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
+# }}}
+# Editor {{{
+export EDITOR="vim -c 'set cursorline'"
+export VISUAL=$EDITOR
+export SVN_EDITOR=$EDITOR
+# }}}
+# Aliases {{{
+export ALIASES_MAP=""
+# }}}
+# }}}
+# Shell setup {{{
+export HISTCONTROL="ignoreboth:erasedups"
+export HISTTIMEFORMAT="$DATE_FMT "
+export HISTFILESIZE=1000
+export HISTFILE=$HOME/.bash_history
+[[ -n $TMUX_SESSION ]] && export HISTFILE=$TMUX_SESSION_PATH/bash_history
+export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
+export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
+
+shopt -s histappend
+shopt -s checkwinsize
+# }}}
+# InputRC: Bash shortcuts {{{
+if [[ "$what_to_do" == 'full' ]]; then
+  bind 'set bell-style none'
+  bind 'set colored-stats on'
+  bind 'set completion-ignore-case on'
+  bind 'set completion-map-case on'
+  bind 'set completion-prefix-display-length 10'
+  bind 'set expand-tilde off'
+  bind 'set mark-directories on'
+  bind 'set mark-symlinked-directories on'
+  bind 'set menu-complete-display-prefix on'
+
+  bind 'set show-all-if-ambiguous on'
+  bind 'set show-all-if-unmodified on'
+  bind 'set skip-completed-text on'
+
+  bind 'set show-mode-in-prompt on'
+  if [[ $(bash --version  |  head -n1 | sed 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/') == 4.4* ]]; then
+    bind 'set vi-ins-mode-string "+"'
+    bind 'set vi-cmd-mode-string ":"'
+    bind 'set emacs-mode-string "@"'
+    bind 'set colored-completion-prefix on'
+  fi
+
+  for i in {emacs,vi-command,vi-insert}; do
+    bind "set keymap $i"
+    bind -r '\C-k'    # u for utils
+    bind '"\e[5~":    history-search-backward' # S-PgUp
+    bind '"\M-k":     history-search-backward'
+    bind '"\e[6~":    history-search-forward'  # S-PgDn
+    bind '"\M-j":     history-search-forward'
+    bind '"\e[Z":     complete'                # S-TAB
+    bind '"\C-k":     complete'                # C-k
+    bind '"	":      menu-complete'           # TAB
+    bind '"\C-b":     menu-complete-backward'  # C-B
+    bind '"\C-h":     dynamic-complete-history' # C-h
+    bind '"\M-.":     yank-last-arg'
+    bind '"\C-s":     forward-search-history'
+    bind '"\C-r":     reverse-search-history'
+    bind '"\M-#":     insert-comment'
+    bind '"\C-g":     kill-whole-line'
+    bind '"\M-\M-":   kill-whole-line'
+    bind '"\C-kk":    kill-whole-line'
+    bind '"\C-ks":    clear-screen'
+    bind '"\C-a":     beginning-of-line'
+    bind '"\C-e":     end-of-line'
+    bind '"\C-w":     backward-kill-word'
+    bind '"\C-T":     transpose-chars'
+    bind '"\C-t":     transpose-words'
+    bind '"\C-km(":   start-kbd-macro'
+    bind '"\C-km)":   end-kbd-macro'
+    bind '"\C-km-":   print-last-kbd-macro'
+    bind '"\C-kme":   call-last-kbd-macro'
+    bind '"\C-k/":    edit-and-execute-command'
+    bind '"\C-ke":    edit-and-execute-command'
+    pre=
+    case $i in
+    emacs)
+      bind '"JJ":      vi-editing-mode'
+      bind '"\C-kV":   "JJJJ"' # workaround for vi-movement-mode
+      bind '"\e[1;5C": forward-word'
+      bind '"\e[1;5D": backward-word'
+      ;;
+    vi-command) # vi-movement-mode
+      bind '"\C-kE":  emacs-editing-mode'
+      bind '"/":      reverse-search-history'
+      bind '"K":      history-search-backward'
+      bind '"J":      history-search-forward'
+      bind '".":      yank-last-arg'
+      bind '"yl":     yank-last-arg'
+      bind '"yn":     yank-nth-arg'
+      bind '"\e-":    yank-nth-arg'
+      pre='i'
+      ;;
+    vi-insert) # vi-editing-mode
+      bind '"\C-kE":   emacs-editing-mode'
+      bind '"JJ":      vi-movement-mode'
+      bind '"\e[1;5C": vi-next-word'
+      bind '"\e[1;5D": vi-prev-word'
+      if $FZF_INSTALLED; then
+        bind '"\el":"$(!!|fzf)\C-a \C-m"'
+      fi
+      ;;
+    esac
+    bind '"\C-kl":  "'${pre}' \C-g logout\C-m'
+    bind '"\C-kr":  "'${pre}' \C-g reset\C-m'
+    bind '"\C-l":   "'${pre}' \C-g clr\C-m'
+    if $FZF_INSTALLED; then
+      bind '"\C-f":  "'${pre}' fzfwr\C-m'
+    fi
+  done
+  unset i pre
+  bind 'set editing-mode vi'
+  bind 'set keymap vi-insert'
+  bind "set keyseq-timeout 200"
+fi
+# }}}
+# Completion {{{
+if [[ -f /etc/bash_completion ]] && ! shopt -oq posix; then
+  source /etc/bash_completion
+fi
+
+if [[ -e $GIT_PATH ]]; then
+  for i in $(ls $GIT_PATH/share/contrib/completion/{git-completion.bash,git-prompt.sh}); do
+    [[ -f $i ]] && source $i
+  done
+fi
+
+! declare -F __git_ps1 &>/dev/null && echo "Using internal __git_ps1" && source $BASH_PATH/completion.d/git/git-prompt.sh
+# }}}
+# Less {{{
+: ${LESSPIPE_PATH:="/usr/bin/lesspipe"}
+if [[ -x "$LESSPIPE_PATH" ]]; then
+  eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
+  export LESSOPEN='|'$LESSPIPE_PATH' %s 2>&-'
+fi
+export PAGER=less
+export LESSCHARSET='utf-8'
+# Use this if lesspipe.sh exists
+export LESS="-dFiJRSwX -x4 -z-4 -+F -~"
+# Less man page colors (makes Man pages more readable) {{{
+export LESS_TERMCAP_mb="$CGreen"
+export LESS_TERMCAP_md="$CCyan"
+export LESS_TERMCAP_me="$COff"
+export LESS_TERMCAP_so="$CRed"
+export LESS_TERMCAP_se="$COff"
+export LESS_TERMCAP_us="$CGold"
+export LESS_TERMCAP_ue="$COff"
+# }}}
+# }}}
+# PS1 {{{
+export PROMPT_COMMAND="set_title --set-none --set-terminal --tmux-session; bash_phistory; history -a"
+export PROMPT_DIRTRIM=3
+
+if [[ -n $STY || -n $TMUX ]]; then
+  export PROMPT_COMMAND="set_title; $PROMPT_COMMAND"
+fi
+
+export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
+
+export PS1_STATUS="short_git:default"
+export PS1_SHORTEN_PATH=true
+[[ -n "$SSH_CLIENT" && $PS1_SSH_CHANGE ]] && export PS1_STATUS="short_git_ssh:default_ssh"
+[[ $PERS_USERS != *\ $USER\ * && $USER != 'root' ]] && export PS1_STATUS="usuper_full:short_git"
+[[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
+# }}}
+# CapsLock <-> Ctrl # {{{
+if [[ -n $DISPLAY ]] && type setxkbmap xcape >/dev/null 2>&1; then
+  setxkbmap -option 'caps:ctrl_modifier'
+  if [[ ! "$(pidof xcape)" ]]; then
+    xcape -e 'Caps_Lock=Escape'
+  fi
+fi
+#}}}
+# Disable stopping terminal by C-S # {{{
+if type stty >/dev/null 2>&1; then
+  stty -ixon
+fi # }}}
+# Source profiles' configurations {{{
+for i in $BASH_PROFILES; do
+  [[ -e $BASH_PATH/profiles/$i/cfg ]] && source $BASH_PATH/profiles/$i/cfg
+done
+export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
+# }}}
+# Setup PROMPT_COMMAND {{{
+export PROMPT_COMMAND="PS1_setter; $PROMPT_COMMAND"
+export PROMPT_COMMAND_ORIG=$PROMPT_COMMAND
+# }}}
+

@@ -1,0 +1,117 @@
+#!/bin/bash
+
+maindir() {
+  local dir=$PWD
+  while true; do
+    [[ -e "$dir/.git" ]] && break
+    [[ "$dir" == '/' ]] && echo "" && return 1
+    dir=$(cd $dir/.. && pwd)
+  done
+  echo "$dir"
+  return 0
+}
+
+check() {
+  local dir=$(maindir)
+  local files=$(cd $dir; git diff --cached --name-only)
+  local err=0
+  local _err=0
+  local line=
+  local skip=
+  local keyword="GIT-HOOK-IGNORE:"
+  [[ -z "$files" ]] && return 0
+  for f in $files; do
+    [[ ! -e $f || -d $f ]] && continue
+    _err=0
+    cd $dir; git diff --cached $f | command grep -q --color "^+.*$1" && _err=1
+    if [[ $_err != 0 ]]; then
+      skip=false
+      cd $dir; command grep --color -Hn -E "$1" $f
+      while read line; do
+        [[ $line != \#* && $line != //#* ]] && break
+        [[ $line != *$keyword* ]] && continue
+        [[ $line != *$1* ]] && continue
+        skip=true
+        break
+      done < $f
+      ! $skip && err=$_err || echo "[$keyword] File was ignored"
+    fi
+  done
+  return $err
+}
+
+check_special() {
+  local dir=$(maindir)
+  local files=$(cd $dir; git diff --cached --name-only)
+  local err=0
+  local _err=0
+  local line=
+  local to_check=
+  local keyword="GIT-HOOK-SPECIAL:"
+  [[ -z "$files" ]] && return 0
+  for f in $files; do
+    [[ ! -e $f || -d $f ]] && continue
+    to_check=
+    while read line; do
+      [[ $line != \#* && $line != //#* ]] && break
+      [[ $line != *$keyword* ]] && continue
+      to_check=${line/*$keyword }
+      break
+    done < $f
+    [[ -z $to_check ]] && continue
+    _err=0
+    cd $dir; git diff --cached $f | command grep -q --color "^+.*$to_check" && _err=1
+    if [[ $_err != 0 ]]; then
+      cd $dir; command grep --color -Hn "$to_check" $f
+      err=$_err
+    fi
+  done
+  return $err
+}
+
+check_debugs() {
+  check '//\\<TB].*'
+  [[ "$?" != "0" ]] && return 1
+  check '\<printf'
+  [[ "$?" != "0" ]] && return 1
+  check 'Thread\.dumpStack()'
+  [[ "$?" != "0" ]] && return 1
+  check '\<System\.\(out\|err\)\.print'
+  [[ "$?" != "0" ]] && return 1
+  return 0
+}
+
+displayTB() {
+  local err=0
+  local phrase="TB]"
+  local sep="--------------------------------------------------------------\n"
+  local answer=
+  check "$phrase" >/dev/null
+  [[ "$?" == '0' ]] && return 0
+  echo -e "$sep"
+  echo "Lines with $phrase:"
+  echo -e "$sep"
+  check "$phrase"
+  echo -e "$sep"
+  return 0
+}
+
+err=0
+
+if [[ $err == 0 ]]; then
+  check_debugs
+  [[ "$?" != "0" ]] && echo -e "\nCommit REJECTED\n" && err=1
+fi
+
+if [[ $err == 0 ]]; then
+  check_special
+  [[ "$?" != "0" ]] && echo -e "\nCommit REJECTED\n" && err=1
+fi
+
+if [[ $err == 0 ]]; then
+  displayTB
+fi
+
+# [[ "$err" == '0' ]] && echo "TB] [ok]" && exit 1 #//TB]
+exit $err
+

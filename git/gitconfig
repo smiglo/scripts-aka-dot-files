@@ -1,0 +1,134 @@
+# vim: fdl=0 fdm=marker
+
+[user] # {{{
+  useConfigOnly = true #}}}
+[core] # {{{
+  editor = vim
+  pager = less -x4
+  excludesfile = ~/.gitignore
+  whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2
+# }}}
+[color] # {{{
+  ui = auto # }}}
+[diff] # {{{
+  tool = vimdiff
+  guitool = kdiff3 # }}}
+[diff "zip"] # {{{
+  textconv = unzip -v # }}}
+[diff "pdf"] # {{{
+  textconv = pdfinfo # }}}
+[diff "asta"] # {{{
+  textconv = hexdump -v -C # }}}
+[diff "bin"] # {{{
+  textconv = hexdump -v -C # }}}
+[difftool "vimdiff"] # {{{
+  cmd = vimdiff $LOCAL $REMOTE # }}}
+[difftool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[mergetool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[merge] # {{{
+  tool = vimdiff
+  conflictstyle = diff3
+  ff = false # }}}
+[alias] # {{{
+  adp = add -p
+  backup = !"git-cmds.sh backup"
+  bash-switches = !"git-cmds.sh bash-switches"
+  br = branch
+  cba = !"bash -c 'f() { set -xv; local c=$1 p=$1~; [[ $c == @* ]] && p+=\\~; git commit --fixup=$c --no-verify && git rebase -i --autosquash $p; }; f "$@";'" -
+  ci = commit
+  ci-fast = !"git-cmds.sh commit-fast"
+  ciaa = commit --all --no-verify
+  ciam = commit --amend --reuse-message=HEAD --no-verify
+  ciamp = !"git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
+  ciamm = commit --amend --no-verify
+  cim = commit -m
+  co = checkout
+  dff = diff --relative
+  dffc = !"git diffc --relative"
+  dffp = !"git diffp --relative"
+  dffw = diff --relative --word-diff
+  diffc = diff --cached
+  diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f "$@";'" -
+  dc    = !"git diffc"
+  dp    = !"git diffp"
+  info = log --pretty=fuller -1
+  lg   = !"bash -c 'f() { local b=$1; [[ $b == -* ]] && b= || shift; if [[ ! -z $b ]]; then local c=$(($(git rev-list --count $b)-1)); [[ $c -gt 15 ]] && c=15; git lgf $@ $b~$c..$b; else git lgf $@; fi; true; }; f "$@";'" -
+  lga  = !"git lg  $GIT_LOG_ALL_PARAMS --all"
+  lgf  = !"git log-default $GIT_LOG_PARAMS"
+  lgfa = !"git lgf $GIT_LOG_ALL_PARAMS --all"
+  log-default = log --graph --pretty=format:'%C(auto)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(blue)<%an>%Creset'
+  melddiff = difftool -y -t meld
+  ps = push --recurse-submodules=check
+  range-diff = !"git-cmds.sh range-diff"
+  rb = rebase
+  rba = rebase -i --autosquash
+  restash = !"git stash pop && git stash"
+  retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f "$@";'" -
+  sh = show -w
+  shv = !"bash -c 'f() { git shst $@ | vim -; }; f "$@";'" -
+  shst = !"bash -c 'f() { git diffp $@ --name-status; }; f "$@";'" -
+  shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f "$@";'" -
+  st = status --short -b
+  stv = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim -; }; f "$@";'" -
+  sync = !"git-cmds.sh sync"
+  userset = !"git-cmds.sh userset"
+  vimdiff = difftool -y -t vimdiff
+  vimdiff-p = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f "$@";'" -
+  wipe = !"git-cmds.sh commit-fast 'WIPE SavePoint' >/dev/null 2>&1 && git reset HEAD~1 --hard >/dev/null 2>&1"
+  # }}}
+[bash] # {{{
+  showDirtyState = true
+  showUntrackedFiles = true
+  showStashState = true
+  showUpstream = auto
+  completeAdd = true # }}}
+[branch] # {{{
+  autosetuprebase = always # }}}
+[format] # {{{
+  pretty = format:%h - %s <%an> # }}}
+[giggle] # {{{
+  main-window-maximized = false
+  main-window-geometry = 974x734+468+116
+  history-view-vpane-position = 428
+  file-view-vpane-position = 592
+  main-window-view = HistoryView # }}}
+[push] # {{{
+  default = current # }}}
+[svn] # {{{
+  # push empty directory removals back to svn as directory deletes
+  rmdir = true
+  # set svn:mergeinfo when pushing merge commits
+  pushmergeinfo = true # }}}
+[init] # {{{
+  templatedir = ~/.git_template # }}}
+[fetch] # {{{
+  prune = true
+  recurseSubmodules = true # }}}
+[rerere] # {{{
+  enabled = true # }}}
+[help] # {{{
+  autocorrect = 10 # }}}
+[tag] # {{{
+  # sort = -version:refname # }}}
+[log] # {{{
+  date = relative
+  decorate = short
+  showRoot = true # }}}
+[status] # {{{
+  submodulesummary = true # }}}
+[receive] # {{{
+  denyCurrentBranch = false # }}}
+[rebase] # {{{
+  autosquash = true # }}}
+[gitsh] # {{{
+  prompt = "[0;36m%D[0m[0;32m(%b)[0m%c%#%w"
+  noGreeting = true
+  defaultCommand = status --short -b
+# }}}
+[include] # {{{
+  path = ~/.runtime/gitconfig # }}}
+

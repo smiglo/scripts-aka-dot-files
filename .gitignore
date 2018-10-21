@@ -1,0 +1,6 @@
+/oth/download.cfg
+core.*
+/*.out
+/test*
+/*tmp*
+

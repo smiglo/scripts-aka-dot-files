@@ -1,0 +1,32 @@
+[submodule "batch"]
+	path = batch
+	url = ../scripts-batch.git
+	branch = master
+[submodule "bash/profiles/home"]
+	path = bash/profiles/home
+	url = ../scripts-profiles-home.git
+	branch = master
+[submodule "bash/profiles/work1"]
+	path = bash/profiles/work1
+	url = ../scripts-profiles-work1.git
+	branch = master
+[submodule "bash/inits/atom"]
+	path = bash/inits/atom
+	url = ../scripts-atom.git
+	branch = master
+[submodule "bash/profiles/work2"]
+	path = bash/profiles/work2
+	url = ../scripts-profiles-work2.git
+	branch = master
+[submodule "bash/inits/xcape"]
+	path = bash/inits/xcape
+	url = https://github.com/alols/xcape.git
+	branch = master
+[submodule "bash/inits/fzf"]
+	path = bash/inits/fzf
+	url = https://github.com/junegunn/fzf.git
+[submodule "bash/personalities"]
+	path = bash/personalities
+	url = ../scripts-personalities.git
+	branch = master
+
