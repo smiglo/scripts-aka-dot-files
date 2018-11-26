@@ -6,7 +6,7 @@ if [[ -z $TICKET_PATH || ! -e $TICKET_PATH ]]; then # {{{
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 1 ||  return 1
 fi # }}}
 ISSUES=
-for i in $(find $TICKET_PATH -maxdepth 4 -name \*-data.txt); do # {{{
+for i in $(find $TICKET_PATH -maxdepth 4 -name \*-data.txt | sort); do # {{{
   dn="$(dirname $i)"
   [[ -e $dn/.done ]] && continue
   command grep -q "^# j-info: .*[^-]DONE" $i && continue

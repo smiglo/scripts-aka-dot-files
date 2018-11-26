@@ -32,7 +32,7 @@ if [[ -z $ISSUES ]]; then # {{{
   # }}}
 elif [[ $ISSUES == '-' ]]; then # {{{
   wnd_name=  path_issue= ext=
-  wnd_name="$(tmux display-message -p -F '#W' | sed 's/--.*//')"
+  wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W' | sed 's/--.*//')"
   wnd_name="${wnd_name,,}"
   ISSUES=
   if [[ $wnd_name == *-* ]]; then # {{{

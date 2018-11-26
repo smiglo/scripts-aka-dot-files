@@ -35,7 +35,8 @@ if [[ -e $ROOT/local ]]; then
   suffix+="$(date +$DATE_FMT)"
   mv $ROOT/local $ROOT/local-${suffix}
 fi
-command mkdir -p $ROOT/local $ROOT/tmux_tmp
+DST="$ROOT/local-$TMUX_INSTALL_VERSION"
+command mkdir -p $DST $ROOT/tmux_tmp
 cd $ROOT/tmux_tmp
 # Download source files for tmux, libevent, and ncurses # {{{
 if [[ -z $LOCAL_TARBALL ]]; then
@@ -54,7 +55,7 @@ fi
 [[ ! -e libevent-release-${LIBEVENT_VERSION} ]] && tar xvzf release-${LIBEVENT_VERSION}.tar.gz
 cd libevent-release-${LIBEVENT_VERSION}
 ./autogen.sh
-./configure --prefix=$ROOT/local --disable-shared
+./configure --prefix=$DST --disable-shared
 make
 make install
 cd ..
@@ -63,7 +64,7 @@ cd ..
 [[ ! -e ncurses-${NCURSES_VERSION} ]] && tar xvzf ncurses-${NCURSES_VERSION}.tar.gz
 cd ncurses-${NCURSES_VERSION}
 export CPPFLAGS="-P"
-./configure --prefix=$ROOT/local
+./configure --prefix=$DST
 make
 make install
 export CPPFLAGS=
@@ -73,26 +74,26 @@ cd ..
 [[ ! -e tmux-${TMUX_INSTALL_VERSION} ]] && tar xvzf tmux-${TMUX_INSTALL_VERSION}.tar.gz
 cd tmux-${TMUX_INSTALL_VERSION}
 [[ -e autogen.sh ]] && sh autogen.sh
-./configure CFLAGS="-I$ROOT/local/include -I$ROOT/local/include/ncurses" LDFLAGS="-L$ROOT/local/lib -L$ROOT/local/include/ncurses -L$ROOT/local/include"
-CPPFLAGS="-I$ROOT/local/include -I$ROOT/local/include/ncurses" LDFLAGS="-static -L$ROOT/local/include -L$ROOT/local/include/ncurses -L$ROOT/local/lib" make
-cp tmux $ROOT/local/bin
+./configure CFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-L$DST/lib -L$DST/include/ncurses -L$DST/include"
+CPPFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-static -L$DST/include -L$DST/include/ncurses -L$DST/lib" make
+cp tmux $DST/bin
 if [[ -e 'tmux.1' ]]; then
-  [[ ! -e "$ROOT/local/share/man/man1" ]] && command mkdir -p "$ROOT/local/share/man/man1"
-  cp 'tmux.1' "$ROOT/local/share/man/man1/"
+  [[ ! -e "$DST/share/man/man1" ]] && command mkdir -p "$DST/share/man/man1"
+  cp 'tmux.1' "$DST/share/man/man1/"
   (
     echo ".Sh VERSION"
     echo ".An $(./tmux -V)"
-  ) >>$ROOT/local/share/man/man1/tmux.1
+  ) >>$DST/share/man/man1/tmux.1
 fi
 cd ..
 # }}}
 # }}}
 # Clean up # {{{
 $CLEAN_AFTER && rm -rf $ROOT/tmux_tmp
-# ln -s $ROOT/local/bin $HOME/.bin/tmux-local-bin
+# ln -s $DST/bin $HOME/.bin/tmux-local-bin
 echo
 echo '--------------------------------------------------------------------------------'
 echo 'DONE'
-echo "$ROOT/local/bin/tmux is now available. You can optionally add $ROOT/local/bin to your PATH."
+echo "$DST/bin/tmux is now available. You can optionally add $DST/bin to your PATH."
 # }}}
 

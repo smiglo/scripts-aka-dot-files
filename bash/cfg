@@ -35,37 +35,44 @@ export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match
 export FZF_INSTALLED=false
 if [[ -f ~/.fzf.bash ]]; then
   if which ag >/dev/null 2>&1; then
-    export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS -g ""'
+    export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS -g "" | sort'
   fi
-  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-  if [[ -e $TMP_MEM_PATH/.fzf.alt-c-cmd.env ]]; then
-    export FZF_ALT_C_COMMAND="$(cat $TMP_MEM_PATH/.fzf.alt-c-cmd.env)"
-  else
-    export FZF_ALT_C_COMMAND="$(cat <<-EOF
-				command find \${dir:-.}
-					-mindepth 1
-					-type d
-					-a \(
-						\( -name .\* $( [[ -e ~/.agignore ]] && cat ~/.agignore | command grep -v '^\s*#\|^\s*$' | sed -e 's/^/-o -name /' -e 's/\*/\\\*/g' | tr '\n' ' ') \) -prune -o
-					-print \)
-					2>/dev/null | sed 's#^\./##'
-			EOF
-    )"
-    export FZF_ALT_C_COMMAND="$(echo $FZF_ALT_C_COMMAND)"
-    echo "$FZF_ALT_C_COMMAND" >$TMP_MEM_PATH/.fzf.alt-c-cmd.env
-  fi
+  if which fd >/dev/null 2>&1; then # {{{
+    [[ -z $FZF_DEFAULT_COMMAND ]] && export FZF_DEFAULT_COMMAND='command fd --type f | sort'
+    export FZF_ALT_C_COMMAND='command fd --type d | sort'
+    # }}}
+  else # {{{
+    if [[ -e $TMP_MEM_PATH/.fzf.alt-c-cmd.env ]]; then # {{{
+      export FZF_ALT_C_COMMAND="$(cat $TMP_MEM_PATH/.fzf.alt-c-cmd.env)"
+    else
+      export FZF_ALT_C_COMMAND="$(cat <<-EOF
+					command find \${dir:-.}
+						-mindepth 1
+						-type d
+						-a \(
+							\( -name .\* $( [[ -e ~/.agignore ]] && cat ~/.agignore | command grep -v '^\s*#\|^\s*$' | sed -e 's/^/-o -name /' -e 's/\*/\\\*/g' | tr '\n' ' ') \) -prune -o
+						-print \)
+						2>/dev/null | sed 's#^\./##'
+				EOF
+      )"
+      export FZF_ALT_C_COMMAND="$(echo $FZF_ALT_C_COMMAND)"
+      echo "$FZF_ALT_C_COMMAND" >$TMP_MEM_PATH/.fzf.alt-c-cmd.env
+    fi # }}}
+  fi # }}}
   fzf_exe="$BASH_PATH/aliases fzf_exe"
-  if [[ -e $TMP_MEM_PATH/.fzf.def-opts.env ]]; then
+  if [[ -e $TMP_MEM_PATH/.fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $TMP_MEM_PATH/.fzf.def-opts.env)"
   else
     export FZF_DEFAULT_OPTS="$(cat <<-EOF
 				-m -x --algo=v2 -e +s --no-mouse --height 80% --border --tabstop=2 --exit-0
 				--color=dark,fg:15,fg+:15,bg+:238,hl:214,hl+:208,marker:3,pointer:2
-				--preview '$fzf_exe -c prev --prev 20 -f {1}'
+				--layout=reverse-list
+				--preview '$fzf_exe -c prev --prev 10 -f {1}'
 				--preview-window 'hidden'
 				--bind 'f1:execute($fzf_exe -c less -f {1})'
 				--bind 'f2:execute($fzf_exe -c vim  -f {1})'
 				--bind 'f3:execute($fzf_exe -c pane -f {1})'
+				--bind 'esc:cancel'
 				--bind 'ctrl-a:select-all'
 				--bind '?:toggle-preview'
 				--bind 'ctrl-s:toggle-sort'
@@ -75,8 +82,10 @@ if [[ -f ~/.fzf.bash ]]; then
     )"
     export FZF_DEFAULT_OPTS="$(echo $FZF_DEFAULT_OPTS)"
     echo "$FZF_DEFAULT_OPTS" >$TMP_MEM_PATH/.fzf.def-opts.env
-    export FZF_ALT_C_OPTS="-x --algo=v2"
-  fi
+  fi # }}}
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+  export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
+  export FZF_ALT_C_OPTS="+e -x --layout=reverse --prompt='cd> ' --query=\'"
   unset fzf_exe
   export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
   export FZF_INSTALLED=true
@@ -89,17 +98,19 @@ export GREP_COLORS='mt=38;5;214:ne:fn=36'
 export HL_DEFAULTS="+cC \<TB]"
 export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
 export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
+export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
 export HIGHLIGHT_DEFAULT="warning\|diagnostic\|"
 export TMUX_INIT_SESSIONS="MAIN"
 export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
-export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
+export TMUX_PREFIX_2='C-q'
 export TMUX_SMART_BLACKLIST="EMPTY_VALUE\|gitlab\.com\|github\.com"
 export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 025:time"
-export TMUX_PREFIX_2='C-q'
+export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
 [[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
 export DATE_FMT="%Y%m%d-%H%M%S"
-export TERMINAL_HAS_EXTRA_CHARS=true
+export TIME_FMT="%H:%M:%S"
+export DATE2_FMT="%Y%m%d"
 export CD_LAST_DIRS=($PWD)
 [[ -e $HOME/Downloads ]] && export CD_LAST_DIRS_STORED+=":Dw@$HOME/Downloads"
 [[ -e $HOME/Desktop   ]] && export CD_LAST_DIRS_STORED+=":De@$HOME/Desktop"
@@ -109,9 +120,6 @@ export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
 export EDITOR="vim -c 'set cursorline'"
 export VISUAL=$EDITOR
 export SVN_EDITOR=$EDITOR
-# }}}
-# Aliases {{{
-export ALIASES_MAP=""
 # }}}
 # }}}
 # Shell setup {{{
@@ -143,7 +151,7 @@ if [[ "$what_to_do" == 'full' ]]; then
   bind 'set skip-completed-text on'
 
   bind 'set show-mode-in-prompt on'
-  if [[ $(bash --version  |  head -n1 | sed 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/') == 4.4* ]]; then
+  if [[ $BASH_VERSION == '4.4'* ]]; then
     bind 'set vi-ins-mode-string "+"'
     bind 'set vi-cmd-mode-string ":"'
     bind 'set emacs-mode-string "@"'
@@ -159,7 +167,7 @@ if [[ "$what_to_do" == 'full' ]]; then
     bind '"\M-j":     history-search-forward'
     bind '"\e[Z":     complete'                # S-TAB
     bind '"\C-k":     complete'                # C-k
-    bind '"	":      menu-complete'           # TAB
+    bind '"	":        menu-complete'           # TAB
     bind '"\C-b":     menu-complete-backward'  # C-B
     bind '"\C-h":     dynamic-complete-history' # C-h
     bind '"\M-.":     yank-last-arg'
@@ -214,7 +222,8 @@ if [[ "$what_to_do" == 'full' ]]; then
     bind '"\C-kr":  "'${pre}' \C-g reset\C-m'
     bind '"\C-l":   "'${pre}' \C-g clr\C-m'
     if $FZF_INSTALLED; then
-      bind '"\C-f":  "'${pre}' fzfwr\C-m'
+      bind -x '"\C-f": "'${pre}'fzfwr"'
+      bind -x '"\C-p": "'${pre}'fzf-file-widget"'
     fi
   done
   unset i pre
@@ -237,10 +246,14 @@ fi
 ! declare -F __git_ps1 &>/dev/null && echo "Using internal __git_ps1" && source $BASH_PATH/completion.d/git/git-prompt.sh
 # }}}
 # Less {{{
-: ${LESSPIPE_PATH:="/usr/bin/lesspipe"}
-if [[ -x "$LESSPIPE_PATH" ]]; then
-  eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
-  export LESSOPEN='|'$LESSPIPE_PATH' %s 2>&-'
+if [[ -z $LESSOPEN ]]; then
+  : ${LESSPIPE_PATH:="/usr/bin/lesspipe"}
+  if [[ -x "$LESSPIPE_PATH" ]]; then
+    eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
+  fi
+  if which dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
+    export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
+  fi
 fi
 export PAGER=less
 export LESSCHARSET='utf-8'

@@ -17,6 +17,8 @@ tags
 
 .gitbranches
 
+.env
+
 # ------------------------------------------------------------------------
 # Could be quite controversial, let's see:
 .*-data.txt

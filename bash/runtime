@@ -21,6 +21,9 @@ export BASH_UPDATE_REPOS=
 export BASH_UPDATE_TIME=
 export COMPLETION_GENERIC_UTILS=
 export COMPLETION_GENERIC_FUNCTIONS=
+export CD_INTERACTIVE_PREDEFINED_LIST=
+export CD_INTERACTIVE_USER_LIST=
+export CD_LAST_DIRS_INTERACTIVE_IGNORE=
 export CD_LAST_DIRS_STORED=
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
@@ -47,6 +50,7 @@ export TMUX_FINGERS_REGEX=
 export TMUX_INIT_SESSIONS=
 export TMUX_REMOTE_PREFIXES=
 export TMUX_STATUS_RIGHT_EXTRA=
+export TMUX_SWITCH_CLIENT_MAP=
 export TO_INSTALL_BIN_MISC='BASIC'
 export TO_INSTALL_TOOLS=
 export TO_INSTALL_TOOLS_EXTRA=
@@ -78,9 +82,7 @@ done
 # }}}
 # Path # {{{
 export PATH=@END@:$PATH
-export PATH=$BIN_PATH:$BIN_PATH/vims:$BIN_PATH/misc:$PATH
-[[ -e $BIN_PATH/brew ]] && export PATH=$BIN_PATH/brew:$PATH
-[[ -e $BIN_PATH/gnu-aliases ]] && export PATH=$BIN_PATH/gnu-aliases:$PATH
+export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$BIN_PATH/misc:$PATH
 [[ -e $HOME/.bin-tools/bin ]] && export PATH=$HOME/.bin-tools/bin:$PATH
 # }}}
 # Tmux - local # {{{
@@ -96,7 +98,7 @@ export MY_PROJ_PATH=$HOME/projects/my
 if [[ -e $MY_PROJ_PATH ]]; then
   export SCRIPT_PATH=$MY_PROJ_PATH/scripts
   export BASH_UPDATE_REPOS="$MY_PROJ_PATH/scripts $MY_PROJ_PATH/vim"
-  export BASH_UPDATE_TIME="$((1*24*60*60))"
+  export BASH_UPDATE_TIME="$((1*18*60*60))"
   export GIT_REPOS+=" $MY_PROJ_PATH/scripts $MY_PROJ_PATH/info $MY_PROJ_PATH/vim"
   export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
   [[ -e $MY_PROJ_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$MY_PROJ_PATH/vim"
@@ -130,7 +132,8 @@ fi
 # TMP setup {{{
 export TMP_PATH=$HOME/.tmp
 export TMP_MEM_PATH=$TMP_PATH/.mem
-export TMPDIR=$TMP_MEM_PATH
+export TMPDIR=$TMP_PATH/tmp-dir
+[[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
 [[ ! -d $TMP_MEM_PATH ]] && echo "Memory fs does not exist [$TMP_MEM_PATH]. It will be created" && command mkdir -p $TMP_MEM_PATH && chmod 700 $TMP_MEM_PATH
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
 export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
@@ -141,7 +144,7 @@ export GREP_LAST_PATH=$TMP_PATH/.grep-last
 export VIM_UTILS_PATH="$TMP_PATH/.vim"
 export VIM_SESSIONS_PATH=$VIM_UTILS_PATH/sessions
 if [[ -n $TMUX ]]; then
-  export TMUX_SESSION="$(tmux display-message -p -F '#S')"
+  export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
   export TMUX_SESSION_PATH="$TMP_PATH/.tmux-sessions/$TMUX_SESSION"
   [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
   export GREP_LAST_PATH="$TMUX_SESSION_PATH/grep-last"
@@ -171,57 +174,59 @@ if [[ $(id -u) != 0 ]]; then # {{{
     sleep .$((1+($RANDOM%5)))
     [[ ! -e $check_file ]] && echo "$now" >$check_file && do_clean=true
   fi # }}}
-  [[ ${TMP_PATH_LAST_CHECK:-0} -lt $(($now - 1 * 24 * 60 * 60)) ]] && export TMP_PATH_LAST_CHECK=$(cat $check_file)
-  if [[ $TMP_PATH_LAST_CHECK -lt $(($now - 1 * 24 * 60 * 60)) ]] || $do_clean; then # {{{
+  [[ ${TMP_PATH_LAST_CHECK:-0} -lt $(($now - 1 * 18 * 60 * 60)) ]] && export TMP_PATH_LAST_CHECK=$(cat $check_file)
+  if [[ $TMP_PATH_LAST_CHECK -lt $(($now - 1 * 18 * 60 * 60)) ]] || $do_clean; then # {{{
     export TMP_PATH_LAST_CHECK=$now
     echo $TMP_PATH_LAST_CHECK >$check_file
     (
-      # Vars $ {{{
+      # Vars # {{{
       [[ -z $COff ]] && source $BASH_PATH/colors
       paths=""
-      paths+=" p=\"$TMP_MEM_PATH\";threshold=7;"
-      paths+=" p=\"${RMF_TRASH_PATH:-$TMP_PATH/.trash}\";silent=true;"
-      paths+=" p=\"$TMP_PATH\""
-      paths+=" p=\"$TMP_PATH/.grep-last\""
-      paths+=" p=\"$TMP_PATH/.vim/undoes\""
-      paths+=" p=\"$TMP_PATH/.vim/sessions\";threshold=42;"
+      paths+=" p=\"$TMP_MEM_PATH\";threshold=7;size=50"
+      paths+=" p=\"$TMPDIR\";threshold=1;silent=true;size=250"
+      paths+=" p=\"${RMF_TRASH_PATH:-$TMP_PATH/.trash}\";threshold=7;silent=true;size=200"
+      paths+=" p=\"$TMP_PATH\";size=150"
+      paths+=" p=\"$TMP_PATH/.grep-last\";silent=true;size=15"
+      paths+=" p=\"$TMP_PATH/.vim/undoes\";silent=true;size=20"
+      paths+=" p=\"$TMP_PATH/.vim/sessions\";silent=true;threshold=42"
       for p in $TMP_PATH/.tmux-sessions/*; do # {{{
         [[ $p == */ROOT ]] && continue
-        paths+=" p=\"$p/grep-last\""
-        paths+=" p=\"$p/vim/undoes\""
+        paths+=" p=\"$p/grep-last\";size=15"
+        paths+=" p=\"$p/vim/undoes\";size=20"
         paths+=" p=\"$p/vim/sessions\";threshold=42;"
       done # }}}
       marker="$TMP_MEM_PATH/.marker.$$"
       # }}}
       for p in $paths; do # {{{
-        threshold=21
-        silent=false
+        threshold=21 size= silent=false
         eval "$p"
         touch -t "$(command date +"%Y%m%d%H%M.%S" -d "$threshold days ago")" $marker
         msg="${CBlue}Cleaning tmp"
         [[ $p == $TMP_MEM_PATH ]] && msg+="-mem"
         msg+=" [${p/$TMP_PATH\/}]"
-        $BASH_PATH/aliases progress --msg "$msg" --color ${CCyan} --cnt $((2 + ($RANDOM % 3))) --delay 0.1
+        $BASH_PATH/aliases progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1
         # Old files # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
           -exec \
-            /bin/bash -c 'f() { ! '$silent' && echo "Removing ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
+            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         # Dead links # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -type l \
           -exec \
-            /bin/bash -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo "Removing deadlink ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
+            /bin/bash -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo -en "\nRemoving deadlink ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
           2>/dev/null # }}}
         # Empty Dirs # {{{
         find $p \
           -mindepth 1 -not -path $p/'.*' -a -type d -a -not -newer $marker -a -empty \
           -exec \
-            /bin/bash -c 'f() { ! '$silent' && echo "Removing empty dir ['${CCyan}'${1/$2\/}'${COff}']"; }; f "{}" '\"$p\"';' \; \
+            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']"; }; f "{}" '\"$p\"';' \; \
           -delete \
           2>/dev/null # }}}
         rm -f $marker
+        [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && echo -en "\nSize greater than [${CCyan}${size}${COff}]"
+        $BASH_PATH/aliases progress --unmark
       done # }}}
     )
   fi # }}}

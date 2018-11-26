@@ -121,9 +121,15 @@ while [[ ! -z $1 ]]; do # {{{
   -v)       verbose=1;;
   -vv)      verbose=2;;
   -vvv)     verbose=3; set -xv;;
-  -j | -jj) i="$(getIssue $2 true)"; shift
+  -j | -jj | \
+  -J | -JJ) cmd="$1"; i="$(getIssue $2 true)"; shift
             if [[ ! -z $i ]]; then
-              [[ -z $issue ]] && { issue="$i"; ISSUE_FALLBACK="$issue"; } || issue+=" $i"
+              if [[ -z $issue ]]; then
+                issue="$i"
+                [[ $cmd == '-J' || $cmd == '-JJ' ]] && ISSUE_FALLBACK="$issue"
+              else
+                issue+=" $i"
+              fi
             fi;;
   -l)       issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)"
             [[ ! -z $issue ]] && ISSUE_FALLBACK="$issue";;
@@ -131,6 +137,7 @@ while [[ ! -z $1 ]]; do # {{{
             saveConfiguration
             exit 0;;
   --setup)  shift; issue="$1"
+            [[ $# -gt 1 ]] && issue="${@: -1}"
             $TICKET_TOOL_PATH/ticket-setup.sh --open "$@"
             [[ ! -z $issue ]] && ISSUE_FALLBACK="$issue" && saveConfiguration
             exit 0;;
@@ -146,6 +153,7 @@ while [[ ! -z $1 ]]; do # {{{
     echo "  -vv        - verbosity, level 2"
     echo "  -vvv       - verbosity, level 3"
     echo "  -j, -jj    - specify the issue"
+    echo "  -J, -JJ    - specify the issue, set it as default for next calls"
     echo "  -l         - get issue from last selected window"
     echo "  -r         - reset configuration"
     echo "  --setup    - setup an issue"
@@ -162,7 +170,7 @@ while [[ ! -z $1 ]]; do # {{{
       i=3
       while [[ ! -z ${params[$i]} ]]; do
         [[ ${params[$i]} == [0-9]* ]] && wNr=${params[$i]} && break
-        [[ ${params[$i]} == '-j' || ${params[$i]} == '-jj' ]] && issue="${params[$(($i+1))]}" && break
+        [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj' ]] && issue="${params[$(($i+1))]}" && break
         [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)" && break
         i=$(($i+1))
       done
@@ -185,13 +193,12 @@ if $do_grep; then # {{{
   fi
   [[ -z $files ]] && echo "No files were found" >/dev/stderr && exit 0
   [[ -t 1 ]] && tmux delete-buffer -b 'ticket-data' 2>/dev/null
-  kb_file="$TMP_PATH/${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
+  kb_file="$TMP_PATH/kb-${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
   [[ ! -e "$kb_file" ]] && touch -d '2000-01-01' "$kb_file"
   kb_mod="$(stat -c %Y "$kb_file")"
-  rm -f "${kb_file}.done"
-  $BASH_PATH/aliases progress --out /dev/stderr --cmd "[[ -e \"${kb_file}.done\" ]] && { rm -f \"${kb_file}.done\"; true; }" --every-step --msg "Updating DB" --delay 0.2 &
+  $BASH_PATH/aliases progress --mark --dots --out /dev/stderr --msg "Updating DB"
   for file in $files; do # {{{
-    issue="$(echo "$file"| sed -e 's|.*/||' -e 's|-data\.txt||')"
+    issue="$(echo "$file"| sed -e 's|.*/||' -e 's|-data\.txt||' -e 's|^\.||')"
     list+="$issue\|"
     [[ $(stat -c %Y "$file") -le $kb_mod ]] && continue
     sed -i "/^$issue:/ d" "$kb_file"
@@ -201,11 +208,11 @@ if $do_grep; then # {{{
     updated=true
   done # }}}
   $updated && sort -t':' -k1,1 -s "$kb_file" >"${kb_file}.tmp" && mv "${kb_file}.tmp" "$kb_file"
-  touch "${kb_file}.done"
+  $BASH_PATH/aliases progress --unmark
   sleep 0.3
   if [[ -t 1 ]]; then # {{{
     command grep "^\(${list:0:-2}\):" "$kb_file" | \
-      fzf -i --tac --exit-0 --no-sort --multi --height 100% --prompt='Tickets> ' \
+      fzf -i --exit-0 --no-sort --multi --height 100% --prompt='Tickets> ' \
         --preview "fzf_wrapper {} {q} -c prev --prev 20" \
         --preview-window 'hidden' \
         --bind "f1:execute(fzf_wrapper {1} -c less >/dev/tty)" \
@@ -234,7 +241,7 @@ if [[ -z $issue ]]; then # {{{
     fi # }}}
     # Get issue from window name # {{{
     if [[ -z $issue ]]; then
-      wnd_name="$(tmux display-message -p -F '#W')"
+      wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
       if [[ $wnd_name == *-* ]]; then
         issue="$(getIssue "$wnd_name")"
       else
@@ -266,10 +273,10 @@ else # {{{
 fi # }}}
 export verbose
 if [[ $1 == '@@' ]]; then # {{{
-  ret=
+  ret= param="$3"
   if [[ $2 == 1 ]]; then # {{{
-    ret="-h ?? -j -jj -l -r --setup --init"
-    if [[ -z "$(getIssue "$(tmux display-message -p -F '#W')" true)" ]]; then
+    ret="-h ?? -j -jj -J -JJ -l -r --setup --init"
+    if [[ -z "$(getIssue "$(tmux display-message -p -t $TMUX_PANE -F '#W')" true)" ]]; then
       i=1 is= issue_list=":"
       for is in $(tmux list-windows -F '#W'); do
         is="$(getIssue "$is" true)"
@@ -282,15 +289,25 @@ if [[ $1 == '@@' ]]; then # {{{
     fi
   fi # }}}
   issue="${issue,,}"
-  case $3 in
-  -j) # {{{
+  case $4 in # {{{
+  --setup | --init) param="$4";;
+  esac # }}}
+  case $param in
+  --setup) # {{{
+    ret+=" --title --recreate"
+    ${TICKET_SETUP_ALWAYS:-false}  && ret+=" --no-always" || ret+=" --always"
+    ${TICKET_SETUP_DONE:-false}    && ret+=" --no-done"   || ret+=" --done"
+    ${TICKET_SETUP_HIDDEN:-false}  && ret+=" --no-hide"   || ret+=" --hide"
+    ${TICKET_SETUP_MINIMAL:-false} && ret+=" --no-min"    || ret+=" --min"
+    ;;& # }}}
+  -j | -J) # {{{
     marker="$TMP_MEM_PATH/j-cmd-marker.$$"
     touch -t $(command date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
     files="$(getIssues -newer $marker)"
     rm $marker
     files+=" $(command grep -lF '^# j-info: .*[^-]ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/||' -e 's|-data\.txt||')"
     ret+=" $files" ;; # }}}
-  -jj | --setup | --init | \?\?) # {{{
+  -jj | -JJ | --setup | --init | \?\?) # {{{
     files="$(getIssues)"
     ret+=" $files" ;; # }}}
   -l) shift;&

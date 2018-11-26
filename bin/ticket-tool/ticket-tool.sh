@@ -8,6 +8,7 @@ mapCommand() { # {{{
   i)    ret='info';;
   e)    ret='edit';;
   ci)   ret='commit';;
+  s)    ret='setup';;
   tm)   ret='tmux';;
   *)    # {{{
         for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do
@@ -49,8 +50,9 @@ cmd="$(mapCommand "$1")" && shift
 params="$@"
 cmd_TT="${0/$PWD\/} --issue"
 cmd_tt="$cmd_TT $issue"
-fzf_params="--no-multi --cycle --ansi --tac --height=100%"
-export issue path_issue cmd params cmd_tt cmd_TT fzf_params
+setup="$cmd_tt setup"
+fzf_params="--no-multi --cycle --ansi --tac --layout=default --height=100%"
+export issue path_issue cmd params cmd_tt cmd_TT setup fzf_params
 for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
   eval "$($ext --env)"
 done # }}}
@@ -85,7 +87,7 @@ case "$cmd" in
 @@)  # {{{
   [[ $verbose -ge 2 ]] && set -xv
   if [[ -z $1 || $1 == 1 ]]; then # {{{
-    ret="? cd edit env archive"
+    ret="? cd edit env archive clean setup browser"
     if [[ $PWD == $TICKET_PATH* ]]; then
       ret+=" tmux"
       git -C $TICKET_PATH rev-parse 2>/dev/null && ret+=" commit"
@@ -100,11 +102,15 @@ case "$cmd" in
     cmd="$(mapCommand "$1")" && shift
     case $cmd in
     archive) # {{{
-      echo "--all --clean --test";; # }}}
+      echo "--all --all-all --clean --pkg --test";; # }}}
+    browser) # {{{
+      echo "@ff @chrome @chromium";; # }}}
     cd | edit) # {{{
       echo "-v";; # }}}
     commit) # {{{
       echo "-p -b";; # }}}
+    setup) # {{{
+      $cmd_tt setup @@ "$@";; # }}}
     \?) # {{{
       getFunctions;; # }}}
     *) # {{{
@@ -118,7 +124,7 @@ case "$cmd" in
         info*) # {{{
           ret=
           ${TICKET_CONF_INFO_HEADER:-false} && ret+=" --no-header" || ret+="--header"
-          ret+=" $(echo "$func" | command grep -ai '^##\+ @ [a-z0-9].*' | sed -e '/}\{3\}/d' -e 's/^##\+ @ //' -e 's/ #.*//' | tr [A-Z] [a-z])";; # }}}
+          ret+=" $(echo "$func" | sed -n '/^##\+ @ [A-Za-z0-9].*/ { /}\{3\}/!s/.*@ \([A-Za-z0-9][^ ]*\).*/\L\1/p }')";; # }}}
         *) # {{{
           echo "$func" | head -n1 | command grep -qa '@@' && ret=$(bash -c "$(echo "$func" | sed -e '/^# /d')" - @@ "$@") ;; # }}}
         esac
@@ -148,16 +154,24 @@ archive) # {{{
   git -C $TICKET_PATH rev-parse 2>/dev/null && is_git=true
   cd "$path_issue"
   dst_tar="$issue-archive.tar" dst_gz="$dst_tar.gz" list= params= do_clean=false do_test=false
+  [[ -e $dst_tar ]] && echo "Intermediate file [$dst_tar] exists, remove them and proceed again" >/dev/stderr && exit 1
   [[ -e $dst_gz ]] && { gunzip "$dst_gz"; params+=" -r"; } || params+=" -c"
+  [[ $1 == --pkg ]] && set -- --all-all --test
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --all) # {{{
       if $is_git; then
         list="$(git clean -dxfn . | cut -d' ' -f3)"
       else
-        list="$(command find . -name ${issue}-'*' -prune -o .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
+        list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
       fi
+      [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
       do_clean=true
+      ;; # }}}
+    --all-all) # {{{
+      list="$(command find . -print | sed '/^\.$/ d')"
+      list="$(echo "$list" | sort | fzf --height 100% --prompt "Choose files> ")"
+      [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
       ;; # }}}
     --clean) do_clean=true;;
     --test)  do_test=true;;
@@ -171,9 +185,9 @@ archive) # {{{
     else
       list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print)"
     fi
-    list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --tac --height 100% --prompt "Choose files> ")"
+    list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --height 100% --prompt "Choose files> ")"
   fi # }}}
-  [[ -z $list ]] && echo "No file was chosen" >/dev/stderr && exit 1
+  [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
   list="$(echo "$list" | tr '\n' ' ')"
   tar $params -f "$dst_tar" $list
   $do_test && tar -tf "$dst_tar"
@@ -188,8 +202,51 @@ archive) # {{{
     rm -rf $list
   fi # }}}
   ;; # }}}
+browser) # {{{
+  browser="${TICKET_CONF_BROWSER#@}" params=
+  if [[ -z $browser ]]; then
+    $IS_MAC && browser="open" || browser="chromium"
+  fi
+  case $1 in
+  @ff | @chrome | @chromium) browser="${1#@}"; shift;;
+  @*) cmd="${1#@}"; shift; params="$@"; shift $#;;
+  esac
+  urls="$@"
+  if [[ -z $urls ]]; then
+    func="$(getFunctionBodyRaw "$cmd")"
+    [[ -z $func ]] && echo "Cannot get any URLs from [$cmd]" >/dev/stderr && exit 1
+    if [[ $cmd == 'browser' ]]; then
+      urls="$(echo "$func")"
+    else
+      urls="$($cmd_tt $cmd $params)"
+    fi
+    urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\L\1/p')"
+    [[ -z $urls ]] && echo -e "No ULRs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
+  fi
+  for i in $urls; do
+    case $browser in
+    ff)       firefox -new-tab -url $i;;
+    chrome)   /opt/google/chrome $i;;
+    chromium) chromium-browser $i;;
+    open)     open $i;;
+    esac
+  done;; # }}}
 cd) # {{{
   [[ $1 == "-v" ]] && ( cd $path_issue; pwd; ) || { cd "$path_issue"; exec bash; }
+  ;; # }}}
+clean) # {{{
+  is_git=false
+  git -C $TICKET_PATH rev-parse 2>/dev/null && is_git=true
+  if $is_git; then
+    list="$(eval command find . \\\( $(git clean -n -dxf | cut -d\  -f3 | xargs -i echo "-path ./{} -o" | sed 's|/ -o|/\\* -o|') -path '../..' \\\) -print;)"
+  else
+    list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print)"
+  fi
+  list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --height 100% --prompt "Choose files> ")"
+  [[ $? != 0 || -z $list ]] && return 0
+  command mkdir -p $TMP_MEM_PATH/issue/$issue
+  echo "$list" | tr ' ' '\n' | rsync -a --files-from=- . $TMP_MEM_PATH/issue/$issue/
+  rm -rf $list
   ;; # }}}
 commit) # {{{
   ! git -C $TICKET_PATH rev-parse 2>/dev/null && exit 1
@@ -226,26 +283,38 @@ edit) # {{{
   ;; # }}}
 tmux) # {{{
   [[ $PWD != $TICKET_PATH* ]] && exit 1
-  title="${issue^^}-ext"
+  title="${issue}"
+  declare -f __ticket_title >/dev/null 2>&1 && title="$(__ticket_title "$title")"
   isInit=false
-  [[ $1 == 'INIT' ]] && shift && isInit=true && title="${issue^^}"
+  if [[ $1 == 'INIT' ]]; then
+    shift && isInit=true
+  else
+    title="${title}-ext"
+  fi
   tmux list-windows -F '#W' | command grep -q "$title" && exit 0
-  export w=$(($(tmux display-message -p -F '#I') + 1))
+  export w=$(($(tmux display-message -p -t $TMUX_PANE -F '#I') + 1))
+  export pl_abs="$(command cd $path_issue; pwd)"
+  export title
   if $isInit; then # {{{
-    pl_abs="$(command cd $path_issue; pwd)"
     tmux \
-      new-window   -a    -c $pl_abs          \; \
-      split-window -t .1 -c $pl_abs -v -p30  \; \
+      new-window   -a -n $title -d -c $pl_abs \; \
+      set-option   -t $w -w @locked_title 1   \; \
+      split-window -t $w.1 -c $pl_abs -v -p30 \; \
       select-pane  -t $w.1
     $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
+    func="$(getFunctionBody "tmux-init")"
+    [[ ! -z $func ]] && bash -c "$func" - "$@"
     sleep 1
     cmd="${@:-vim-session}"
-    tmux send-keys -l -t $w.1 "$cmd"
+    tmux \
+      select-pane -t.1 \; \
+      send-keys -l -t $w.1 "$cmd"
     # }}}
   else # {{{
     func="$(getFunctionBody "tmux-splits")"
     if [[ ! -z $func ]]; then
       bash -c "$func" - "$@"
+      tmux select-pane -t $w.1
       $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
       sleep 1
       func="$(getFunctionBody "tmux-cmds")"
@@ -253,6 +322,106 @@ tmux) # {{{
     fi
   fi # }}}
   exit 0;; # }}}
+setup) # {{{
+  func="$(getFunctionBody 'setup')"
+  case $1 in
+  @@) # {{{
+    if [[ -z $2 || $2 == --full ]]; then # {{{
+      ret="--loop ?"
+      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        ret+=" $($ext $cmd "get-ext-commands" $2)"
+      done # }}}
+      [[ ! -z "$func"  ]] && ret+=" $(bash -c "$func" - "$@")"
+      # }}}
+    else # {{{
+      ret=
+      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        ret="$($ext $cmd "$@")"
+        [[ -z $ret ]] || break
+      done # }}}
+      [[ -z $ret && ! -z "$func" ]] && ret+=" $(bash -c "$func" - "$@")"
+    fi # }}}
+    echo "$ret"
+    ;; # }}}
+  \?) # {{{
+    case $2 in
+    '' | @@)  # {{{
+      echo "$($setup @@ --full)";; # }}}
+    \#show-all) # {{{
+      echo "Show all commands";; # }}}
+    \#travelsal) # {{{
+      echo "Toggle travelsal mode";; # }}}
+    \#reload) # {{{
+      echo "Reload configuration";; # }}}
+    @Quit) # {{{
+      echo  "Quit";; # }}}
+    *) # {{{
+      source $BASH_PATH/colors
+      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        ret="$($ext $cmd "$@")"
+        [[ -z $ret ]] || break
+      done # }}}
+      if [[ -z "$ret" && ! -z "$func" ]]; then
+        ret="$(bash -c "${func#source*; }" - '?' "$2")"
+        [[ -z "$ret" ]] && ret="$(echo "$func" | sed -n "/^\s*$2)/,// p" | sed -e "s/^\(\s*$2\)\().*\)/${CGold}\1${COff}\2/")"
+      fi
+      echo "$ret";; # }}}
+    esac
+    ;; # }}}
+  --loop | '') # {{{
+    $BASH_PATH/aliases set_title --set-pane "$issue: setup"
+    source $BASH_PATH/colors
+    utils_cmd="#reload\n#show-all\n#travelsal\n"
+    reload_cmds=true use_travelsal=
+    while $reload_cmds; do # {{{
+      l= op= use_travelsal=${use_travelsal:-true} reload_cmds=false hidden="!^@"
+      if [[ ! -z "$func" ]]; then # {{{
+        l="$(bash -c "${func#source*; }" - '@@')"
+        l="$(echo "${l//  / }" | tr ' ' '\n' | sed '/^\s*$/ d' | sort)"
+        [[ ! -z "$l" ]] && l+="\n"
+      fi # }}}
+      ext_cmds=
+      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        ext_cmds+=" $($ext $cmd "get-ext-commands")"
+      done # }}}
+      ext_cmds="$(echo "$ext_cmds" | tr ' ' '\n')\n"
+      l="$(echo -e "${utils_cmd}${ext_cmds}${l}${CGold}@Quit${COff}" | sed -e '/^\s*$/d')"
+      $use_travelsal && op="$($setup '@travelsal' '-INIT-')"
+      [[ $op == @* ]] && hidden=''
+      while true; do # {{{
+        op="$(echo -e "$l" | fzf $fzf_params --query="$([[ ! -z $hidden ]] && echo "$hidden ")$([[ ! -z $op ]] && echo "$op ")" --preview="$0 setup ? {1}")"
+        [[ $? != 0 || $op == '@Quit' ]] && break
+        [[ -z $op ]] && continue
+        case $op in
+        '#show-all') hidden=''; use_travelsal=false; op=''; continue;;
+        '#travelsal') # {{{
+          if $use_travelsal; then
+            use_travelsal=false
+            op=''
+          else
+            use_travelsal=false
+            op="$($setup '@travelsal' '-INIT-')"
+          fi
+          continue;; # }}}
+        '#reload')   reload_cmds=true; func="$(getFunctionBody 'setup')"; break;;
+        *) # {{{
+          params="$($setup @@ "$op")" arg=
+          [[ "$params" != "$($setup @@ @@)" ]] && arg="$(echo "$params" | sed 's/ /\n/g' | fzf $fzf_params)"
+          $setup "$op" $arg;; # }}}
+        esac
+        err="$?"
+        [[ $err != 0 ]] && break 2
+        $use_travelsal && { op="$($setup '@travelsal' "$op")"; } || { op=''; }
+        [[ $op == @* ]] && hidden=''
+      done # }}}
+    done;; # }}} # }}}
+  *) # {{{
+    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      $ext $cmd $@ && exit 0
+    done # }}}
+    [[ ! -z "$func" ]] && bash -c "$func" - "$@" ;; # }}}
+  esac
+  ;; # }}}
 *) # {{{
   case $cmd in
   env) # {{{
@@ -310,7 +479,9 @@ tmux) # {{{
   [a-z]*) # {{{
     export DO_SOURCE=true
     for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
-      $ext $cmd "$@" && exit 0
+      $ext $cmd "$@"
+      err=$?
+      [[ $err != 255 ]] && exit $err
     done # }}}
     func="$(getFunctionBody $cmd)"
     if [[ ! -z $func ]]; then

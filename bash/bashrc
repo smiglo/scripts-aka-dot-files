@@ -106,12 +106,12 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
       source $BIN_PATH/fix_ssh_agent.sh fix_ssh_agent
     fi
   fi # }}}
+  # Update repo # {{{
+  if [[ ! -n $TMUX  && $BASH_EXTRA_FEATURES == *update-repo* ]]; then
+      $BIN_PATH/setup_updater.sh && exec bash
+  fi # }}}
   # Start TMUX # {{{
   if [[ ! -n $TMUX ]]; then
-    # Update repo # {{{
-    if [[ $BASH_EXTRA_FEATURES == *update-repo* ]]; then
-      $BIN_PATH/setup_updater.sh && exec bash
-    fi # }}}
     # Start tmux if not started or not attached # {{{
     if ! $IS_MAC; then
       export TERMNAME="$(command ps -o 'cmd=' -p $(command ps -o 'ppid=' -p $$))"
@@ -170,6 +170,12 @@ if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
   export RCSTUFF_FZF_INSTALLED=true
 fi # }}}
 # }}}
+
+if [[ -n $TMUX ]]; then
+  case "$(tmux display-message -p -t $TMUX_PANE -F '#W')" in
+  bash | '' | reattach-to-user-namespace) $BASH_PATH/aliases set_title --set-none --set-window --lock-force;;
+  esac
+fi
 
 unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
 

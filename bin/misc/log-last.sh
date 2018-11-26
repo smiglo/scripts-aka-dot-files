@@ -46,7 +46,7 @@ loglast() { # {{{
   local to_do=''
   local to_do_extra=''
   local paused=false paused_time= pause_char='P' normal_char='' pause_msg_show=false pause_msg_last_time= pause_msg_delta=$((10*60))
-  $TERMINAL_HAS_EXTRA_CHARS && pause_char='⏸ ' && normal_char='⏺ '
+  ${TERMINAL_HAS_EXTRA_CHARS:-true} && pause_char='⏸ ' && normal_char='⏺ '
   set -- $PARAMS_DEFAULT $@
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -89,6 +89,7 @@ loglast() { # {{{
     if [[ $new_today != $TODAY ]]; then # {{{
       if ! is_to_be_done 'nested' && [[ -z $($0 --nested | cut -c8-12) ]]; then # {{{
         progress \
+          --dots
           --no-err \
           --msg "Waiting for login time..." --color "${CGold}" \
           --cmd "test -n $($0 --nested | cut -c8-12)"
@@ -517,7 +518,7 @@ loglast() { # {{{
           $BIN_PATH/git-cmds.sh gitst | grep -v 'UP-TO-DATE' | sed 's/^/    /'
           local cnt=10
           [[ $cmd != check ]] && cnt=3
-          progress --msg 'Ack' --cnt $cnt --key; [[ $? == 11 ]] && sleep 1 || sleep 0.3
+          progress --dots --msg 'Ack' --cnt $cnt; [[ $? == 11 ]] && sleep 1 || sleep 0.3
           case $? in
           255) break;;
           11)  sleep 1;;
@@ -526,7 +527,7 @@ loglast() { # {{{
         backup) # {{{
           git backup --all;; # }}}
         sync) # {{{
-          git sync   --all;; # }}}
+          git sync   --all --reset;; # }}}
         fetch) # {{{
           git sync   --all --skip-backup;; # }}}
         unpause) # {{{

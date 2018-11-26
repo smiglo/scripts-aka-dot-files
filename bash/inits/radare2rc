@@ -4,6 +4,9 @@ eco onedark
 # e asm.describe = true
 e asm.syntax = intel
 e cfg.fortunes.type = tips, fun, nsfw
+# e cmd.hexcursor = pf dbw word len msg
+e cmd.hexcursor = ? [$$]&1u32
 e dbg.funcarg = true
+e http.log = false
 e scr.utf8 = true
 

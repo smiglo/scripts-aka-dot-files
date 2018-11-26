@@ -35,6 +35,8 @@ defaults() { # {{{
     tmux bind-key -T ext1   'c' list-keys -T copy-mode-vi
     tmux bind-key -T ext1   'p' display-panes
     tmux bind-key -T ext1   'h' list-keys -T ext1
+    tmux bind-key -T ext1   'R' display-message "Reloading..." \\\; source-file ~/.tmux.conf
+    tmux unbind -T prefix   'R'
   fi
   if [[ $TMUX_VERSION -lt 26 ]]; then
     tmux bind-key 's' choose-tree
@@ -44,6 +46,13 @@ defaults() { # {{{
     tmux bind-key '=' run-shell '~/.tmux.bash smarter_nest "=" "choose-buffer -O name -NF ##{buffer_sample}"'
   fi
   tmux set -g @mark_auto true
+  local i=
+  tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
+    tmux set-environment  ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
+  done
+  tmux show-environment -g | command grep "^TMUX_SB.*update_time" | while read i; do
+    tmux set-environment  -g ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
+  done
 } # }}}
 battery() { # {{{
   is_ac() {
@@ -78,7 +87,7 @@ battery() { # {{{
   local ac_on="$(is_ac)" perc="$(get_percentage)"
   if ! $ac_on || [[ $perc -lt 95 ]]; then
     local BAT="B" PWR="P" delta=30
-    $TERMINAL_HAS_EXTRA_CHARS && BAT='🔋 '&& PWR='🔌 '
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && BAT='🔋 '&& PWR='🔌 '
     # Colors  # {{{
     local c="2"
     if [[ $perc -lt 30 ]]; then
@@ -220,7 +229,7 @@ system_notifications() { # {{{
     icon='#'
   elif [[ "$(stat -c "%Y" "$ntf_file")" -ge "$(($c_time - $delta))" ]]; then
     icon="N"
-    $TERMINAL_HAS_EXTRA_CHARS && icon="🖂 "
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && icon="🖂 "
   fi
   printf "%s" "$icon"
 } # }}}
@@ -271,7 +280,7 @@ status_right_extra() { # {{{
       local prefix="/media/$USER"
       $IS_MAC && prefix="/Volumes"
       if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
-        ret+=" #[fg=colour148]$($TERMINAL_HAS_EXTRA_CHARS && echo "🖫 " || echo "U")"
+        ret+=" #[fg=colour148]$(${TERMINAL_HAS_EXTRA_CHARS:-true} && echo "🖫 " || echo "U")"
       fi
       ;; # }}}
     notifs) # {{{
@@ -308,7 +317,7 @@ window_status_flags() { # {{{
   if [[ $flags == *Z* ]]; then
     local repl="/Z"
     flags="${flags/Z}"
-    $TERMINAL_HAS_EXTRA_CHARS && [[ $TERMNAME != 'alacritty' ]] && repl=" 🔍 "
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && repl=" 🔍 "
     flags="$repl$flags"
   fi
   echo "$flags"
@@ -355,10 +364,10 @@ edit_mode() { # {{{
 splitting() { # {{{
   local params=
   [[ $TMUX_VERSION -gt 16 ]] && params="-c #{pane_current_path}"
-  tmux bind-key \\ run-shell "~/.tmux.bash smarter_nest '\' 'split-window -h -p 25 $params'"
-  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest '-' 'split-window -v -p 20 $params'"
-  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest '|' 'split-window -h       $params'"
-  tmux bind-key _  run-shell "~/.tmux.bash smarter_nest '_' 'split-window -v       $params'"
+  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest '|'  'split-window -h -p 25 $params'"
+  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest '-'  'split-window -v -p 20 $params'"
+  tmux bind-key \\ run-shell "~/.tmux.bash smarter_nest '\\' 'split-window -h       $params'"
+  tmux bind-key _  run-shell "~/.tmux.bash smarter_nest '_'  'split-window -v       $params'"
 } # }}}
 new_window() { # {{{
   local params=
@@ -374,7 +383,7 @@ get_marked_pane() { # {{{
   [[ -z $auto_check_nest ]] && auto_check_nest=$(tmux show-options -gqv @mark_auto)
   if [[ $auto_check_nest == 'true' ]]; then
     pane='S'
-    ${TERMINAL_HAS_EXTRA_CHARS:-false} && pane='ⓢ '
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && pane='ⓢ '
   fi
   echo "$pane"
 } # }}}
@@ -430,7 +439,7 @@ smarter_nest() { # {{{
   local auto_check_nest=$(tmux show-options -wqv @mark_auto)
   [[ -z $auto_check_nest ]] && auto_check_nest=$(tmux show-options -gqv @mark_auto)
   if [[ $auto_check_nest == 'true' ]]; then
-    pane_info=$(tmux display-message -p -F '#P:#{pane_pid}')
+    pane_info=$(tmux display-message -p -t $TMUX_PANE -F '#P:#{pane_pid}')
     if ! $IS_MAC; then
       local ps_out="$(command ps -o args -g ${pane_info/*:})"
     else
@@ -457,7 +466,12 @@ smarter_nest() { # {{{
     tmux send-keys -t .$pane_info $key
   else
     if [[ ! -z $1 ]]; then
-      tmux ${@//@@/\'}
+      todo="${@//@@\'}"
+      if [[ $todo =~ .*\ -c\ *$ ]]; then
+        tmux $todo "$(tmux show -v @tmux_path)"
+      else
+        tmux ${@//@@/\'}
+      fi
     elif [[ ! -z $CMD ]]; then
       eval tmux $CMD
     fi
@@ -485,6 +499,43 @@ toggle_show_pane_info() { # {{{
   top|bottom) state='off';;
   esac
   tmux set-window-option -qg pane-border-status "$state"
+} # }}}
+switch_client() { # {{{
+  local current_s= i= dst= src=
+  current_s="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
+  for i in $TMUX_SWITCH_CLIENT_MAP; do
+    src="${i%:*}" dst="${i##*:}"
+    [[ "$src" == '*' || "$src" == "$current_s" ]] || continue
+    [[ "$dst" != "$current_s" ]] || continue
+    tmux switch-client -t "$dst"
+    return 0
+  done
+  tmux switch-client -l
+  return 0
+} # }}}
+switch_window() { # {{{
+  local current_s= current_w= i= dst= src= local switch_to_last=false
+  current_s="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
+  current_s="${current_s^^}" && current_s="${current_s//-/_}"
+  current_w="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
+  for i in $(eval echo \$TMUX_SWITCH_WINDOW_${current_s}_MAP); do
+    src="${i%:*}" dst="${i##*:}"
+    [[ $src == @* ]] && src="$(tmux list-windows -F '@#I. #W' | sed -n -e "/^$src./s/$src. //p")"
+    [[ ! -z $src ]] || continue
+    [[ "$src" == '*' || "$src" == "$current_w" ]] || continue
+    [[ $dst == @* ]] && dst="$(tmux list-windows -F '@#I. #W' | sed -n -e "/^$dst./s/$dst. //p")"
+    [[ ! -z $dst ]] || continue
+    [[ "$dst" != "$current_w" ]] || { switch_to_last=true; continue; }
+    dst="$(tmux list-windows -F '#I. @#W' | sed -n -e "/ @$dst$/s/\. .*//p")"
+    tmux select-window -t ":$dst"
+    return 0
+  done
+  if [[ $(tmux display-message -p -t $TMUX_PANE -F '#I') == '1' ]] || $switch_to_last; then
+    tmux last-window
+  else
+    tmux select-window -t :1
+  fi
+  return 0
 } # }}}
 
 [[ -z $TMUX_VERSION ]] && TMUX_VERSION="$(tmux -V | sed 's/\.//' | cut -c6-7)"

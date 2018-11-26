@@ -330,6 +330,7 @@ do_sync() { # {{{
   local verbose=false
   local quiet=false
   local resetH=false
+  local dots=true
   while [[ ! -z $1 ]]; do
     case $1 in
     --skip-backup) skipBackup=true;;
@@ -338,9 +339,11 @@ do_sync() { # {{{
     --reset)  resetH=true;;
     --verbose|-v) verbose=true;;
     --quiet) quiet=true; verbose=false;;
+    --no-dots) dots=false;;
     esac
     shift
   done
+  $verbose && dots=false
   if [[ -z $parBranch ]]; then
     parBranch="$(git rev-parse --abbrev-ref HEAD)"
     [[ $parBranch == 'HEAD' ]] && parBranch=
@@ -353,8 +356,14 @@ do_sync() { # {{{
   export cmd
   source $BIN_PATH/bash/colors
   local dir=${PWD/$HOME/\~}
-  ! $quiet && ! $verbose && echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
-  git submodule --quiet foreach 'cd $PWD; $cmd'
+  if ! $quiet; then
+    if $dots; then
+      $BASH_PATH/aliases progress --mark --msg "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+3)) 3)"
+    elif ! $verbose; then
+      echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
+    fi
+  fi
+  git submodule --quiet foreach 'cd $PWD; $cmd || true'
   $verbose && echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
   for remote in $remotes; do
     local remoteUrl=$(git config --get remote.$remote.url)
@@ -369,24 +378,25 @@ do_sync() { # {{{
     fi
     done_remotes+=" $remote"
     [[ $(git remote) != *$remote* ]] && continue
-    if ! $quiet; then
-      echo "[${CCyan}Syncing from $remote...${COff}]"
-    fi
-    git fetch --recurse-submodules=no $remote
-    if [[ $? == 0 ]]; then
-      local stash=$(git status --short) skip=false
+    ! $quiet && ! $dots && echo "[${CCyan}Syncing from $remote...${COff}]"
+    if git fetch --recurse-submodules=no $remote; then
+      local stash=$(git status --short)
       [[ -z $stash ]] && stash=false || stash=true
       $stash && git stash -q
-      git rebase -q $remote/$parBranch $parBranch
-      [[ $? != 0 ]] && $resetH && git reset --hard $remote/$parBranch && skip=true
-      if ! $skipBackup && ! $skip ; then
-        $verbose && echo "Backing up..."
-        git backup
+      if git rebase -q $remote/$parBranch $parBranch; then
+        if ! $skipBackup; then
+          $verbose && echo "Backing up..."
+          git backup
+        fi
+      elif $resetH; then
+        git rebase --abort
+        git reset --hard $remote/$parBranch
       fi
       $stash && git stash pop -q
       break
     fi
   done
+  ! $quiet && $dots && $BASH_PATH/aliases progress --unmark
 } # }}}
 sync() { # {{{
   local remote=
@@ -395,7 +405,7 @@ sync() { # {{{
   local saveTime=false
   local params=
   if [[ $1 == '@@' ]]; then
-    local ret="--all --all-all --env --remote -r --branch -b --skip-backup --reset"
+    local ret="--all --all-all --env --remote -r --branch -b --skip-backup --reset --no-dots"
     local args=("$@")
     case ${args[$((${#args[*]}-1))]} in
     -b|--branch) ret="$(git branch | sed 's/^..//')";;
@@ -413,6 +423,7 @@ sync() { # {{{
     --skip-backup) params+=" --skip-backup";;
     -v|--verbose) params+=" --verbose";;
     --reset) params+=" --reset";;
+    --no-dots) params+=" --no-dots";;
     esac
     shift
   done
@@ -520,6 +531,58 @@ range_diff() { # {{{
   ! $list_only && cmd+=" | LESS=\"-dFiJRSwX -x4 -z-4 -+F -~ -c\" xargs -n1 $cmd_diff -- "
   eval $cmd
 } # }}}
+cba() { # {{{
+  local d= c= first='@' fzf_p= gitlog= do_break=false stashed=false changed=false pattern='-------' cnt=${GIT_CBA_MAX:-30}
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    +*) cnt="${1#+}";;
+    *)  [[ -e $1 ]] && d="-- $1" || c="$1"
+    esac
+    shift
+  done
+  fzf_p="--height=80% --layout=reverse-list --no-sort +m --ansi \
+      --prompt='Fix-Up> ' \
+      --preview='git sh {2}' --preview-window=down:hidden"
+  gitlog="log --pretty=format:'%C(auto)%h%Creset %C(auto)%d%Creset %s %Cgreen(%cr)' --color=always"
+  [[ ! -z $GIT_CBA_QUERY ]] && fzf_p+=" --query='$GIT_CBA_QUERY '"
+  if [[ -z $c ]]; then
+    while ! git diff --quiet $d || ! git diff --cached --quiet $d; do
+      if git diff --cached --quiet $d; then
+        if git diff --quiet $([[ ! -z $d ]] && echo "-- $d"); then
+          $do_break && break || { echo "Nothing to commit" >/dev/stderr; return 0; }
+        fi
+        git add -p $d
+        do_break=true
+      fi
+      git diff --cached --quiet $d && break
+      c="$( \
+        { echo "$pattern"; \
+          eval git $gitlog -$cnt $GIT_CBA_LOG_PARAMS; \
+        } | \
+        eval fzf $fzf_p | \
+        awk '{print $1}' \
+      )"
+      [[ $? == 0 ]] || return 1
+      [[ ! -z $c ]] || break
+      if [[ "$c" == "$pattern" ]]; then
+        first=$(git merge-base $first @)
+        git commit --no-verify
+      else
+        first=$(git merge-base $first ${c}~)
+        git commit --fixup=$c --no-verify
+      fi
+      changed=true
+    done
+    $changed || return 0
+  else
+    first="${c}~"
+    [[ $c == @* ]] && first+='~'
+    git commit --fixup=$c --no-verify
+  fi
+  ! git diff --quiet && git stash >/dev/null 2>&1 && stashed=true
+  git rebase -i --autosquash $first
+  $stashed && git stash pop >/dev/null 2>&1
+} # }}}
 # }}}
 # MAIN {{{
 cmd="${1:-usage}"
@@ -547,6 +610,7 @@ commit-fast)   cmd=commit_fast;;
 bash-switches) cmd=bash_switches;;
 userset)       cmd=userset;;
 range-diff)    cmd=range_diff;;
+cba)           cmd=cba;;
 --test)        cmd=$1; shift; params="$@";;
 *)             cmd="usage \"$cmd\"";;
 esac # }}}

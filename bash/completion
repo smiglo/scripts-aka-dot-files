@@ -9,6 +9,7 @@ export RCSTUFF_COMPLETION_INSTALLED=true
 _completion_generic() { # {{{
   local cur= prev= opts= cmd= _alias= param= i=
   cur=${COMP_WORDS[COMP_CWORD]}
+  _get_comp_words_by_ref -n : cur
   prev=${COMP_WORDS[COMP_CWORD-1]}
   cmd=${COMP_WORDS[0]}
   param="@@"
@@ -51,6 +52,7 @@ _completion_generic() { # {{{
     COMPREPLY[$i]="${opts// /\\ }"
     i=$(($i+1))
   done < <(compgen -W "$opts" -- "$cur") # }}}
+  __ltrim_colon_completions "$cur"
 }
 # }}}
 _completion_git_cmds() { # {{{
@@ -92,6 +94,15 @@ _do_vim_completion() { # {{{
  complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim vim-session
 }
 # }}}
+# Brew & Mac-Ports # {{{
+if $IS_MAC; then
+  if type brew 1>/dev/null 2>&1; then
+    for cf in /usr/local/etc/bash_completion.d/*; do
+      [[ -e $cf ]] && source "$cf"
+    done
+    unset cf
+  fi
+fi # }}}
 # Completion for git aliases defined in git-cmds.sh {{{
 _git_sync()     { _completion_generic; }
 _git_backup()   { _completion_generic; }
@@ -120,23 +131,23 @@ fi # }}}
 # Vim # {{{
 _do_vim_completion
 # }}}
+# Oth # {{{
+complete | command grep " cdd$" || complete -o bashdefault -o default -o nospace -W "$($BASH_PATH/aliases cd_wrapper -- @@ - -i)" cdd
+# }}}
 # tldr # {{{
 complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
 # }}}
-# Brew & Mac-Ports # {{{
-if $IS_MAC; then
-  if type brew 2&>/dev/null; then
-    for cf in $(brew --prefix)/etc/bash_completion.d/*; do
-      source "$cf"
-    done
-    unset cf
-  fi
-  [[ -e /opt/local/etc/profile.d/bash_completion.sh ]] && source /opt/local/etc/profile.d/bash_completion.sh
-fi # }}}
 # Source additional completions {{{
-for i in $(ls $BASH_PATH/completion.d); do
-  [[ -f $BASH_PATH/completion.d/$i ]] && source $BASH_PATH/completion.d/$i
-done
+if [[ -e $BASH_PATH/completion.d ]]; then
+  for i in $(ls $BASH_PATH/completion.d); do
+    [[ -f $BASH_PATH/completion.d/$i ]] && source $BASH_PATH/completion.d/$i
+  done
+fi
+if [[ -e $RUNTIME_PATH/completion.d ]]; then
+  for i in $(ls $RUNTIME_PATH/completion.d); do
+    [[ -f $RUNTIME_PATH/completion.d/$i && -x $RUNTIME_PATH/completion.d/$i ]] && source $RUNTIME_PATH/completion.d/$i
+  done
+fi
 # }}}
 # Source profile specic completions {{{
 for i in $BASH_PROFILES; do

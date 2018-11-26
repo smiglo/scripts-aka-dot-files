@@ -1,5 +1,6 @@
 #!/bin/bash
 # vim: fdl=0
+
 # Configure {{{
 BASH_ALIASES_FROM_CMD=false
 if [[ "${BASH_SOURCE[0]}" == "$0" && ! -z $1 ]]; then
@@ -74,6 +75,8 @@ fi # }}}
 if install 'rsync'; then # {{{
   alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
   alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
+  alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
+  alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
 fi # }}}
 if install 'less'; then # {{{
   alias more='less'
@@ -98,9 +101,11 @@ if install 'shlock'; then # {{{
 fi # }}}
 if install 'diff'; then # {{{
   if type colordiff >/dev/null 2>&1; then
-    alias diff='colordiff -y --suppress-common-lines'
+    alias diff='\colordiff -u'
+    alias diff-sbs='\colordiff -y --suppress-common-lines'
   else
-    alias diff='diff -y --suppress-common-lines'
+    alias diff='\diff -u --suppress-common-lines'
+    alias diff-sbs='\diff -y --suppress-common-lines'
   fi
 fi # }}}
 if install 'clang'; then # {{{
@@ -120,7 +125,7 @@ if install 'grc'; then # {{{
       done
       grc_prgs=''
     fi
-    grc_prgs+=" ping:-c:5::8.8.8.8 traceroute::google.pl configure gcc netstat wdiff last ps dig"
+    grc_prgs+=" ping::-c:5:8.8.8.8 traceroute::google.pl configure gcc netstat wdiff last ps dig"
     if ! $IS_MAC; then
       grc_prgs+=" ifconfig"
       grc_prgs+=" mtr::google.pl"
@@ -155,17 +160,18 @@ if install 'mkdir'; then # {{{
   alias mkdir='mkdir -pv'
 fi # }}}
 if install 'lolcat'; then # {{{
-  alias lolcat='lolcat -F 0.3 -p 3'
-  alias lolcatA='lolcat -F 0.2 -a -d 7 -s 18'
+  alias lolcat='\lolcat -F 0.2 -p 3'
+  alias lolcatA='\lolcat -F 0.2 -a -d 7 -s 18'
 fi # }}}
 if install 'auto-sudo'; then # {{{
   if [[ $(id -u) != 0 ]] ; then
-    ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --cnt 8 --delay 0.5 --key --no-err"
+    ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
     if $IS_MAC; then
       alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
     else
       alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt"
       alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get"
+      alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
       alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
       alias systemctl="$ALIASES_AUTO_SUDO_PROMPT && sudo systemctl"
     fi
@@ -173,6 +179,54 @@ if install 'auto-sudo'; then # {{{
 fi # }}}
 # }}}
 # Functions {{{
+if install 'clang:@@:brun'; then # {{{
+  brun() {
+    if [[ $1 == '@@' ]]; then # {{{
+      echo "-- -R -r -c --run --clang $($BASH_PATH/aliases getFileList '*.c') $($BASH_PATH/aliases getFileList '*.cpp')"
+      return 0
+    fi # }}}
+    local f= p= o= cl=clang++ run=true compile=true new_params= args=
+    case $@ in
+    --\ *)           set -- --run ${BRUN_PARAMS%% -- *} $@;;
+    -c | -r | --run) set -- $@ $BRUN_PARAMS;;
+    esac
+    [[ -z $1 ]] && set -- $BRUN_PARAMS ## Required to capture file
+    [[ -z $1 ]] && set -- $($BASH_PATH/aliases getFileList -t -1 '*.cpp')
+    [[ -z $1 ]] && set -- $($BASH_PATH/aliases getFileList -t -1 '*.c')
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -R)      BRUN_PARAMS=""; [[ -z $2 ]] && return 0;;
+      -c)      run=false;;
+      -r)      run=true;;
+      --run)   compile=false; run=true;;
+      --clang) cl='command clang -Weverything -std=c99';;
+      *.c | *.cpp)
+        cl='command clang++ -std=c++11 -Wall'
+        f="$1";;
+      --);;
+      *) p+=" $1";;
+      esac
+      case $1 in
+      -r | -c | -R | --run);;
+      --) new_params+=" $@"; shift; args="$@"; shift $#;;
+      *)  new_params+=" $1";;
+      esac
+      shift
+    done # }}}
+    [[ -z $f || ! -e $f ]] && echo "File [$f] does not exist" >/dev/stderr && return 1
+    [[ ! -z $new_params ]] && export BRUN_PARAMS="$new_params"
+    o="${f%.*}.out"
+    $run && [[ ! -e $o ]] && compile=true
+    if $compile; then
+      echo "Compiling as '$cl $f $p -o $o'..."
+      $cl $f $p -o $o || return 1
+    fi
+    $run || return 0
+    echo -e "Running as './$o ${args:-\b}'..."
+    ./$o $args
+    return $?
+  }
+fi # }}}
 if install 'smart-alias'; then # {{{
   smart_alias() { # {{{
     local cmd= store=
@@ -557,7 +611,7 @@ if install 'remember:@@:rem:r:rr'; then # {{{
           1)       c="ls -A";;
           *)       echo "ls mode [$ls_mode] not yet known" >/dev/stderr && return 1;;
           esac
-          c+=" | fzf --height 100% --prompt '$fzf_prompt' --tac"
+          c+=" | fzf --height 100% --prompt '$fzf_prompt'"
           set -- $(eval "$c")
         fi # }}}
         for i; do # {{{
@@ -632,7 +686,7 @@ if install 'remember:@@:rem:r:rr'; then # {{{
         p="${i//%20/ }" && p="${p/$tild/$HOME}"
         $show_abs || p="${p/$PWD/.}"
         echo "$p"
-      done | { $do_fzf && fzf --height 100% --prompt "$fzf_prompt" --tac || cat -; } | { $do_cmd && xargs -ri $cmd || cat -; }
+      done | { $do_fzf && fzf --height 100% --prompt "$fzf_prompt" || cat -; } | { $do_cmd && xargs -ri $cmd || cat -; }
       # }}}
       if ! $do_keep; then # {{{
         if $do_use_file && [[ -e $file ]]; then
@@ -809,11 +863,13 @@ if install 'fzf-tools'; then # {{{
     file="$(echo "$file" | sed "s/\x1B\[[0-9;]*[mGK]//g")"
     [[ $file == \~* ]] && file=${file/\~/$HOME}
     [[ ! -z $line ]] && line="$(echo "$line" | sed "s/\x1B\[[0-9;]*[mGK]//g")"
-    if [[ $file =~ ^([^:]+):([0-9]+):.*$ ]]; then
+    if [[ $file =~ ^([^:]+):([0-9]+)[:-].*$ ]]; then
       file=${BASH_REMATCH[1]}
       line=${BASH_REMATCH[2]}
     fi
-    [[ -f $file ]] || { echo "Canot open [$file]" >/dev/stderr; sleep 1; return 0; }
+    file="${file%%:*}"
+    [[ ! -e $file ]] && file="${file%-*}"
+    [[ -f $file || $cmd == 'prev' ]] || { echo "Canot open [$file]" >/dev/stderr; sleep 1; return 0; }
     case $cmd in
     less)       params="-N";;&
     vim)        params="-c FastBuffer";;&
@@ -835,7 +891,22 @@ if install 'fzf-tools'; then # {{{
     *)          { echo "Unknown command [$cmd]" >/dev/stderr; sleep 1; return 0; };;
     esac
     case $cmd in
-    prev) cat -n $file | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | $BASH_PATH/aliases hl +cY "^\s*$line\s";;
+    prev) [[ -h $file ]] && echo -e "File ${file##*/} links to $(readlink $file)\n" && file="$(readlink -f $file)"
+          if [[ -f $file ]]; then
+            local t="$(file --mime $file)"
+            [[ "$t" =~ binary ]] && echo "$file is a binary" && return 0
+            if which highlight >/dev/null 2>&1; then
+              [[ ${file##*/} != *.* && ( "$t" =~ shellscript || "$t" =~ text/plain ) ]] && t="-S bash" || t=""
+              highlight -O ansi $t $file 2>/dev/null || cat $file
+            else
+              cat $file
+            fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | $BASH_PATH/aliases hl +cY "^\s*$line\s"
+          elif [[ -d $file ]]; then
+            ! which tree >/dev/null 2>&1 && echo "$file is a directory" && return 0
+            tree -C $file 2>/dev/null | head -200
+          else
+            echo "Not supported entity [$file]"
+          fi;;
     pane) [[ $file != /* ]] && file="$PWD/$file"
           tmux send-keys -t $pane ":call RelTabEdit(\"$file\")"
           [[ ! -z $line ]] && tmux send-keys -t $pane "zR${line}gg"
@@ -844,11 +915,63 @@ if install 'fzf-tools'; then # {{{
     esac
   } # }}}
   fzfwr() { # {{{
-    local FZF_DEFAULT_COMMAND="command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
-    fzf --height 80% "$@"
+    local FZF_DEFAULT_COMMAND="fd -I"
+    if ! which fd >/dev/null 2>&1; then
+      FZF_DEFAULT_COMMAND="command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
+    fi
+    FZF_DEFAULT_COMMAND+=" | sort"
+    local selected="$(fzf --height 80% "$@")"
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
     return 0
   } # }}}
   alias ff='fzfwr'
+  vimf() { # {{{
+    local IFS=$'\n'
+    local files=($(fzf --query="${1:-$VIMF_QUERY} " --multi --select-1 --exit-0))
+    [[ -n "$files" ]] && vim "${files[*]}"
+  } # }}}
+  vimg() { # {{{
+    local search= ret= max="${VIMG_MAX:-100000}"
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      -n) shift; max="$1";;
+      *)  break;
+      esac
+      shift
+    done
+    search="${@:-$VIMG_SEARCH}"
+    [[ -z $search ]] && search="^"
+    ret=($(ag --nobreak --noheading $search \
+      | sort -t ':' -k1,1 -k2,2n \
+      | head -n $max \
+      | fzf --query="$VIMG_QUERY" --no-sort --multi --select-1 --exit-0 \
+      | awk -F: '{print $1, $2}'))
+    if [[ -n $ret ]]; then
+      local i=0 file= line= params= v=
+      if [[ $BASH_VERSINFO -ge 4 ]]; then
+        declare -A retMap
+        while [[ $i -lt ${#ret[*]} ]]; do
+          file="${ret[$i]}" line="${ret[$(($i+1))]}" v="${retMap[$file]}"
+          [[ -z $v || $line -lt $v ]] && retMap[$file]="$line" # Can "or" condition even happen?
+          i="$(($i+2))"
+        done
+        for i in ${!retMap[*]}; do
+          file="$i" line="${retMap[$file]}"
+          [[ -z $params ]] && params+=" $file +$line" || params+=" +\"tabnew +$line $file\""
+        done
+        unset retMap
+      else
+        while [[ $i -lt ${#ret[*]} ]]; do
+          file="${ret[$i]}" line="${ret[$(($i+1))]}"
+          [[ -z $params ]] && params+=" $file +$line" || params+=" +\"tabnew +$line $file\""
+          i="$(($i+2))"
+        done
+      fi
+      params+=" +tabfirst"
+      [[ ! -z $params ]] && _vim $params
+    fi
+  } # }}}
 fi # }}}
 if install 'run-for-some-time'; then # {{{
   run_for_some_time() { # {{{
@@ -1055,7 +1178,7 @@ if install 'weather'; then # {{{
   } # }}}
   alias pogoda='weather'
 fi # }}}
-if install 'kb-open:@@'; then # {{{
+if install 'kb-open:@@:kb-open:kb'; then # {{{
   kb-open() {
     local i= p=
     if [[ $1 == '@@' ]]; then # {{{
@@ -1083,6 +1206,7 @@ if install 'kb-open:@@'; then # {{{
       eval $r
     )
   }
+  alias kb='kb-open'
 fi # }}}
 if install 'simple-http:@@:simple_http'; then # {{{
   simple_http() { # {{{
@@ -1136,10 +1260,28 @@ if install 'caps-ctrl'; then # {{{
     fi
   } # }}}
 fi #}}}
-if install 'date'; then # {{{
+if install 'date:@@'; then # {{{
   date() { # {{{
-    [[ ! -z $1 ]] && eval command date "$@" && return
-    eval command date +$DATE_FMT
+    if [[ $1 == '@@' ]]; then
+      case $3 in
+      +) echo "%Y-%m-%d %Y.%m.%d %H%M%S";;
+      *) echo "+ -d +t +d +dt";;
+      esac
+      return 0
+    fi
+    [[ -z $1 ]] && eval command date +$DATE_FMT && return
+    local p=
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      +t)       p="+'$TIME_FMT'";;
+      +d)       p="+'$DATE2_FMT'";;
+      +dt)      p="+'$DATE_FMT'";;
+      +)        shift; p="+'$1'";;
+      *)        break;;
+      esac
+      shift
+    done
+    eval command date $p "$@"
   } # }}}
 fi # }}}
 if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
@@ -1159,18 +1301,38 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
     echo $dst
   } # }}}
   function cd_wrapper { # {{{
-    if [[ $1 != '--' ]]; then # {{{
-      if [[ ${#BASH_SOURCE[*]} -gt 1 ]]; then
-        command cd "$@"
-        return $?
+    if [[ $1 != '@@' ]]; then # {{{
+      if [[ $1 != '--' ]]; then
+        if [[ ${#BASH_SOURCE[*]} -gt 1 ]]; then
+          command cd "$@"
+          return $?
+        fi
+      else
+        shift
+        [[ "${#BASH_SOURCE[*]}" != 2 ]] && { false && echo "Fall-back [${#BASH_SOURCE[*]}], [$@]" >/dev/stderr; set +f; command cd "$@"; return; }
       fi
-    else
-      shift
-      [[ $1 != '@@' && "${#BASH_SOURCE[*]}" != 2 ]] && { false && echo "Fall-back [${#BASH_SOURCE[*]}], [$@]" >/dev/stderr; set +f; command cd "$@"; return; }
     fi # }}}
     set +f
-    local dst="$1" i= cmd="cd" p= verbose=false oldIFS=$IFS cd_list= len= out= stdout= create_dir=false param= in_pipe=false
+    local dst="$1" i= cmd="cd" p= verbose=false oldIFS=$IFS cd_list= len= out= stdout= create_dir=false param= in_pipe=false fzf_key_split_v='' fzf_key_split_h=''
     if [[ $1 == '@@' ]]; then # {{{
+      if [[ $3 == '-i' || $4 == '-i' ]]; then
+        echo "2 3 4 5 10 --fzf-params"
+        ${CD_INTERACTIVE_LOOP:-true}         && echo "--no-loop"       || echo "--loop"
+        ${CD_INTERACTIVE_PROMPT_EXTRA:-true} && echo "--no-prompt"     || echo "--prompt"
+        ${CD_INTERACTIVE_USER:-true}         && echo "--no-user"       || echo "--user"
+        ${CD_INTERACTIVE_PARENT:-true}       && echo "--no-parent"     || echo "--parent"
+        case ${CD_INTERACTIVE_PREDEFINED:-all} in
+        all)   echo "--predefined-smart --predefined-none";;
+        smart) echo "--predefined-all   --predefined-none";;
+        none)  echo "--predefined-all   --predefined-smart";;
+        esac
+        case ${CD_INTERACTIVE_STORED:-all} in
+        all)   echo "--stored-smart --stored-none";;
+        smart) echo "--stored-all   --stored-none";;
+        none)  echo "--stored-all   --stored-smart";;
+        esac
+        return 0
+      fi
       local ret=''
       [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
       cd_list=$CD_LAST_DIRS_STORED
@@ -1178,7 +1340,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
       for i in ${!cd_list[*]}; do
         ret+=" :${cd_list[$i]/@*}"
       done
-      ret+=" @@-d -mk -P -pu -po"
+      ret+=" @@-d -mk -P -pu -po -i"
       echo "$ret"
       return 0
     fi # }}}
@@ -1193,6 +1355,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
       [[ $1 == '--' ]] && shift
       local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*CD-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
       [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+      [[ -z $1 ]] && set -- -i ${CD_INTERACTIVE_CONF:-${CD_INTERACTIVE_DEPTH2:-2} --loop --parent --user --predefined-smart --stored-smart}
       while [[ ! -z $1 ]]; do # {{{
         param=$1
         case $param in
@@ -1200,7 +1363,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
         .[0-9]*)
             dst="$(eval printf "../%.0s" {1..${1:1}})";;
         .)  stdout=$(i=1; while true; do
-              p="$(command cd $PWD/$(eval printf "../%.0s" {1..$i}); pwd | sed -e "s|^$HOME|~|")"
+              p="$(command cd "$PWD/$(eval printf "../%.0s" {1..$i})"; pwd | sed -e "s|^$HOME|~|")"
               printf "%d. %s\n" "$i" "$p"
               i=$(($i+1))
               [[ $p == '/' ]] && break
@@ -1256,7 +1419,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
              done)
              if $use_fzf; then
                dst="$(echo "$stdout" | fzf --exit-0 --sort --no-multi --prompt='Stored> ')"
-              [[ $? != 0 ]] && return 0
+               [[ $? != 0 ]] && return 0
                dst="${dst#*: }"
              else
                echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
@@ -1394,11 +1557,231 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
               [[ -z $dst ]] && return 1
             fi;;
         # }}}
+        -i) # {{{
+          dst="." && shift
+          # Env configutation # {{{
+          local \
+            fzf_params="${CD_INTERACTIVE_FZF_PARAMS:-+e -x}"    \
+            md="${CD_INTERACTIVE_DEPTH:-1}"                     \
+            loop="${CD_INTERACTIVE_LOOP:-true}"                 \
+            add_parent_dirs="${CD_INTERACTIVE_PARENT:-true}"    \
+            add_predefined="${CD_INTERACTIVE_PREDEFINED:-all}"  \
+            add_stored="${CD_INTERACTIVE_STORED:-all}"          \
+            add_user_list="${CD_INTERACTIVE_USER:-true}"        \
+            prompt_extra="${CD_INTERACTIVE_PROMPT_EXTRA:-true}" \
+            root="${CD_INTERACTIVE_ROOT}"
+          # }}}
+          local res= tmux_p= list= prompt= cd_list= tmp= k= v= paths= predefined_list= user_list= fixed_list=
+          while [[ ! -z $1 ]]; do # {{{
+            case $1 in
+            [0-9]*)             md="$1";;
+            --fzf-params)       fzf_params="$2"; shift;;
+            -l   | --loop)      loop=true;;
+            --parent)           add_parent_dirs=true;;
+            --prompt)           prompt_extra=true;;
+            --user)             add_user_list=true;;
+            --no-loop)          loop=false;;
+            --no-parent)        add_parent_dirs=false;;
+            --no-prompt)        prompt_extra=false;;
+            --no-user)          add_user_list=false;;
+            --predefined-all)   add_predefined='all';;
+            --predefined-smart) add_predefined='smart';;
+            --predefined-none)  add_predefined='none';;
+            --stored-all)       add_stored='all';;
+            --stored-smart)     add_stored='smart';;
+            --stored-none)      add_stored='none';;
+            esac
+            shift
+          done # }}}
+          if [[ -n $TMUX ]]; then # {{{
+            tmux_p="$(tmux show  -vq @tmux_path)"
+            eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null)
+          fi # }}}
+          # Filter stored dirs # {{{
+          IFS=':'
+          for i in $CD_LAST_DIRS_STORED; do
+            IFS="$oldIFS"
+            k="${i%%@*}" v="${i#*@}"
+            [[ -z $k || -z $v ]] && continue
+            echo " $CD_LAST_DIRS_INTERACTIVE_IGNORE " | command grep -q " $k " && continue
+            v="$(__util_cd_param "$k" "$v")"
+            [[ ! -d ${v/\~/$HOME} ]] && continue
+            cd_list+="$(printf ":%-6s --> %s" "$k" "${v/$HOME/\~}")\n"
+            paths+=":$k@$v"
+          done; IFS="$oldIFS"
+          cd_list="$(echo -e "$cd_list" | sort -f -k3,3 | sed -e '/^$/d')"
+          paths="${paths:1}"
+          if [[ "$add_stored" == "smart" ]]; then # {{{
+            [[ -z $root ]] && root="$tmux_p"
+            [[ -z $root ]] && root="$PWD"
+            tmp=
+            if [[ ! -z $root ]]; then
+              while read k i v; do
+                [[ ${v/\~/$HOME} == ${root}* ]] && tmp+="$(printf ":%-6s --> %s" "${k:1}" "${v/$HOME/\~}")\n"
+              done < <(echo -e "$cd_list")
+            fi
+            cd_list="$tmp"
+          fi # }}}
+          # }}}
+          # Fixed list # {{{
+          fixed_list="HOME@$HOME"
+          tmp= IFS=':'
+          for i in $fixed_list; do
+            k="${i%%@*}" v="${i#*@}"
+            [[ -z $k || -z $v ]] && continue
+            [[ ! -d ${v/\~/$HOME} ]] && continue
+            tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/\~}")\n"
+          done; IFS="$oldIFS"
+          fixed_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
+          # }}}
+          if [[ $add_predefined != 'none' ]]; then # {{{
+            predefined_list="ROOT@/"
+            [[ ! -z $tmux_p ]] && predefined_list+=":TMUX@$tmux_p"
+            [[ ! -z $CD_INTERACTIVE_PREDEFINED_LIST ]] && predefined_list+=":$CD_INTERACTIVE_PREDEFINED_LIST"
+            tmp= IFS=':'
+            for i in $predefined_list; do
+              k="${i%%@*}" v="${i#*@}"
+              [[ -z $k || -z $v ]] && continue
+              [[ ! -d ${v/\~/$HOME} ]] && continue
+              [[ $add_predefined != 'smart' || ${v/\~/$HOME} == ${root}* ]] || continue
+              tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/\~}")\n"
+            done; IFS="$oldIFS"
+            predefined_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
+          fi # }}}
+          if $add_user_list; then # {{{
+            user_list= IFS=':'
+            for i in $CD_INTERACTIVE_USER_LIST; do
+              k="${i%%@*}" v="${i#*@}"
+              [[ -z $v ]] && continue
+              [[ ! -d ${v/\~/$HOME} ]] && continue
+              [[ -z $k || $k == $v ]] && k="${v##*/}" && k="${k:0:6}"
+              user_list+="$(printf "+%-6s --> %s" "$k" "${v/$HOME/\~}")\n"
+            done; IFS="$oldIFS"
+            user_list="$(echo -e "$user_list" | sort -f -k3,3 | sed -e '/^$/d')"
+          fi # }}}
+          # fzf-wrapper # {{{
+          if $use_fzf; then
+            fzf_wrapper() {
+              local mode="$1" wd="$3" dir=
+              [[ $2 == '---' || -z $2 ]] && dir="$wd"
+              [[ -z $dir ]] && dir="$(echo "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
+              dir="$(echo ${dir/\~/$HOME})"
+              [[ $dir != /* ]] && dir="$wd/$dir" && dir="$(command cd "$dir"; pwd)"
+              case $mode in
+              prev)    $BASH_PATH/aliases fzf_exe -c prev --prev 10 -f "$dir" ;;
+              split-v) tmux split-window -v -p 30 -d -c "$dir";;
+              split-h) tmux split-window -h -p 50 -d -c "$dir";;
+              new-wnd) tmux new-window   -a       -d -c "$dir";;
+              esac
+            }
+            export -f fzf_wrapper
+          fi # }}}
+          local first=true
+          while true; do # {{{
+            dst="$(command cd "${dst/\~/$HOME}"; pwd)"
+            # List # {{{
+            list=
+            $loop && ! $first && list="---\n"
+            if [[ $md -gt 0 ]]; then # {{{
+              for i in $(seq 1 $md); do
+                res="$( \
+                  command cd $dst; \
+                  find . -mindepth $i -maxdepth $i \
+                         -type d -a -not \( -name .git -o -path \*/.git/\* \) -print \
+                         -o -prune 2>/dev/null \
+                    | sed 's|^\./||' | sort -f)"
+                [[ ! -z $res ]] && list+="$res\n"
+              done
+            fi # }}}
+            if $add_parent_dirs && [[ "$dst" != '/' ]]; then # {{{
+              list+="../\n"
+              list+="$( \
+                command cd $dst; \
+                find .. -maxdepth 1 \
+                        -type d -a -not \( -path "../$(basename $PWD)" -o -path ../.git \) -print \
+                        -o -prune 2>/dev/null \
+                  | sort -f)\n"
+            fi # }}}
+            list+='\n'
+            if $add_user_list && [[ ! -z "$user_list" ]]; then # {{{
+              list+="$user_list\n"
+            fi # }}}
+            list+="$fixed_list\n"
+            if [[ ! -z "$predefined_list" ]]; then # {{{
+              case $add_predefined in
+              all | smart) list+="$predefined_list\n"
+              esac
+            fi # }}}
+            if [[ ! -z "$cd_list" ]]; then # {{{
+              case $add_stored in
+              all | smart) list+="$cd_list\n" ;;
+              esac
+            fi # }}}
+            # }}}
+            # Prompt # {{{
+            prompt="$dst"
+            if $prompt_extra; then # {{{
+              IFS=':'
+              for i in $paths; do
+                k="${i%%@*}" v="${i#*@}"
+                [[ $dst == ${v}* ]] || continue
+                tmp="${dst/$v/$k}"
+                [[ ${#tmp} -lt ${#prompt} ]] && prompt=":$tmp"
+              done; IFS="$oldIFS"
+              prompt="${prompt/$tmux_p/TMUX}"
+            fi # }}}
+            prompt="${prompt/$HOME/\~}"
+            [[ ${#prompt} -gt 70 ]] && prompt="$(echo "$prompt" | sed -e 's|\([^/]*\)/.*/\(.*/.*\)|\1/.../\2|')"
+            [[ ${#prompt} -gt 70 ]] && prompt="$(echo "$prompt" | sed -e 's|\([^/]*\)/.*/\(.*\)|\1/.../\2|')"
+            # }}}
+            stdout="$(echo -e "$list" | sed -e '/^\.\{1,2\}$/d')"
+            if $use_fzf; then # {{{
+              res="$(\
+                echo -e "$stdout" \
+                | fzf \
+                    --exit-0 --no-sort --no-multi --layout=reverse \
+                    --preview "fzf_wrapper prev {} \"$dst\"" \
+                    --bind "$fzf_key_split_v:execute(fzf_wrapper split-v {} \"$dst\")" \
+                    --bind "$fzf_key_split_h:execute(fzf_wrapper split-h {} \"$dst\")" \
+                    --bind "ctrl-o:execute(fzf_wrapper new-wnd {} \"$dst\")" \
+                    --prompt="${prompt}> " \
+                    --query="'" \
+                    $fzf_params \
+              )"
+              [[ $? != 0 || -z $res ]] && { unset fzf_wrapper; return 0; }
+              # }}}
+            else # {{{
+              echo "$stdout" | cat -n | cut -c4- | { ! $in_pipe && hl --lines || cat -; }
+              $in_pipe && return 0
+              read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+              case ${i^^} in
+              Q|N|'') return 0;;
+              esac
+              res="$(echo -e "$stdout" | sed "${i}q;d")"
+            fi # }}}
+            case $res in # {{{
+            ---)  break;;
+            @* | +* | :*) dst="$(echo "$res" | sed -e 's/.*-->\s*\(.*\)/\1/')";;
+            *) # {{{
+              dst+="/$res"
+              [[ $dst == //* ]] && dst="${dst:1}"
+              [[ ! -d "$dst" ]] && return 1
+              ;; # }}}
+            esac # }}}
+            ! $loop && break
+            first=false
+          done # }}}
+          unset fzf_wrapper
+          dst="${dst/\~/$HOME}"
+          [[ -z $dst || ! -d $dst ]] && return 1
+        ;; # }}}
         --)  shift; dst="$1"; break;;
         -mk) create_dir=true;;
         -pu) cmd="pushd";;
         -po) cmd="popd";;
         -v)  verbose=true; in_pipe=true; use_fzf=false;;
+        -P)  shift; dst="$(readlink -f "$1")"; break;;
+        -*)  [[ ! -d "$1" ]] && cmd+=" $1" || { dst="$1"; break; };;
         *)   dst="$1"; break;;
         esac
         shift
@@ -1459,7 +1842,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
   alias cd='set -f;cd_no_expansion $@'
   alias po='cd -- -P'
   alias pu='cd -- -p'
-  alias cdd='cd -- -p'
+  alias cdd='cd -- -i 3 --loop --prompt --stored-all --fzf-params "+e -x --query="'
   alias .1='cd -- .1'
   alias .2='cd -- .2'
   alias .3='cd -- .3'
@@ -1604,59 +1987,71 @@ if install 'rmf-trash:@@:rmfTrash:rmf'; then # {{{
 elif install 'rmf-basic'; then
   alias rmf='rm -rf'
 fi # }}}
-if install 'find-short'; then # {{{
+if install 'find-short:@@:f:ff'; then # {{{
   ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
   f() {
-    local use_tee=true use_fzf=true fallback=false params= query=
+    if [[ $1 == '@@' ]]; then
+      echo "-+tee=false +tee=true +-fzf +fzf +find"
+      return 0
+    fi
+    local use_tee=true use_fzf=true fallback=false params= query= force_find=false
+    ! which fd >/dev/null 2>&1 && force_find=true
     while [[ ! -z $1 ]]; do
       case $1 in
-        +t | +tee)   use_tee=true;;
-        +tee=*)      use_tee=${1/+tee=};;
-        +-fzf | +-f) use_fzf=false;;
-        +fzf  | +f)  use_fzf=$FZF_INSTALLED;;
-        +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
-        *)
-          query="$1"
-          if [[ ! -z $2 ]]; then
-             if [[ ! -d $1 ]]; then
-               params+=" ."
-             else
-               params+=" $1"
-               shift
-               query="$1"
-             fi
-             [[ $1 != -* ]] && params+=" -name" || query="$2"
-             local msg="Falling back to find command: 'find $params $@'"
-             progress --msg "$msg" --cnt 4 --key --every-step --no-err --out /dev/stderr || return 0
-             if [[ ! -t 1 ]]; then
-               echo "find $params $@"
-               echo
-             fi
-             fallback=true
-           fi
-           break;;
+      +t | +tee)   use_tee=true;;
+      +tee=*)      use_tee=${1/+tee=};;
+      +-fzf | +-f) use_fzf=false;;
+      +fzf)        use_fzf=$FZF_INSTALLED;;
+      +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+      +find | +f)  force_find=true;;
+      *) # {{{
+        query="$1"
+        if [[ ! -z $2 ]]; then
+          if [[ ! -d $1 ]]; then
+            params+=" ."
+          else
+            params+=" $1"
+            shift
+            query="$1"
+          fi
+          [[ $1 != -* ]] && params+=" -name" || query="$2"
+          local msg="Falling back to find command: 'find $params $@'"
+          progress --msg "$msg" --dots --cnt 30 --no-err --out /dev/stderr || return 0
+          if [[ ! -t 1 ]]; then
+            echo "find $params $@"
+            echo
+          fi
+          fallback=true
+        fi
+        break;; # }}}
       esac
       shift
     done
     [[ ! -t 1 ]] && use_fzf=false
     if ! $fallback; then
-      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" find . -name "$1"
+      if ! $force_find; then
+        output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'fd: $query> '" --no-err fd "$1"
+      else
+        output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find . -name "$1"
+      fi
     else
-      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" find $params "$@"
+      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find $params "$@"
     fi
     return $?
   }
+  alias ff="f +find"
 fi # }}}
-if install 'ack-wrapper:@@:ag:ack:ack-grep'; then # {{{
+if install 'ack-wrapper:@@:ag:ack:ack-grep:rg'; then # {{{
   ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
   ack_ag_wrapper() { # {{{
     if [[ $1 == @@ ]]; then
-      echo "--cmd-ag --cmd-ack +tee=false +tee=true +-fzf +fzf"
+      echo "--cmd-ag --cmd-ack --cmd-rg +tee=false +tee=true +-fzf +fzf"
       return 0
     fi
     local cmd=
     local use_tee=true
     local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*ACK-AG-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
+    local fzf_params=
     [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
     while [[ ! -z $1 ]]; do
       case $1 in
@@ -1667,6 +2062,7 @@ if install 'ack-wrapper:@@:ag:ack:ack-grep'; then # {{{
       +fzf | +f)
                use_fzf=$FZF_INSTALLED;;
       +fzf=*)  use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+      +fzf-*)  fzf_params+=" $1";;
       *)       break;;
       esac
       shift
@@ -1681,53 +2077,58 @@ if install 'ack-wrapper:@@:ag:ack:ack-grep'; then # {{{
         *)    break;;
         esac
       done
-      grep_wrapper --cmd-grep +tee=$use_tee -R "$@" *
+      grep_wrapper --cmd-grep +tee=$use_tee +fzf=$use_fzf $fzf_params -R "$@" *
       return $?
     fi
     local params= prompt=
     case $cmd in
-    ack*) params+=" $ACK_OPTIONS"; prompt="ack: $1> ";;
-    ag*)  params+=" --silent $AG_OPTIONS"; prompt="ag: $1> ";;
+    ack*) params+=" $ACK_OPTIONS"; prompt="ack: ${@: -1}> ";;
+    ag*)  params+=" --silent $AG_OPTIONS"; prompt="ag: ${@: -1}> ";;
+    rg*)  prompt="rg: ${@: -1}> ";;
     esac
     [[ ! -t 1 ]] && use_fzf=false
     if $use_tee && [[ -t 1 ]] && ! $use_fzf; then
       case $cmd in
       ack*) params+=" --color";;
       ag*)  params+=" --color";;
+      rg*)  params+=" --color always";;
       esac
     fi
-    output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt '$prompt'" $cmd $params "$@"
+    output_to_file --no-sort $use_tee +fzf=$use_fzf $fzf_params +fzf-p "--prompt '$prompt'" $cmd $params $@
     return $?
   }
   alias ack-grep='ack_ag_wrapper --cmd-ack'
   alias ack='ack_ag_wrapper --cmd-ack'
-  alias _ack='ack_ag_wrapper --cmd-ack +tee=false'
   alias ag='ack_ag_wrapper --cmd-ag'
-  alias _ag='ack_ag_wrapper --cmd-ag +tee=false'
+  alias rg='ack_ag_wrapper --cmd-rg'
   # }}}
 fi # }}}
 if install 'mg:@@'; then # {{{
   ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
   mg() { # {{{
     if [[ $1 == @@ ]]; then
-      echo "+g +ack +ag +tee=true +tee=false +-fzf +fzf"
+      echo "+g +ack +ag +rg +tee=true +tee=false +-fzf +fzf"
       return 0
     fi
     local cmd="ag"
+    ! which $cmd >/dev/null 2>&1 && cmd="rg"
     ! which $cmd >/dev/null 2>&1 && cmd="ack"
     ! which $cmd >/dev/null 2>&1 && cmd="grep"
     local tee=true
     local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*MG:[^,]\+,' | command grep -o 'true\|false')"
+    local fzf_params=
     [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
     while [[ ! -z $1 ]]; do
       case $1 in
       +g)     cmd="grep";;
       +ack)   cmd="ack";;
       +ag)    cmd="ag";;
+      +rg)    cmd="rg";;
       +tee=*) tee="${1/+tee=}";;
       +-fzf | +-f) use_fzf=false;;
       +fzf  | +f)  use_fzf=$FZF_INSTALLED;;
       +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+      +fzf-*)      fzf_params+=" $1";;
       *)      break;;
       esac
       shift
@@ -1736,9 +2137,10 @@ if install 'mg:@@'; then # {{{
     _aliases_dbg
     local err=
     case $cmd in
-    grep*) grep_wrapper   --cmd-grep +tee=$tee +fzf=$use_fzf -R "$@" *; err=$?;;
-    ack*)  ack_ag_wrapper --cmd-ack  +tee=$tee +fzf=$use_fzf    "$@"; err=$?;;
-    ag*)   ack_ag_wrapper --cmd-ag   +tee=$tee +fzf=$use_fzf    "$@"; err=$?;;
+    grep*) grep_wrapper   --cmd-grep +tee=$tee +fzf=$use_fzf $fzf_params -R "$@" *; err=$?;;
+    ack*)  ack_ag_wrapper --cmd-ack  +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
+    ag*)   ack_ag_wrapper --cmd-ag   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
+    rg*)   ack_ag_wrapper --cmd-rg   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
     esac
     return $err
   } # }}}
@@ -1763,10 +2165,12 @@ if install 'grep:@@:grep:grep_wrapper'; then # {{{
     local color=
     local use_tee=
     local ignoreErr=
-    local query=
+    local query="${@: -2}"
+    local fzf_params=
+    local fzf_prompt=
     local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*GREP:[^,]\+,' | command grep -o 'true\|false')"
     [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
-    while [[ ! -z $1 ]]; do
+    while [[ ! -z $1 ]]; do # {{{
       case $1 in
         --cmd-*) cmd=${1/"--cmd-"}
                  case $cmd in
@@ -1779,13 +2183,15 @@ if install 'grep:@@:grep:grep_wrapper'; then # {{{
         +tee)    use_tee=true;;
         +-fzf | +-f) use_fzf=false;;
         +fzf  | +f)  use_fzf=$FZF_INSTALLED;;
+        +fzf-prompt) fzf_prompt="$2"; shift;;
         +fzf=*)  use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+        +fzf-*)  fzf_params+=" $1";;
         -*)      args+=" $1";;
-        *)       args+=" \"$1\""; [[ -z $query ]] && query="$1";;
+        *)       args+=" \"$1\"";;
       esac
       shift
-    done
-    if [[ ! -z $color ]]; then
+    done # }}}
+    if [[ ! -z $color ]]; then # {{{
       params+=" --color=yes"
       case $(echo ${color,,}) in
       gr|gray|grey)   GREP_COLORS=$(echo $GREP_COLORS | sed 's/mt=[0-9;]*/mt=01;30/');;
@@ -1799,35 +2205,36 @@ if install 'grep:@@:grep:grep_wrapper'; then # {{{
       hls)            GREP_COLORS=$(echo $GREP_COLORS | sed 's/mt=[0-9;]*/mt=38;5;208/');;
       search)         GREP_COLORS=$(echo $GREP_COLORS | sed 's/mt=[0-9;]*/mt=38;5;214/');;
       [0-9]*\;[0-9]*) GREP_COLORS=$(echo $GREP_COLORS | sed "s/mt=[0-9;]*/mt=$color/");;
-      [0-9]*)         GREP_COLORS=$(echo $GREP_COLORS | sed "s/mt=[0-9;]*/mt=01;$color/");;
+      [0-9]*)         GREP_COLORS=$(echo $GREP_COLORS | sed "s/mt=[0-9;]*/mt=01;38;5;$color/");;
       *=*)            GREP_COLORS=$(echo $GREP_COLORS | sed "s/mt=[0-9;]*/$color/");;
       esac
-    fi
+    fi # }}}
     export GREP_COLORS
     $IS_MAC && ! $gnuGrep && export GREP_COLOR=${GREP_COLORS/mt=}
     local exclude=
     [[ $cmd != z* ]] && exclude=" --exclude-dir .git --exclude-dir .hg --exclude=tags --exclude 'cscope*' $GREP_EXCLUDES"
-    if [[ -t 0 ]]; then
+    if [[ -t 0 ]]; then # {{{
       params+=" -n"
       [[ $args != *-h* ]] && params+="H"
-    fi
-    if [[ -z $use_tee ]]; then
+    fi # }}}
+    if [[ -z $use_tee ]]; then # {{{
       [[ -t 0 ]] && use_tee=true || use_tee=false
-    fi
+    fi # }}}
     local err=
-    if [[ ! -t 1 ]]; then
+    if [[ ! -t 1 ]]; then # {{{
       use_fzf=false
       params="${params/--color=yes}"
       params="${params/--color}"
       params+=" --color=no "
-    fi
-    if $use_tee; then
+    fi # }}}
+    if $use_tee; then # {{{
       params=" $params "
       [[ -t 1 ]] && params="${params/--color }" && params="--color=$($use_fzf && echo 'no' || echo 'yes') $params"
-    fi
+    fi # }}}
     set - "$args"
     # echo "output_to_file $use_tee +fzf=$use_fzf $ignoreErr "eval $cmd" $params "$@" $exclude" >/dev/stderr
-    output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'grep: $query> '" $ignoreErr "eval $cmd" $params "$@" $exclude
+    [[ -z fzf_prompt ]] && fzf_prompt="grep: $query> "
+    output_to_file --no-sort $use_tee +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
     err=$?
     export GREP_COLORS=$oldColors
     $IS_MAC && ! $gnuGrep && export GREP_COLOR=$oldColors
@@ -1847,7 +2254,7 @@ fi # }}}
 if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
   output_to_file() { # {{{
     if [[ $1 == '@@' ]]; then
-      echo "+tee=true +tee=false --ignore=err +fzf +-fzf"
+      echo "+tee=true +tee=false --ignore=err +fzf +-fzf --no-err --no-sort"
       return 0
     fi
     local use_tee=true
@@ -1855,17 +2262,20 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
     local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*OUTPUT-TO-FILE:[^,]\+,' | command grep -o 'true\|false')"
     [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
     local colors= sort_params=
-    local fzf_params="--exit-0 --tac --no-sort --multi --height 100%"
+    local fzf_params="--exit-0 --layout=reverse-list --no-sort --multi --height 100%" errout="/dev/stderr"
     while [[ ! -z $1 ]]; do
       case $1 in
       true|false)   use_tee=$1;;
       +tee=*)       use_tee="${1/+tee=}";;
       --ignore-err) ignoreErr=true;;
       --sort-*)     sort_params+=" ${1#--sort-}";;
+      --no-sort)    sort_params='NO-SORT';;
       +-fzf | +-f)  use_fzf=false;;
       +fzf  | +f)   use_fzf=$FZF_INSTALLED;;
       +fzf=*)       use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
       +fzf-p)       fzf_params+=" $2"; shift;;
+      +fzf-*)       fzf_params+=" ${1#+fzf-}";;
+      --no-err)     errout="/dev/null";;
       *)            cmd=$1; shift; break;;
       esac
       shift
@@ -1887,7 +2297,7 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
     if $use_tee; then # {{{
       [[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
       local file="$GREP_LAST_PATH/last-$(date).txt"
-      [[ -n $TMUX ]] && file="$GREP_LAST_PATH/$(tmux display-message -p '#S-#I-#P')-$(date).txt"
+      [[ -n $TMUX ]] && file="$GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')-$(date).txt"
       (
         echo "$cmd $@"
         echo "# "${PWD/$HOME/\~}
@@ -1896,20 +2306,20 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
       ) >$file
       if $use_fzf; then # {{{
         if [[ $sort_params == 'NO-SORT' ]]; then
-          $use_eval command $cmd $colors "$@" | tee -a $file | { eval fzf $fzf_params; }
+          $use_eval command $cmd $colors "$@" 2>$errout | tee -a $file | { eval fzf $fzf_params; }
         else
-          $use_eval command $cmd $colors "$@" | tee -a $file | sort $sort_params -st':' -k1,1 -k2,2n | { eval fzf $fzf_params; }
+          $use_eval command $cmd $colors "$@" 2>$errout | tee -a $file | sort $sort_params -st':' -k1,1 -k2,2n | { eval fzf $fzf_params; }
         fi
         # }}}
       else # {{{
-        $use_eval command $cmd "$@" | tee -a $file
+        $use_eval command $cmd "$@" 2>$errout | tee -a $file
       fi # }}}
       err=${PIPESTATUS[0]}
       if [[ $err == 0 ]] || $ignoreErr; then # {{{
         sed -i "s/\x1B\[[0-9;]*[mGK]//g" $file
         if [[ -n $TMUX ]]; then
-          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p '#S-#I-#P')
-          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p '#S-#I')
+          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')
+          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')
           ln -sf $file $GREP_LAST_PATH/$TMUX_SESSION
         fi
         ln -sf $file $GREP_LAST_PATH/last
@@ -1945,8 +2355,8 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
         esac
         if [[ -n $TMUX ]]; then
           case $3 in
-          -p) echo "$(command cd $GREP_LAST_PATH; ls $(tmux display-message -p '#S-#I-#P')-* 2>/dev/null | command grep -v '.txt')";;
-          -w) echo "$(command cd $GREP_LAST_PATH; ls $(tmux display-message -p '#S-#I')-*    2>/dev/null | command grep -v '.txt')";;
+          -p) echo "$(command cd $GREP_LAST_PATH; ls $(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')-* 2>/dev/null | command grep -v '.txt')";;
+          -w) echo "$(command cd $GREP_LAST_PATH; ls $(tmux display-message -p -t $TMUX_PANE -F '#S-#I')-*    2>/dev/null | command grep -v '.txt')";;
           -s) echo "$(command cd $GREP_LAST_PATH; ls ${TMUX_SESSION}-*       2>/dev/null | command grep -v '.txt')";;
           esac
         fi
@@ -1964,8 +2374,8 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
       while [[ ! -z $1 ]]; do
         case $1 in
           -l) f=last;;
-          -p) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$(tmux display-message -p '#S-#I-#P') || { f=$2; shift; }; fi;;
-          -w) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$(tmux display-message -p '#S-#I')    || { f=$2; shift; }; fi;;
+          -p) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P') || { f=$2; shift; }; fi;;
+          -w) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')    || { f=$2; shift; }; fi;;
           -s) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$TMUX_SESSION                         || { f=$2; shift; }; fi;;
           -L) if [[ -n $TMUX ]]; then [[ -z $2 ]] && f=$TMUX_SESSION                         || { f=$2; shift; }; fi; show_greps=true;;
           -f | --file)   show_file=true;;
@@ -1999,7 +2409,7 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
     if $clean; then
       if [[ -z $f ]]; then
         f=last.txt
-        [[ -n $TMUX ]] && f=$(tmux display-message -p '#S-#I')
+        [[ -n $TMUX ]] && f=$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')
       elif [[ $f == ALL ]]; then
         f=
       fi
@@ -2022,8 +2432,8 @@ if install 'output_to_file:@@:output_to_file:last_grep:l-grep'; then  # {{{
     else
       local files=( $GREP_LAST_PATH/last.txt )
       [[ -n $TMUX ]] && files=( \
-          $GREP_LAST_PATH/$(tmux display-message -p '#S-#I-#P') \
-          $GREP_LAST_PATH/$(tmux display-message -p '#S-#I') \
+          $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P') \
+          $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I') \
           $GREP_LAST_PATH/$TMUX_SESSION \
           $GREP_LAST_PATH/last \
         )
@@ -2049,7 +2459,7 @@ fi # }}}
 if install 'hl'; then # {{{
   hl() { # {{{
     local cmd_root="$GREP_DEFAULT_PARAMS --text --line-buffered --color=yes"
-    local params=() cnt=0 lines=false add_lines=false lines_colors=($(echo "48;5;12 48;5;232")) c= add_default=false
+    local params=() cnt=0 lines=false add_lines=false lines_colors=($(echo "48;5;239 48;5;232")) c= add_default=false
     #  hl --lines "48;5;239  48;5;232"
     while true; do # {{{
       while [[ ! -z "$1" ]]; do # {{{
@@ -2249,17 +2659,9 @@ if install 'extract:@@'; then # {{{
     else
       cmd="$cmd $file"
       echo $cmd
-      exec 3>&2         # Save stderr
-      exec 2> /dev/null # Be silent
-      progress --msg "Extracting [$file]..." &
-      local p1=$!
-      exec 2>&3         # Restore stderr
+      $BASH_PATH/aliases progress --mark --dots --msg "Extracting '$file'"
       eval $cmd 1>/dev/null
-      exec 2> /dev/null # Be silent again
-      kill $p1
-      wait $p1
-      exec 2>&3         # Restore
-      exec 3>&-         # Close
+      $BASH_PATH/aliases progress --unmark
       echo
     fi
   }
@@ -2565,8 +2967,8 @@ if install 'tmux-tm:@@:tm'; then # {{{
           [[ -z $var ]] && return 1
           if $nest; then
             tmux set-option -t "$var" -q @master_pane $TMUX_SESSION
-            tmux set-option -t "$(tmux display-message -p '#S:#I')" -qw @marked_pane $(tmux display-message -p '#P')
-            $BASH_PATH/aliases set_title --from-tmux "$(tmux display-message -p '#S:#I')" "$var"
+            tmux set-option -t "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" -qw @marked_pane $(tmux display-message -p -t $TMUX_PANE -F '#P')
+            $BASH_PATH/aliases set_title --from-tmux "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" "$var"
             cmd="TMUX= tmux attach-session -t \"$var\""
           else
             cmd="tmux switch-client -t \"$var\""
@@ -2731,7 +3133,11 @@ if install 'sshh:@@'; then # {{{
     fi
     [[ -z $port ]] && port='22'
     [[ ! -z $user ]] && user+='@'
-    [[ ! -z $2 ]] && echo "ssh -A $params -p $port ${user}${host}" && return 0
+    if [[ ! -z $2 ]]; then
+      $BASH_PATH/profiles/$i/aliases __util_ssh_getParams --pre $host $host_alias >/dev/stderr || return 1
+      echo "ssh -A $params -p $port ${user}${host}"
+      return 0
+    fi
     echo "$host $user $port"
   } # }}}
   __util_ssh_getHosts() { # {{{
@@ -2794,13 +3200,14 @@ if install 'sshh:@@'; then # {{{
         params+=" $1";; # }}}
       *) # {{{
         host="$1"
-        cmd=$(__util_ssh_getParams $host true);; # }}}
+        cmd=$(__util_ssh_getParams $host true)
+        [[ -z $cmd ]] && return 1;; # }}}
       esac
       shift
     done # }}}
     cmd="${cmd/ssh /ssh $params }"
     local params="--set-pane"
-    [[ -n $TMUX && $(tmux display-message -pF '#{window_panes}') == 1 ]]  && params+=" --set-window"
+    [[ -n $TMUX && $(tmux display-message -p -t $TMUX_PANE -F '#{window_panes}') == 1 ]]  && params+=" --set-window"
     set_title $params "ssh: $host"
     _aliases_dbg $cmd
     eval $cmd
@@ -3450,8 +3857,7 @@ if install 'set-title:@@:set_title'; then # {{{
     local current_pane= current_pane_title=
     if $isTMUX; then # {{{
       [[ -z $title ]] && title="$(tmux show-environment "SET_TITLE_NEW_WINDOW_TITLE" 2>/dev/null | cut -d'=' -f2)"
-      current_pane=$(tmux display-message -p -F '#P')
-      current_pane_title="$(tmux list-panes -F '.#P #T' | command grep "^\.$current_pane" | cut -d\  -f2-)"
+      read current_pane current_pane_title < <(tmux display-message -p -t $TMUX_PANE -F '#P #W')
     fi # }}}
     if $setPaneTitle; then # {{{
       if [[ ! -z $title_pane ]]; then
@@ -3468,7 +3874,7 @@ if install 'set-title:@@:set_title'; then # {{{
       $setPaneTitle && printf ']2;%s\\' "$title_pane" >/dev/stderr
       local TMUX_LOCKED_TITLE='@locked_title' locked_pane=
       if $isTMUX; then # {{{
-        $dbg && echo "current pane=($(tmux display-message -p -t . -F "#S:#I.#P")) ft=($from_tmux)"
+        $dbg && echo "current pane=($(tmux display-message -p -t $TMUX_PANE -F "#S:#I.#P")) ft=($from_tmux)"
         locked_pane=$(tmux show-option $from_tmux -qvw $TMUX_LOCKED_TITLE)
       fi # }}}
       if [[ -z $locked_pane || $lock_title == 'true-force' ]]; then # {{{
@@ -3550,27 +3956,26 @@ fi # }}}
 if install 'progress:@@'; then # {{{
   progress() { # {{{
     if [[ $1 == '@@' ]]; then # {{{
-      local retVal='--cmd --delay --msg --cnt --key --get-key --keys --every-step --out --color --pv --no-err --dbg --dbg2 --end-msg'
+      local retVal='--cmd --delay --msg --cnt --key --get-key --keys --every-step --out --color --pv --dots --spin --no-err --dbg --dbg2 --end-msg --steps --mark --unmark'
       echo "$retVal"
       return 0
     fi # }}}
     # Init {{{
     [[ -z $COff ]] && source $BASH_PATH/colors
-    local cmd=false
-    local delay=1
-    local msg=
-    local cnt=0
-    local key=false
-    local get_key=false
-    local pressed_key=
-    local extra_keys=
-    local every=false
-    local out="/dev/stdout"
-    local color="${CHLSearch}"
-    local end_message="[DONE]:[BREAK]"
+    local cmd= delay= msg= cnt=0 every=false steps= dbg=
+    local use_pv=false use_dots=false use_spin=false
+    local out="/dev/stdout" color="${CHLSearch}" end_message="DONE:BREAK"
+    local key=false get_key=false pressed_key= extra_keys=
+    local mark_file="$TMP_MEM_PATH/progress-$PPID.tmp"
     local report_error=true
-    local use_pv=false
-    local dbg=
+    if [[ -z $PROGRESS_DOTS_SUPPORTED ]]; then # {{{
+      PROGRESS_DOTS_SUPPORTED=true
+      if [[ ! -z $LC_CTYPE ]] && ! echo "$LC_CTYPE" | command grep -q "UTF-8"; then
+        PROGRESS_DOTS_SUPPORTED=false
+      elif which locale >/dev/null 2>&1 && ! locale | command grep -q "LC_CTYPE=.*UTF-8"; then
+        PROGRESS_DOTS_SUPPORTED=false
+      fi
+    fi # }}}
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
       --cmd)        shift; cmd=$1;;
@@ -3580,23 +3985,45 @@ if install 'progress:@@'; then # {{{
       --out)        shift; out=$1;;
       --color)      shift; color=$1;;
       --end-msg)    shift; end_message=$1;;
+      --steps)      shift; steps=$1;;
       --no-err)     report_error=false;;
       --key)        key=true;;
       --keys)       shift; extra_keys=$1;&
       --get-key)    get_key=true;;
       --every-step) every=true;;
       --pv)         use_pv=true;;
+      --dots)       use_dots=${PROGRESS_DOTS_SUPPORTED:-true};;
+      --spin)       use_spin=true;;
+      --mark)       shift; progress --mark-raw "$@" & :; return 0;;
+      --mark-f)     shift; mark_file="$TMP_MEM_PATH/progress-$1.tmp";;&
+      --mark-raw | \
+      --mark-f)     touch $mark_file; cmd="[[ ! -e $mark_file ]]"; every=true;;
+      --unmark)     [[ ! -z $2 ]] && mark_file="$TMP_MEM_PATH/progress-$2.tmp"; rm -f $mark_file; sleep 0.1; return 0;;
       --dbg)        dbg="l1";;
       --dbg2)       dbg="l2";;
+      *)            msg="$1";;
       esac
       shift
     done # }}}
     $get_key && [[ $out == '/dev/stdout' ]] && out='/dev/stderr'
-    [[ ! -z $msg ]] && echo -n "$msg " >>$out
+    if ! $use_spin && ! $use_dots && ! $use_pv; then # {{{
+      if $every || [[ $(echo $delay | awk '{print $1 * 100}') -le 25 ]]; then
+        use_dots=${PROGRESS_DOTS_SUPPORTED:-true}
+      fi
+    fi # }}}
+    if [[ -z $delay ]]; then # {{{
+      $use_dots && delay=0.15 || delay=1
+    fi # }}}
+    if [[ -z $steps ]]; then # {{{
+      $use_dots && steps=10 || steps=4
+    fi # }}}
+    if $use_spin && [[ $(echo $delay | awk '{print $1 * 100}') -lt 50 ]]; then # {{{
+      delay=0.5
+    fi # }}}
+    [[ -z $cmd ]] && key=true && cmd=false
     # }}}
-    # PV mode # {{{
-    if $use_pv; then
-      [[ ! -z $msg ]] && echo >>$out
+    if $use_pv; then # PV mode # {{{
+      [[ ! -z $msg ]] && echo "$msg " >>$out
       echo -n "${color}" >>$out
       for (( ; $cnt > 0; cnt-- )); do
         echo -n "."
@@ -3605,16 +4032,46 @@ if install 'progress:@@'; then # {{{
       echo -n "${COff}" >>$out
       return 0
     fi # }}}
-    # Spin mode # {{{
+    local chars=() local charIdx=0
+    if $use_dots; then # Dots mode # {{{
+      genChars() {
+        chars=()
+        local i=
+        if [[ -e $TMP_PATH/.progress-dots ]]; then
+          source $TMP_PATH/.progress-dots
+        else
+          for ((i=1; i<0xFF; i++)); do chars+=("$(printf "%x" $((0x2800+$i)))"); done
+          echo "chars=(${chars[*]})" >$TMP_PATH/.progress-dots
+        fi
+      }
+      nextChar()    { local l=${#chars[*]}; charIdx=$((($charIdx+1+$RANDOM%($l-1))%$l)); }
+      getChar()     { echo -en "\u${chars[$charIdx]}"; }
+      getLastChar() { echo -en "\u28ff"; }
+      # }}}
+    else # Spin mode # {{{
+      genChars() { chars=('-' '\' '|' '/'); }
+      nextChar() { charIdx=$((($charIdx + 1) % ${#chars[*]})); }
+      getChar()  { echo -en "${chars[$charIdx]}"; }
+      getLastChar() {
+        local msg='   '
+        case $1 in
+        0|10|11|12) [[ ! -z "${end_message/:*}" ]] && msg="${end_message/:*}";;
+        *)          [[ ! -z "${end_message/*:}" ]] && msg="${end_message/*:}";;
+        esac
+        echo -ne "$msg"
+      }
+    fi # }}}
+    cleanChars() { unset charIdx chars; unset -f genChars getChar getLastChar nextChar; }
+    genChars
     local i=0
-    local spin='-\|/'
-    echo -en "${color}[${spin:$i:1}]${COff}" >>$out
+    [[ ! -z $msg ]] && echo -n "$msg " >>$out
+    echo -en "${color}[$(getChar)]${COff}" >>$out
     local retVal=0
-    if [[ ! -z $dbg ]]; then
+    if [[ ! -z $dbg ]]; then # {{{
       echo >/dev/stderr
       echo "cmd=($cmd)" >/dev/stderr
       echo >/dev/stderr
-    fi
+    fi # }}}
     while true; do # {{{
       if $every || [[ $i == 0 ]]; then # {{{
         if [[ ! -z $dbg ]]; then
@@ -3627,7 +4084,7 @@ if install 'progress:@@'; then # {{{
         fi
       fi # }}}
       if $key; then # {{{
-        if read -t $delay -n 1 -s pressed_key; then
+        if read -s -t $delay -n 1 pressed_key; then
           retVal=$((10+2))
           local do_break=false
           case $pressed_key in
@@ -3635,46 +4092,45 @@ if install 'progress:@@'; then # {{{
           '')      do_break=true;;
           *)       echo "$extra_keys" | command grep -sq "$pressed_key" && do_break=true
           esac
-          if $do_break; then
-            $get_key && echo "$pressed_key"
-            break
-          fi
+          $do_break && break
         fi
         # }}}
       else # {{{
         sleep $delay
       fi # }}}
-      i=$(( ($i + 1) % 4 ))
-      echo -ne "\b\b\b${color}[${spin:$i:1}]${COff}" >>$out
+      i=$(( ($i + 1) % $steps))
+      nextChar
+      echo -ne "\b\b\b${color}[$(getChar)]${COff}" >>$out
       if [[ $cnt != 0 ]]; then # {{{
         cnt=$(( $cnt - 1 ))
         if [[ $cnt == 0 ]]; then
-          retVal=$((10+1))
+          [[ $cmd == 'false' ]] && retVal=$((10+1)) || retVal=1
           break
         fi
       fi # }}}
     done # }}}
     case $retVal in # {{{
     0|10|11|12) # {{{
-      [[ $color != ${COff} ]] && color=${CGreen}
+      [[ $color != ${COff} ]] && color=${CIGreen}
       echo -ne "\b\b\b" >>$out
-      [[ ! -z "${end_message/:*}" ]] && echo -ne "${color}${end_message/:*}${COff}" >>$out || echo -ne '   ' >>$out
+      echo -ne "${color}[$(getLastChar $retVal)]${COff}" >>$out
       echo >>$out
       ;; # }}}
     *) # {{{
-      [[ $color != ${COff} ]] && color=${CRed}
-      echo -ne "\b\b\b"
-      [[ ! -z "${end_message/*:}" ]] && echo -ne "${color}${end_message/*:}${COff}" >>$out || echo -ne '   ' >>$out
+      [[ $color != ${COff} ]] && color=${CIRed}
+      echo -ne "\b\b\b" >>$out
+      echo -ne "${color}[$(getLastChar $retVal)]${COff}" >>$out
       echo >>$out
       ;; # }}}
     esac # }}}
+    cleanChars
+    $get_key && echo "$pressed_key"
     if ! $report_error; then # {{{
       case $retVal in
       0|10|11|12) return 0;;
       esac
     fi # }}}
     return $retVal
-    # }}}
   } # }}}
 fi # }}}
 if install 'tmux-notifications:@@:show_notifications'; then # {{{
@@ -3775,7 +4231,7 @@ if install 'tmux-notifications:@@:show_notifications'; then # {{{
       [[ -z "$last_time"  ]] && last_time="$(command date +"%H%M%S")"
       source $BASH_PATH/colors
       local tmux_pane=
-      [[ -n $TMUX ]] && tmux_pane="$(tmux display-message -p -F '#S:#I.#P')"
+      [[ -n $TMUX ]] && tmux_pane="$(tmux display-message -p -t $TMUX_PANE -F '#S:#I.#P')"
       set_title --set-pane "Notifications"
       while true; do
         [[ ! -z $tmux_pane ]] && tmux -t "$tmux_pane" clear-history
@@ -3786,7 +4242,7 @@ if install 'tmux-notifications:@@:show_notifications'; then # {{{
         [[ $last_time != $first_time ]] && echo -n "/${CSearch}${last_time:0:2}:${last_time:2:2}${COff}"
         [[ "1$last_5m" -gt "1$last_time" ]] && echo -n "/${CRed}${last_5m:0:2}:${last_5m:2:2}${COff}"
         echo -n "]: "
-        $BASH_PATH/aliases progress --cnt 4 --delay 0.15 --key --no-err --msg '' --end-msg ':'
+        $BASH_PATH/aliases progress --dots --cnt 10 --no-err --msg '' --end-msg ':'
         local last_msgs= add_msg=false
         while read l; do # {{{
           echo "$l" | command grep -q "^$today" || continue

@@ -19,7 +19,7 @@ elif [[ -z $TMUX_SESSION ]] || ! tmux list-sessions -F '#S' | command grep -q "^
     ! tmux list-sessions -F '#S' | command grep -q "^$sessionName\$" || return 0
     [[ "$TMUX_SESSION" != "$sessionName" ]] || return 0
     [[ "$PWD" == "$sessionDir" ]] || return 0
-    [[ -e '.ticket-data.sh' ]] || echo '# Just a markup to define "j" helper' >.ticket-data.sh
+    [[ -e '.ticket-data.sh' ]] || ln -sf $TICKET_TOOL_PATH/ticket-data.sh .ticket-data.sh
     tmux \
       new-session -d -s "$sessionName" -c "$sessionDir" \; \
       set -q -t "$sessionName" @tmux_path "$sessionDir" \; \
@@ -28,7 +28,13 @@ elif [[ -z $TMUX_SESSION ]] || ! tmux list-sessions -F '#S' | command grep -q "^
     local TMUX=
     [[ -z $TMUX_SESSION ]] && tmux attach-session -t "$sessionName" || tmux switch-client -t "$sessionName"
   } # }}}
-  alias init-session="__init_session '$sessionDir' '$sessionName' && unset __init_session"
+  alias init-session="__init_session '$sessionDir' '$sessionName' && unset __init_session && unalias init-session"
+  __deinit_session() { # {{{
+    local sessionName="$1"
+    tmux list-sessions -F '#S' | command grep -q "^$sessionName\$" || return 0
+    tmux kill-session -t "$sessionName"
+  } # }}}
+  alias deinit-session-${sessionName,,}="__deinit_session '$sessionName' && unset __deinit_session && unalias deinit-session-${sessionName,,}"
 fi # }}}
 unset sessionDir sessionName
 

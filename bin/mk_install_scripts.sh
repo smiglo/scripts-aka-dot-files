@@ -64,7 +64,7 @@ do_install() { # {{{
     done
   fi
   if $IS_MAC; then
-    sudo port install $inst || INSTALL_FAILED+="$inst "
+    brew install $inst || INSTALL_FAILED+="$inst "
   elif type apt-get >/dev/null 2>&1; then
     sudo apt-get -y install $inst || INSTALL_FAILED+="$inst "
   elif type yum >/dev/null 2>&1; then
@@ -134,7 +134,7 @@ IS_SILENT=false
 DO_EXEC=true
 INSTALL_FEATURES_BASIC='bashrc bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf fonts colors'
 INSTALL_FEATURES_EXT='grc atom ap-calc tig install-tools ack ssh-config gitsh'
-INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse'
+INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse less-highlight'
 INSTALL_FEATURES_EXT_MAC='mac-tools mac-grep'
 INSTALL_BIN_MISC_BASIC='cht.sh'
 INSTALL_FROM_ARGS=
@@ -424,6 +424,13 @@ if install 'atom'; then # {{{
   done
   dbg "[DONE]"
 fi # }}}
+if install 'less-highlight'; then # {{{
+  if which dpkg >/dev/null 2>&1 && ! dpkg -L libsource-highlight-common >/dev/null 2>&1; then
+    dbg "Configuring (less-highlight)... "
+    sudo apt install libsource-highlight-common source-highlight
+    dbg "[DONE]"
+  fi
+fi # }}}
 if install 'ap-calc'; then # {{{
   dbg -n "Configuring (ap-calc)... "
   ln -sf $script_path/bash/inits/calcrc ~/.calcrc
@@ -496,6 +503,7 @@ if install 'agignore'; then # {{{
   files="$script_path/bash/inits/agignore"
   [[ ! -z $SETUP_PROFILES ]] && files+=" $(eval echo $script_path/bash/profiles/{${SETUP_PROFILES// /,}}/inits/agignore)"
   appender $cfg_file $files
+  ln -sf $HOME/.agignore $HOME/.fdignore
   dbg "[DONE]"
 fi # }}}
 if install 'ssh-config'; then # {{{
@@ -587,41 +595,6 @@ if install 'ticket-tool'; then # {{{
   for i in $script_path/bin/ticket-tool/*; do
     [[ -f $i && ! -e $bin_path/ticket-tool/${i##*/} ]] && ln -s $i $bin_path/ticket-tool/
   done
-  dbg "[DONE]"
-fi # }}}
-if install 'mac-tools'; then # {{{
-  dbg -n "Configuring (mac-tools (GNU))... "
-  gnu_aliases="$BIN_PATH/gnu-aliases"
-  [[ ! -e $gnu_aliases ]] && command mkdir -p $gnu_aliases
-  # Homebrew {{{
-  homebrew="$MY_PROJ_PATH/oth/homebrew/bin"
-  if [[ -e $homebrew ]]; then
-    [[ ! -e $BIN_PATH/brew ]] && ln -sf $homebrew $BIN_PATH/brew
-    homebrew="$BIN_PATH/brew"
-    for i in $homebrew/g*; do
-      ! which "${i#g}" >/dev/null 2>&1 && continue
-      ln -sf "$i" "$gnu_aliases/${i#*/g}"
-    done
-    dbg "[DONE]"
-  else
-    dbg "[FAIL] Homebrew not found ($homebrew)"
-  fi # }}}
-  # Port {{{
-  port="/opt/local/bin"
-  if [[ -e $port ]]; then
-    for i in $port/g*; do
-      ! which "${i#g}" >/dev/null 2>&1 && continue
-      [[ -e "$gnu_aliases/${i#*/g}" ]] && continue
-      ln -sf "$i" "$gnu_aliases/${i#*/g}"
-    done
-    dbg "[DONE]"
-  else
-    dbg "[FAIL] Port not found ($port)"
-  fi # }}}
-fi # }}}
-if install 'mac-grep'; then # {{{
-  dbg -n "Configuring (grep)... "
-  command grep -v | head -n1 | command grep -q "GNU" || sudo port install grep
   dbg "[DONE]"
 fi # }}}
 # Install tools {{{

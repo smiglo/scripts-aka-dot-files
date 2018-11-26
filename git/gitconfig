@@ -38,7 +38,7 @@
   backup = !"git-cmds.sh backup"
   bash-switches = !"git-cmds.sh bash-switches"
   br = branch
-  cba = !"bash -c 'f() { set -xv; local c=$1 p=$1~; [[ $c == @* ]] && p+=\\~; git commit --fixup=$c --no-verify && git rebase -i --autosquash $p; }; f "$@";'" -
+  cba = !"git-cmds.sh cba"
   ci = commit
   ci-fast = !"git-cmds.sh commit-fast"
   ciaa = commit --all --no-verify

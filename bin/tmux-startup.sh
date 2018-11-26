@@ -56,12 +56,12 @@ run() { # {{{
     --no-hide)  hide=false;;
     --clear)    clear_after=true;;
     --no-clear) clear_after=false;;
-    --select)   current=$(tmux display-message -p -F '#S:#I.#P');;
+    --select)   current=$(tmux display-message -p -t $TMUX_PANE -F '#S:#I.#P');;
     *)  if [[ -z $s ]]; then
           s="$1"
         else
           cmd="$@"
-          case $1 in
+          case $cmd in
           command*|     \
           exec*|        \
           cd*|          \
@@ -78,10 +78,11 @@ run() { # {{{
   done
   $hide && cmd=" $cmd"
   $clear_after && cmd="$cmd; clear"
-  [[ ! -z $current ]] && tmux select-window -t ${s/.*} && tmux select-pane -t .${s/*.} && sleep 0.3
+  [[ ! -z $current ]] && tmux select-window -t ${s/.*} && tmux select-pane -t .${s/*.}
   tmux send-key -t $s -l "$cmd"
+  [[ $cmd == cd* ]] && sleep 0.1
   sleep "$(printf "0.%03d" "$((10 + $RANDOM % 20))")"
-  [[ ! -z $current ]] && sleep 0.2 && tmux select-window -t ${current/.*} && tmux select-pane -t .${current/*.} && sleep 0.2
+  [[ ! -z $current ]] && tmux select-window -t ${current/.*} && tmux select-pane -t .${current/*.} && sleep 0.2
   return 0
 } # }}}
 run_mc() { # {{{
@@ -95,7 +96,7 @@ makeNiceSplits() { # {{{
   # Init # {{{
   local cnt="$#" max_c=4 rows= p_no= i= no= splits= row= dbg=false
   [[ $# == 0 ]] && return 0
-  splits="RUN:p=2 cd $(getPath "$1")\n"
+  splits="RUN:p=2 cd "$1"\n"
   shift
   [[ $# == 0 ]] && echo "$splits" && return 0
   # {{{
@@ -113,7 +114,7 @@ makeNiceSplits() { # {{{
   $dbg && echo "cnt=$cnt, max_c=$max_c, rows=$rows" >/dev/stderr
   p_no=2
   for i in $(seq 1 $rows); do
-    [[ $i -lt $rows ]] && splits+="SPLIT:p=$p_no -v -p $((($rows - $i) * 100 / ($rows - $i + 1))) -c $(getPath "$1")\n"
+    [[ $i -lt $rows ]] && splits+="SPLIT:p=$p_no -v -p $((($rows - $i) * 100 / ($rows - $i + 1))) -c "$1"\n"
     p_no="$(($p_no + 1))"
   done # }}}
   # Horizontals # {{{
@@ -127,7 +128,7 @@ makeNiceSplits() { # {{{
     fi # }}}
     if [[ $co -lt $max_c ]]; then # {{{
       no="$(($max_c - $co))"
-      splits+="SPLIT:p=$p_no -h -p $(($no * 100 / ($no + 1))) -c $(getPath "$1")\n"
+      splits+="SPLIT:p=$p_no -h -p $(($no * 100 / ($no + 1))) -c "$1"\n"
     fi # }}}
     p_no="$(($p_no + 1))"
     co="$(($co+1))"
@@ -141,7 +142,7 @@ makeNiceSplits() { # {{{
   echo "$splits"
 } # }}}
 initFromEnv() { # {{{
-  local sessionName="$sessionName" setup=
+  local sessionName="$sessionName" setup= silent=true
   [[ ! -z $1 ]] && sessionName="$1" && shift
   [[ ! -z $sessionName ]] || return 1
   [[ $sessionName == 'REMOTE' ]] && sessionName=$(getRemoteSessionName)
@@ -156,24 +157,24 @@ initFromEnv() { # {{{
     else
       setup="${!setup}"
       [[ ${setup:0:1} == '@' ]] && ${setup#@}
-    fi
-    ;;
+    fi ;;
   *) setup="$@";;
   esac
   [[ ! -z $setup ]] || return 0
+  $BASH_PATH/aliases progress --mark --dots --msg "Setting up windows in [$sessionName]..."
   [[ ! $(declare -p setup) =~ "declare -a" ]] && setup=($setup)
-  local i= p= t= c= w=$(($(tmux display -t "$sessionName" -p -F '#{session_windows}') + 1))
-  echo "Setting up windows in [$sessionName]..."
+  local i= p= t= c= w=$(($(tmux display -t "$sessionName" -p -F '#{session_windows}') + 1)) msgs=
   for i in ${!setup[*]}; do # {{{
     t=$(echo "${setup[$i]}" | cut -d':' -f1)
     p=$(echo "${setup[$i]}" | cut -d':' -f2)
     c=$(echo "${setup[$i]}" | cut -d':' -f3-)
     [[ -z $p ]] && p="$t" && t=
-    [[ ! -e $p ]] && echo "Path [$p] does not exists (EnvInit[$sessionName])" && continue
+    [[ ! -e $p ]] && msgs+="Window[$t]: Path ($p) does not exists\n" && continue
     p=$(command cd $p; pwd -P)
-    [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | command grep -q "^$t\$" && echo "Window [$t] already created" && continue
+    [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | command grep -q "^$t\$" && msgs+="Window [$t]: Already created\n" && continue
     tmux \
-      new-window -t $sessionName:$w -c "$p" \; \
+      new-window -t $sessionName:$w $([[ ! -z $t ]] && echo "-n $t") -d -c "$p" \; \
+      set-option -t $sessionName:$w -w @locked_title 1 \; \
       split-window -t $sessionName:$w -v -p 20 -d -c "$p"
     # Title {{{
     if [[ ! -z $t ]]; then
@@ -214,9 +215,11 @@ initFromEnv() { # {{{
       done
       sleep 1
     fi # }}}
-    echo "Window [$t] has been created (${p/$HOME/\~})"
+    msgs+="Window [$t]: Created (${p/$HOME/\~})\n"
     w=$(($w+1))
   done # }}}
+  $BASH_PATH/aliases progress --unmark
+  ! $silent && sleep 0.1 && echo -e "$msgs" | sed 's/^/  /'
   tmux select-window -t $sessionName:1
 } # }}}
 setBuffer() { # {{{
@@ -270,7 +273,7 @@ runExtensions() { #{{{
 } #}}}
 makePreconfiguredSplits() { # {{{
   local sessionName="$sessionName"
-  [[ -z $sessionName ]] && sessionName="${TMUX_SESSION:-$(tmux display-message -p -F '#S')}"
+  [[ -z $sessionName ]] && sessionName="${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}"
   [[ -z $sessionPath ]] && sessionPath="$(tmux show -qvt "$sessionName" '@tmux_path')"
   local path="$sessionPath" wnd= cfg= cnt_panes=1 dbg=false
   while [[ ! -z $1 ]]; do # {{{
@@ -330,14 +333,14 @@ initTmux_MAIN() { # {{{
   eval $(init "MAIN" "$HOME")
   [[ ! -z $SSH_KEYS ]] && $BASH_PATH/aliases sshh-add ${SSH_KEYS/STOP}
   tmux \
-    split-window  -t $sessionName:1   -v       -d -c "$sessionPath" \; \
-    new-window    -t $sessionName:1   -a       -d -c "$sessionPath" \; \
-    new-window    -t $sessionName:2   -a       -d -c "$sessionPath" \; \
+    split-window  -t $sessionName:1 -v -d -c "$sessionPath" \; \
+    new-window    -t $sessionName:1 -a -d -c "$sessionPath" \; \
+    new-window    -t $sessionName:2 -a -d -c "$sessionPath" \; \
     set-option    -t $sessionName:3 -w "@mark_auto" 'false' \; \
     select-window -t $sessionName:2 \; \
     select-pane   -t $sessionName:2.1
   local isNet=false
-  $BASH_PATH/aliases progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --every-step --cnt 6 && isNet=true
+  $BASH_PATH/aliases progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
   $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
   $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
   $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
@@ -381,7 +384,7 @@ sessionEnvParams=
 do_attach="$([[ "${BASH_SOURCE[0]}" == "$0" ]] && echo 'false' || echo 'true')"
 todo="pre init env post"
 dbg=false
-[[ -z $1 ]] && set -- --do-env ${TMUX_SESSION:-$(tmux display-message -p -F '#S')}
+[[ -z $1 ]] && set -- --do-env ${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   --no-attach) do_attach=false;;
@@ -400,7 +403,7 @@ while [[ ! -z $1 ]]; do # {{{
   --todo)      todo="$2"; shift;;
   --env) # {{{
     shift
-    sn="${TMUX_SESSION:-$(tmux display-message -p -F '#S')}"
+    sn="${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}"
     initFromEnv "${@:-$sn}"
     exit;; # }}}
   --preconfigure) # {{{
