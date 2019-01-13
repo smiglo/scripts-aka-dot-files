@@ -1,0 +1,4 @@
+#!/bin/bash
+
+which keep-pass.sh >/dev/null 2>&1 && source keep-pass.sh --complete
+

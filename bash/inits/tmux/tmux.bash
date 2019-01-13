@@ -55,14 +55,14 @@ defaults() { # {{{
   done
 } # }}}
 battery() { # {{{
-  is_ac() {
+  is_ac() { # {{{
     if $IS_MAC; then
       pmset -g batt  | command grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
     else
       upower -i /org/freedesktop/UPower/devices/line_power_AC | command grep -q "online: *yes" && echo 'true' || echo 'false'
     fi
-  }
-  get_percentage() {
+  } # }}}
+  get_percentage() { # {{{
     local perc=
     if $IS_MAC; then
       perc="$(pmset -g batt  | command grep 'InternalBattery' | awk '{print $3}')"
@@ -72,8 +72,9 @@ battery() { # {{{
       perc="${perc%\%}"
     fi
     echo "${perc%\%}"
-  }
-  local delta="${BATTERY_REFRESH_DELTA:-$((2 * 60))}" # 2 minues
+  } # }}}
+  local delta="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}" # 2 minues
+  local thresholds="${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95}" colors="1 3 2 14"
   local update_time= value= battery_info="$(tmux show-environment -g "TMUX_SB_BATTERY_INFO" 2>/dev/null)"
   battery_info="${battery_info#*=}"
   if [[ ! -z $battery_info ]]; then # {{{
@@ -84,42 +85,91 @@ battery() { # {{{
       return 0
     fi
   fi # }}}
-  local ac_on="$(is_ac)" perc="$(get_percentage)"
-  if ! $ac_on || [[ $perc -lt 95 ]]; then
-    local BAT="B" PWR="P" delta=30
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && BAT='🔋 '&& PWR='🔌 '
+  local ac_on="$(is_ac)" perc="$(get_percentage)" max=${thresholds##* }
+  if ! $ac_on || [[ $perc -lt ${max%%:*} ]]; then
+    local BAT="B" PWR="P" delta=30 c= i= showPerc=
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && BAT='🔋 ' && PWR='🔌 '
     # Colors  # {{{
-    local c="2"
-    if [[ $perc -lt 30 ]]; then
-      c="1"
-    elif [[ $perc -lt 60 ]]; then
-      c="3"
-    elif [[ $perc -lt 80 ]]; then
-      c="14"
-    fi # }}}
+    for i in $thresholds; do
+      showPerc=${TMUX_SB_BATTERY_SHOW_PERC:=false}
+      if [[ $i == *:* ]]; then # {{{
+        showPerc="${i#*:}"
+        i="${i%%:*}"
+      fi # }}}
+      [[ $perc -lt $i ]] && c="${colors%% *}" && break
+      colors="${colors#* }"
+    done # }}}
     value="#[fg=colour$c]$BAT"
+    if ! $ac_on; then
+      $IS_MAC && value+="◼ "
+    fi
+    $showPerc && { value+="${perc}%"; $ac_on && value+=" "; }
     $ac_on && value+="#[fg=colour2]$PWR"
   else # {{{
     value=
-    delta="${BATTERY_REFRESH_DELTA:-$((2 * 60))}"
+    delta="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}"
   fi # }}}
   tmux set-environment -g "TMUX_SB_BATTERY_INFO" "update_time=$cur_time;value=\"$value\";delta=\"$delta\""
   unset is_ac get_percentage
   printf "%s" "$value"
 } # }}}
+cpu() { # {{{
+  local delta="${TMUX_SB_CPU_DELTA:-$((1*60))}" # 1 minute
+  local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
+  local update_time= value= cpu_info="$(tmux show-environment -g "TMUX_SB_CPU_INFO" 2>/dev/null)" cpu_1m= cpu_5m= c= i=
+  cpu_info="${cpu_info#*=}"
+  if [[ ! -z $cpu_info ]]; then # {{{
+    eval "$cpu_info"
+    if [[ $cur_time -lt $(( $update_time + $delta )) ]]; then # {{{
+      printf "%s" "$value"
+      return 0
+    fi # }}}
+  fi # }}}
+  if ! $IS_MAC; then # {{{
+    read cpu_1m cpu_5m <<<$(cat /proc/loadavg | awk '{print int($1), int($2)}')
+  else
+    read cpu_1m cpu_5m <<<$(sudo loads.d  | awk '{print $7, $8}' | sed 's/\.[0-9]*,//g')
+  fi # }}}
+  if [[ $cpu_1m -ge ${thresholds##* } ]]; then # {{{
+    local first=true showPerc="${TMUX_SB_CPU_SHOW_PERC:-false}"
+    delta=15
+    # Colors # {{{
+    for i in $thresholds; do
+      if [[ $cpu_1m -ge $i ]]; then
+        $first && showPerc=true;
+        c="${colors%% *}"
+        break
+      fi
+      first=false
+      colors="${colors#* }"
+    done # }}}
+    value="#[fg=colour$c,bold]"
+    ${TERMINAL_HAS_EXTRA_CHARS:-true} && value+="⚛ "
+    if ! ${TERMINAL_HAS_EXTRA_CHARS:-true} || $showPerc; then
+      value+="${cpu_1m}/${cpu_5m}%"
+    elif $IS_MAC; then
+      value+="◼"
+    fi
+    value+="#[fg=default,none]"
+  else
+    delta="${TMUX_SB_CPU_DELTA:-$((1*60))}" value=
+  fi # }}}
+  tmux set-environment -g "TMUX_SB_CPU_INFO" "update_time=$cur_time;value=\"$value\";delta=\"$delta\""
+  printf "%s" "$value"
+} # }}}
 weather_tmux() { # {{{
-  local WEATHER_REFRESH_DELTA="${WEATHER_REFRESH_DELTA:-$((1 * 60 * 60))}" # One hour
+  local delta="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}" # One hour
   local update_time= value= weather_info="$(tmux show-environment -g "TMUX_SB_WEATHER_INFO" 2>/dev/null)"
   local testing=false
   [[ $1 == '--test' ]] && testing=true && shift
   weather_info="${weather_info#*=}"
-  if ! $testing && [[ ! -z $weather_info ]]; then
+  if ! $testing && [[ ! -z $weather_info ]]; then # {{{
     eval "$weather_info"
-    if [[ $cur_time -lt $(( $update_time + $WEATHER_REFRESH_DELTA )) ]]; then
+    if [[ $cur_time -lt $(( $update_time + $delta )) ]]; then
       printf "%s" "$value"
       return 0
     fi
-  fi
+  fi # }}}
   weather_icon() { # {{{
     # Icons: [ 🌣  (  🌞  )  🌤  🌥  ☁️  🌦  🌧  🌨  ⛈  🌩  🌪  🌫  🌬  ]
     case $1 in
@@ -171,7 +221,7 @@ weather_tmux() { # {{{
     [[ -z ${WEATHER_INFO[7]} ]] && WEATHER_INFO[7]="$cur_time"
   fi # }}}
   local err=false
-  while [[ -z ${WEATHER_INFO[0]} || -z ${WEATHER_INFO[3]} || $cur_time -ge $(( ${WEATHER_INFO[0]} + $WEATHER_REFRESH_DELTA )) ]] || $testing; do # {{{
+  while [[ -z ${WEATHER_INFO[0]} || -z ${WEATHER_INFO[3]} || $cur_time -ge $(( ${WEATHER_INFO[0]} + $delta )) ]] || $testing; do # {{{
     if [[ -z ${WEATHER_INFO[1]} ]]; then
       local loc=$(curl --silent http://ip-api.com/csv)
       [[ -z $loc || $? != 0 ]] && echo "Error when acquiring location" >/dev/stderr && err=true && break
@@ -190,7 +240,7 @@ weather_tmux() { # {{{
       echo "Error when acquiring forecast" >/dev/stderr
       err=true
     fi
-    if $testing; then
+    if $testing; then # {{{
       while [[ ! -z $1 ]]; do
         case $1 in
         --reset)               WEATHER_INFO[0]=0;;
@@ -202,7 +252,7 @@ weather_tmux() { # {{{
         esac
         shift
       done
-    fi
+    fi # }}}
     { echo  "${WEATHER_INFO[0]}"
       echo  "${WEATHER_INFO[1]}"
       echo  "${WEATHER_INFO[2]}"
@@ -282,6 +332,10 @@ status_right_extra() { # {{{
       if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
         ret+=" #[fg=colour148]$(${TERMINAL_HAS_EXTRA_CHARS:-true} && echo "🖫 " || echo "U")"
       fi
+      ;; # }}}
+    cpu) # {{{
+      local out="$(cpu)"
+      [[ ! -z "$out" ]] && ret+=" $out"
       ;; # }}}
     notifs) # {{{
       local notifs="$(system_notifications)"
@@ -472,10 +526,13 @@ smarter_nest() { # {{{
       else
         tmux ${@//@@/\'}
       fi
+      [[ $? == 0 ]] || tmux display-message "Cannot do '${@//@@/\'}'"
     elif [[ ! -z $CMD ]]; then
       eval tmux $CMD
+      [[ $? == 0 ]] || tmux display-message "Cannot do '$CMD'"
     fi
   fi
+  return 0
 } # }}}
 lock_toggle() { # {{{
   local w_status="$(tmux show-option  -qv @lock_allowed)"
@@ -517,16 +574,21 @@ switch_window() { # {{{
   local current_s= current_w= i= dst= src= local switch_to_last=false
   current_s="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
   current_s="${current_s^^}" && current_s="${current_s//-/_}"
-  current_w="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
+  current_w="$(tmux display-message -p -t $TMUX_PANE -F '#I')"
   for i in $(eval echo \$TMUX_SWITCH_WINDOW_${current_s}_MAP); do
     src="${i%:*}" dst="${i##*:}"
-    [[ $src == @* ]] && src="$(tmux list-windows -F '@#I. #W' | sed -n -e "/^$src./s/$src. //p")"
+    case $src in
+    '*') ;;
+    @*)  src="${src#@}";;
+    *)   src="$(tmux list-windows -F '#I. @#W' | sed -n -e "/\. @$src$/s/\. .*//p" | head -n1)";;
+    esac
     [[ ! -z $src ]] || continue
     [[ "$src" == '*' || "$src" == "$current_w" ]] || continue
-    [[ $dst == @* ]] && dst="$(tmux list-windows -F '@#I. #W' | sed -n -e "/^$dst./s/$dst. //p")"
+    [[ $dst == @* ]] \
+      && dst="${dst#@}" \
+      || dst="$(tmux list-windows -F '#I. @#W' | sed -n -e "/\. @$dst$/s/\. .*//p" | head -n1)"
     [[ ! -z $dst ]] || continue
     [[ "$dst" != "$current_w" ]] || { switch_to_last=true; continue; }
-    dst="$(tmux list-windows -F '#I. @#W' | sed -n -e "/ @$dst$/s/\. .*//p")"
     tmux select-window -t ":$dst"
     return 0
   done
@@ -535,6 +597,24 @@ switch_window() { # {{{
   else
     tmux select-window -t :1
   fi
+  return 0
+} # }}}
+pasteKey_worker() { # {{{
+  local buff="$1" v="$(source $HOME/.bashrc --do-basic; keep-pass.sh --list-keys | fzf +m --prompt='Key> ' -0)"
+  [[ $? == 0 && ! -z "$v" ]] || return 1
+  v="$(keep-pass.sh --key "$v")"
+  [[ ! -z $v ]] || return 1
+  tmux set-buffer -b $buff "$v"
+} # }}}
+pasteKey() { # {{{
+  local buff="key.$$" pane_id=
+  tmux delete-buffer -b "$buff" >/dev/null 2>&1
+  pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker '$buff'")"
+  while tmux display-message -p -t "$pane_id" -F '#{pane_id}' >/dev/null 2>&1; do
+    sleep 0.5
+  done
+  tmux list-buffers -F '#{buffer_name}' | command grep -q "^$buff$" \
+    && tmux paste-buffer -d -b "$buff"
   return 0
 } # }}}
 

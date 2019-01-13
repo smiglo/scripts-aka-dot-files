@@ -133,10 +133,10 @@ INSTALL_FAILED=
 IS_SILENT=false
 DO_EXEC=true
 INSTALL_FEATURES_BASIC='bashrc bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf fonts colors'
-INSTALL_FEATURES_EXT='grc atom ap-calc tig install-tools ack ssh-config gitsh'
+INSTALL_FEATURES_EXT='grc atom ap-calc tig install-tools ack ssh-config gitsh gdb'
 INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse less-highlight'
 INSTALL_FEATURES_EXT_MAC='mac-tools mac-grep'
-INSTALL_BIN_MISC_BASIC='cht.sh'
+INSTALL_BIN_MISC_BASIC='cht.sh keep-pass.sh'
 INSTALL_FROM_ARGS=
 # Other features: dconf
 # }}}
@@ -504,6 +504,42 @@ if install 'agignore'; then # {{{
   [[ ! -z $SETUP_PROFILES ]] && files+=" $(eval echo $script_path/bash/profiles/{${SETUP_PROFILES// /,}}/inits/agignore)"
   appender $cfg_file $files
   ln -sf $HOME/.agignore $HOME/.fdignore
+  dbg "[DONE]"
+fi # }}}
+if install 'gdb'; then # {{{
+  dbg -n "Configuring (gdb)... "
+  p="$HOME/.config/gdb"
+  [[ -e $p ]] || command mkdir -p $p
+  rm -rf $HOME/.gdbinit
+  ln -sf $script_path/bash/inits/gdb/gdbinit "$HOME/.gdbinit"
+  nr=1
+  for i in $(ls $script_path/bash/inits/gdb/*.gdb 2>/dev/null); do
+    fname=${i##*/}
+    if ! ls $p/*${fname}* >/dev/null 2>&1; then
+      [[ $fname =~ ^[0-9]{3}-* ]] \
+        && ln -sf $i $p/$fname \
+        || ln -sf $i $p/$(printf "%03d-%s" "$nr" "$fname")
+    fi
+    nr=$(($nr+1))
+  done
+  nrj=10
+  for j in $SETUP_PROFILES; do
+    nr=$nrj
+    for i in $(ls $script_path/bash/profiles/$j/inits/gdb/*.gdb 2>/dev/null); do
+      fname=${i##*/}
+      if ! ls $p/*${fname}* >/dev/null 2>&1; then
+        [[ $fname =~ ^[0-9]{3}-* ]] \
+          && ln -sf $i $p/$fname \
+          || ln -sf $i $p/$(printf "%03d-%s" "$nr" "$fname")
+      fi
+      nr=$(($nr+1))
+    done
+    nrj=$(($nrj+10))
+  done
+  nr="050"
+  ls $p/*gdb-dashboard.gdb* >/dev/null 2>&1 || echo "https://github.com/cyrus-and/gdb-dashboard.git" >$p/${nr}-gdb-dashboard.gdb.ign
+  nr="060"
+  ls $p/*peda.py* >/dev/null 2>&1 || echo "https://github.com/longld/peda.git" >$p/${nr}-peda.py.ign
   dbg "[DONE]"
 fi # }}}
 if install 'ssh-config'; then # {{{

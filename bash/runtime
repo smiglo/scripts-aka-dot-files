@@ -2,6 +2,10 @@
 # vim: fdl=0
 
 # Check for MC # {{{
+export IS_MAC=false
+[[ $(uname) == 'Darwin' ]] && IS_MAC=true
+# }}}
+# Check for MC # {{{
 export IS_IN_MC=$( [[ "$(ps -o comm= -p $PPID)" == "mc" ]] && echo 'true' || echo 'false')
 if $IS_IN_MC; then
   export PROMPT_COMMAND=
@@ -104,16 +108,33 @@ if [[ -e $MY_PROJ_PATH ]]; then
   [[ -e $MY_PROJ_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$MY_PROJ_PATH/vim"
   [[ -e $MY_PROJ_PATH/info ]] && export CD_LAST_DIRS_STORED+=":info@$MY_PROJ_PATH/info"
   [[ -e $MY_PROJ_PATH/.ticket-data.sh ]] && KB_PATHS+=" env:$MY_PROJ_PATH"
-  [[ -e $MY_PROJ_PATH/oth/.ticket-data.sh ]] && KB_PATHS+=" oth:$MY_PROJ_PATH/oth"
-  [[ -e $MY_PROJ_PATH/tmp/.ticket-data.sh ]] && KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
   [[ -e $MY_PROJ_PATH/sp/.ticket-data.sh ]] && KB_PATHS+=" sp:$MY_PROJ_PATH/sp"
+  if [[ -e $MY_PROJ_PATH/oth/.ticket-data.sh ]]; then # {{{
+    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/oth" ]]; then
+      KB_PATHS+=" oth-my:$MY_PROJ_PATH/oth"
+      KB_PATHS+=" oth:$HOME/projects/oth"
+    else
+      KB_PATHS+=" oth:$MY_PROJ_PATH/oth"
+    fi
+  elif [[ -e "$HOME/projects/oth" ]]; then
+    KB_PATHS+=" oth:$HOME/projects/oth"
+  fi # }}}
+  if [[ -e $MY_PROJ_PATH/tmp/.ticket-data.sh ]]; then # {{{
+    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/tmp" ]]; then
+      KB_PATHS+=" tmp-my:$MY_PROJ_PATH/tmp"
+      KB_PATHS+=" tmp:$HOME/projects/tmp"
+    else
+      KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
+    fi
+  elif [[ -e "$HOME/projects/tmp" ]]; then
+    KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
+  fi # }}}
 else
   echo "Cannot find script path!"
   export MY_PROJ_PATH=
 fi
 # }}}
 # Env - not grouped # {{{
-export IS_MAC=false
 export PS1_SSH_CHANGE=true
 export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
 [[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool

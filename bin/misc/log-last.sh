@@ -89,10 +89,9 @@ loglast() { # {{{
     if [[ $new_today != $TODAY ]]; then # {{{
       if ! is_to_be_done 'nested' && [[ -z $($0 --nested | cut -c8-12) ]]; then # {{{
         progress \
-          --dots
-          --no-err \
+          --dots --no-err \
           --msg "Waiting for login time..." --color "${CGold}" \
-          --cmd "test -n $($0 --nested | cut -c8-12)"
+          --cmd "! test -z $($0 --nested | cut -c8-12)"
       fi # }}}
       TODAY=$new_today
       TODAY_YMD="$(command date +"%Y%m%d")"
@@ -409,11 +408,12 @@ loglast() { # {{{
       end_delay=
       if ! $was_break; then # {{{
         [[ ! -z $LOGLAST_BEFORE_SUSPEND ]] && eval $LOGLAST_BEFORE_SUSPEND
+        __util_loglast_extra 'suspend'
         pkill -x -u $USER 'ssh'
         if is_to_be_done 'suspend'; then
           sudo systemctl suspend
           sleep 10
-          $BASH_PATH/aliases fix_caps
+          __util_loglast_extra 'suspend-post'
           to_do_extra=" store store-force send"
           local key=
           end_margin=0

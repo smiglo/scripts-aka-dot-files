@@ -43,7 +43,7 @@ check_repo() { # {{{
     esac
     shift
   done # }}}
-  local msg="[${CGreen}${dir/$HOME/\~}${COff}]$(add_spaces $((${#dir}+2)))"
+  local msg="[${CGreen}${dir/$HOME/~}${COff}]$(add_spaces $((${#dir}+2)))"
   [[ ! -e $dir/.git ]] && echo -e "$msg[${CRed}.GIT${COff}]" && return
   pushd $dir > /dev/null
   local git=".git"
@@ -178,7 +178,7 @@ backup() { # {{{
     pushd $repo >/dev/null
     local dir=$(gitdir)
     if [[ "$?" != "0" ]]; then
-      echo -e -n "[${CGreen}${repo/$HOME/\~}${COff}]"
+      echo -e -n "[${CGreen}${repo/$HOME/~}${COff}]"
       echo "$(add_spaces $((${#repo}+2)))[${CRed}.GIT${COff}]"
       popd >/dev/null
       continue
@@ -197,7 +197,7 @@ backup() { # {{{
 
     ! $skipSubmodules && git submodule --quiet foreach "git backup --skip-submodules $sub_params"
 
-    $verbose && echo -e "[${CGreen}${repo/$HOME/\~}${COff}]"
+    $verbose && echo -e "[${CGreen}${repo/$HOME/~}${COff}]"
     local git_cmd="git push --recurse-submodules=no $params_main" r=
 
     for r in $(git remote); do
@@ -235,7 +235,7 @@ backup() { # {{{
       case $r in
       origin|_backup*|tom)
         if ! $verbose; then
-          ! $repo_printed && echo -e "[${CGreen}${repo/$HOME/\~}${COff}]" && repo_printed=true
+          ! $repo_printed && echo -e "[${CGreen}${repo/$HOME/~}${COff}]" && repo_printed=true
           echo -e -n "  [$r]$(add_spaces $((${#r}+4)))"
         fi
         ;;&
@@ -355,7 +355,7 @@ do_sync() { # {{{
   local cmd="git-cmds.sh --test do_sync $params --skip-backup $(! $verbose && echo "--quiet")"
   export cmd
   source $BIN_PATH/bash/colors
-  local dir=${PWD/$HOME/\~}
+  local dir=${PWD/$HOME/~}
   if ! $quiet; then
     if $dots; then
       $BASH_PATH/aliases progress --mark --msg "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+3)) 3)"
@@ -532,9 +532,10 @@ range_diff() { # {{{
   eval $cmd
 } # }}}
 cba() { # {{{
-  local d= c= first='@' fzf_p= gitlog= do_break=false stashed=false changed=false pattern='-------' cnt=${GIT_CBA_MAX:-30}
+  local d= c= first='HEAD' fzf_p= gitlog= do_break=false stashed=false changed=false pattern='-------' cnt=${GIT_CBA_MAX:-30} backup=false
   while [[ ! -z $1 ]]; do
     case $1 in
+    -b) backup=true;;
     +*) cnt="${1#+}";;
     *)  [[ -e $1 ]] && d="-- $1" || c="$1"
     esac
@@ -565,7 +566,7 @@ cba() { # {{{
       [[ $? == 0 ]] || return 1
       [[ ! -z $c ]] || break
       if [[ "$c" == "$pattern" ]]; then
-        first=$(git merge-base $first @)
+        first=$(git merge-base $first HEAD)
         git commit --no-verify
       else
         first=$(git merge-base $first ${c}~)
@@ -576,12 +577,13 @@ cba() { # {{{
     $changed || return 0
   else
     first="${c}~"
-    [[ $c == @* ]] && first+='~'
+    [[ $c == HEAD* ]] && first+='~'
     git commit --fixup=$c --no-verify
   fi
   ! git diff --quiet && git stash >/dev/null 2>&1 && stashed=true
   git rebase -i --autosquash $first
   $stashed && git stash pop >/dev/null 2>&1
+  $backup && git backup
 } # }}}
 # }}}
 # MAIN {{{

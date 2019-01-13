@@ -25,6 +25,7 @@ _completion_generic() { # {{{
       cmd=${cmd/ *}
     fi
   fi
+  # echo "c=[$cmd $param]" >/dev/stderr
   opts=$($cmd $param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})
   set -- $opts
   opts=''
@@ -145,7 +146,7 @@ if [[ -e $BASH_PATH/completion.d ]]; then
 fi
 if [[ -e $RUNTIME_PATH/completion.d ]]; then
   for i in $(ls $RUNTIME_PATH/completion.d); do
-    [[ -f $RUNTIME_PATH/completion.d/$i && -x $RUNTIME_PATH/completion.d/$i ]] && source $RUNTIME_PATH/completion.d/$i
+    [[ -f $RUNTIME_PATH/completion.d/$i && ( -x $RUNTIME_PATH/completion.d/$i || $i == *.sh ) ]] && source $RUNTIME_PATH/completion.d/$i
   done
 fi
 # }}}

@@ -124,6 +124,8 @@
   denyCurrentBranch = false # }}}
 [rebase] # {{{
   autosquash = true # }}}
+[advice] # {{{
+  ignoredHook = false # }}}
 [gitsh] # {{{
   prompt = "[0;36m%D[0m[0;32m(%b)[0m%c%#%w"
   noGreeting = true

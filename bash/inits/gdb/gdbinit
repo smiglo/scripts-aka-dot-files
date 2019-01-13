@@ -1,0 +1,15 @@
+# vim: ft=gdb
+
+python
+import os
+
+for root, dirs, files in os.walk(os.path.expanduser('~/.config/gdb')):
+    for file in sorted(files):
+        path = os.path.join(root, file)
+        _, ext = os.path.splitext(path)
+        # either load Python files or GDB
+        if ext == '.py' or ext == '.gdb':
+            # print(path)
+            gdb.execute('source ' + path)
+end
+

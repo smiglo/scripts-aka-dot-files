@@ -160,13 +160,13 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     if ! $tmux_template_added; then # {{{
       cat >>"$fname" <<-"EOF"
 				# -tmux-init -# {{{
-				tmux split-window -t .2 -c $pl_abs -h -p50
+				tmux split-window -t $w.2 -d -c $pl_abs -h -p50
 				# }}}
 				# -tmux-splits -# {{{
 				tmux \
 				  new-window   -a -n $title -c $pl_abs  \; \
-				  set-option   -w @locked_title 1       \; \
-				  split-window -t .1 -c $pl_abs -v -p30
+				  set-option   -w @locked_title 1          \; \
+				  split-window -t .1 -d -c $pl_abs -v -p30
 				# }}}
 				# -tmux-cmds -# {{{
 				# }}}

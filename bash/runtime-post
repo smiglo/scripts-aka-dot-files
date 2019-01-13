@@ -54,7 +54,7 @@ if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]
       [[ $i != *.sh && $i != *.enc ]] && continue
       [[ $i == *.sh && ! -x $i ]] && continue
       [[ $i == *.sh ]] && ! ${REMOTE_CHANGES_ALLOW_PLAIN:-true} && continue
-      [[ $i == *.enc && -z $REMOTE_CHANGES_PWD ]] && continue
+      [[ $i == *.enc && -z $REMOTE_CHANGES_PWD && -z $REMOTE_CHANGES_KEY ]] && continue
       if [[ $file != all* ]]; then # {{{
         found=false
         for p in $BASH_PROFILES; do
@@ -68,9 +68,15 @@ if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]
       echo "Applying remote changes [$file]..." >/dev/stderr
       if [[ $file == *.enc ]]; then # {{{
         j="$TMP_MEM_PATH/${file%.enc}"
-        $BASH_PATH/aliases encryptor \
-          --pass "$($BASH_PATH/profiles/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")" "$i" "$j" 1>/dev/null 2>&1 \
-          || { echo "Cannot decrypt [$file]"; continue; }
+        if [[ ! -z $REMOTE_CHANGES_KEY ]]; then
+          p="--key '$REMOTE_CHANGES_KEY'"
+        else
+          p="--pass '$($BASH_PATH/profiles/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")'"
+        fi
+        if ! eval $BASH_PATH/aliases encryptor $p "$i" "$j"; then
+          echo "Cannot decrypt [$file]"
+          continue
+        fi
         command chmod +x "$j"
         i="$j"
         unset j
@@ -82,7 +88,7 @@ if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]
   fi
   unset now rmt_chngs_file
 fi
-unset REMOTE_CHANGES_APPLY REMOTE_CHANGES_ALLOW_PLAIN REMOTE_CHANGES_PWD src_dir
+unset REMOTE_CHANGES_APPLY REMOTE_CHANGES_ALLOW_PLAIN REMOTE_CHANGES_PWD REMOTE_CHANGES_KEY src_dir
 # }}}
 # Check personalities # {{{
 [[ -z $PERS_USERS ]] && echo "Personalities not found!!!" >/dev/stderr && sleep 2

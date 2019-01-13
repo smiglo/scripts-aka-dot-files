@@ -78,7 +78,7 @@ getFunctionBody() { # {{{
   return 0
 } # }}}
 getFunctions() { # {{{
-  sed -n '/^# [a-z].* # {{[{]/s/^# \(.*\) # {{[{].*/\1/p' $(getIssueFile) | tr '\n' ' ' # for vim: }} },}} }
+  sed -n '/^# [a-z][^ :]* # {{[{]/s/^# \(.*\) # {{[{].*/\1/p' $(getIssueFile) | tr '\n' ' ' # for vim: }} },}} }
   echo
 } # }}}
 export -f getIssueFile getFunctionBodyRaw getFunctionBody getFunctions
@@ -104,7 +104,7 @@ case "$cmd" in
     archive) # {{{
       echo "--all --all-all --clean --pkg --test";; # }}}
     browser) # {{{
-      echo "@ff @chrome @chromium";; # }}}
+      echo "@ff @chrome @chromium -1";; # }}}
     cd | edit) # {{{
       echo "-v";; # }}}
     commit) # {{{
@@ -136,7 +136,13 @@ case "$cmd" in
   ;; # }}}
 \?) # {{{
   if [[ -z $1 ]]; then
-    getFunctions
+    ret=
+    ret+=" env info setup"
+    ret+=" $(getFunctions)"
+    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ret+=" $($ext ?)"
+    done # }}}
+    echo "$ret" | tr ' ' '\n' | sort -u | tr '\n' ' '
   else
     add_prefix=false
     [[ $# -gt 1 ]] && add_prefix=true
@@ -207,10 +213,16 @@ browser) # {{{
   if [[ -z $browser ]]; then
     $IS_MAC && browser="open" || browser="chromium"
   fi
-  case $1 in
-  @ff | @chrome | @chromium) browser="${1#@}"; shift;;
-  @*) cmd="${1#@}"; shift; params="$@"; shift $#;;
-  esac
+  all=true
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    @ff | @chrome | @chromium) browser="${1#@}";;
+    @*) cmd="${1#@}"; shift; params="$@"; shift $#; break;;
+    -1) all=false;;
+    *)  break;;
+    esac
+    shift
+  done
   urls="$@"
   if [[ -z $urls ]]; then
     func="$(getFunctionBodyRaw "$cmd")"
@@ -222,6 +234,7 @@ browser) # {{{
     fi
     urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\L\1/p')"
     [[ -z $urls ]] && echo -e "No ULRs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
+    ! $all && urls="$(echo "$urls" | head -n1)"
   fi
   for i in $urls; do
     case $browser in
@@ -292,15 +305,14 @@ tmux) # {{{
     title="${title}-ext"
   fi
   tmux list-windows -F '#W' | command grep -q "$title" && exit 0
-  export w=$(($(tmux display-message -p -t $TMUX_PANE -F '#I') + 1))
+  export w=$(($(tmux display-message -p -F '#I') + 1))
   export pl_abs="$(command cd $path_issue; pwd)"
   export title
   if $isInit; then # {{{
     tmux \
-      new-window   -a -n $title -d -c $pl_abs \; \
-      set-option   -t $w -w @locked_title 1   \; \
-      split-window -t $w.1 -c $pl_abs -v -p30 \; \
-      select-pane  -t $w.1
+      new-window   -a -n $title -d -c $pl_abs  \; \
+      set-option   -t $w -w @locked_title 1    \; \
+      split-window -t $w.1 -d -c $pl_abs -v -p30
     $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
     func="$(getFunctionBody "tmux-init")"
     [[ ! -z $func ]] && bash -c "$func" - "$@"
@@ -324,22 +336,46 @@ tmux) # {{{
   exit 0;; # }}}
 setup) # {{{
   func="$(getFunctionBody 'setup')"
+  while [[ $1 == -* ]]; do # {{{
+    case $1 in
+    --loop) break;;
+    -*) # {{{
+      case $1 in
+      *) # {{{
+        handled=false
+        for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+          v="$($ext $cmd $1)"
+          [[ ! -z $v ]] && { eval "$v"; handled=true; break; }
+        done # }}}
+        ! $handled && [[ ! -z "$func" ]] && eval $(bash -c "$func" - "$1") ;; # }}}
+      esac;; # }}}
+    esac
+    shift
+  done # }}}
   case $1 in
   @@) # {{{
-    if [[ -z $2 || $2 == --full ]]; then # {{{
+    shift
+    while [[ $1 == -* ]]; do # {{{
+      case $1 in
+      --full) break;;
+      esac
+      shift
+    done # }}}
+    if [[ -z $1 || $1 == --full ]]; then # {{{
       ret="--loop ?"
       for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
-        ret+=" $($ext $cmd "get-ext-commands" $2)"
+        ret+=" $($ext $cmd "get-ext-commands" $1)"
+        ret+=" $($ext $cmd "get-ext-switches")"
       done # }}}
-      [[ ! -z "$func"  ]] && ret+=" $(bash -c "$func" - "$@")"
+      [[ ! -z "$func"  ]] && ret+=" $(bash -c "$func" - @@ "$@")"
       # }}}
     else # {{{
       ret=
       for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
-        ret="$($ext $cmd "$@")"
+        ret="$($ext $cmd @@ "$@")"
         [[ -z $ret ]] || break
       done # }}}
-      [[ -z $ret && ! -z "$func" ]] && ret+=" $(bash -c "$func" - "$@")"
+      [[ -z $ret && ! -z "$func" ]] && ret+=" $(bash -c "$func" - @@ "$@")"
     fi # }}}
     echo "$ret"
     ;; # }}}
@@ -470,7 +506,7 @@ setup) # {{{
           shift
         done
       fi | sed \
-        -e '/^"$/ d' \
+        -e '/^"\+$/ d' \
         -e "s/^---$/$l1/" -e "s/^===$/$l2/" -e "s/^\(.\)\1\{3\}$/$multi/" \
         -e 's/^## \([^@]*$\)/# \1/' \
         -e "s/^\(##\+\) @ \([a-zA-Z0-9][^ ]*\).*/\1 ${CGold}\2${COff}/g" \

@@ -95,16 +95,20 @@ fi
 export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
 export GREP_DEFAULT_PARAMS="--color --binary-files=binary"
 export GREP_COLORS='mt=38;5;214:ne:fn=36'
-export HL_DEFAULTS="+cC \<TB]"
+export KEEP_PASS_JOURNAL="$RUNTIME_PATH/keep-pass.journal"
+export KEEP_PASS_KEYS="$RUNTIME_PATH/keep-pass.keys"
+[[ -e $SHARED_BASH_PATH ]] && export KEEP_PASS_JOURNAL="$SHARED_BASH_PATH/keep-pass.journal"
+export HL_DEFAULTS="+cC \\<TB]"
 export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
 export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
 export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
-export HIGHLIGHT_DEFAULT="warning\|diagnostic\|"
+export HIGHLIGHT_DEFAULT="warning\\|diagnostic\\|"
 export TMUX_INIT_SESSIONS="MAIN"
 export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
 export TMUX_PREFIX_2='C-q'
-export TMUX_SMART_BLACKLIST="EMPTY_VALUE\|gitlab\.com\|github\.com"
-export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 025:time"
+export TMUX_SMART_BLACKLIST="EMPTY_VALUE\\|gitlab\\.com\\|github\\.com"
+export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 025:time"
+export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
 export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
 [[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
@@ -130,9 +134,10 @@ export HISTFILE=$HOME/.bash_history
 [[ -n $TMUX_SESSION ]] && export HISTFILE=$TMUX_SESSION_PATH/bash_history
 export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
 export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
-
 shopt -s histappend
 shopt -s checkwinsize
+shopt -s extglob
+shopt -s cdspell
 # }}}
 # InputRC: Bash shortcuts {{{
 if [[ "$what_to_do" == 'full' ]]; then
@@ -222,7 +227,7 @@ if [[ "$what_to_do" == 'full' ]]; then
     bind '"\C-kr":  "'${pre}' \C-g reset\C-m'
     bind '"\C-l":   "'${pre}' \C-g clr\C-m'
     if $FZF_INSTALLED; then
-      bind -x '"\C-f": "'${pre}'fzfwr"'
+      bind -x '"\C-f": "'${pre}'fzfwr iRC"'
       bind -x '"\C-p": "'${pre}'fzf-file-widget"'
     fi
   done
@@ -286,10 +291,11 @@ export PS1_SHORTEN_PATH=true
 [[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
 # }}}
 # CapsLock <-> Ctrl # {{{
-if [[ -n $DISPLAY ]] && type setxkbmap xcape >/dev/null 2>&1; then
-  setxkbmap -option 'caps:ctrl_modifier'
-  if [[ ! "$(pidof xcape)" ]]; then
-    xcape -e 'Caps_Lock=Escape'
+if ! $IS_MAC && [[ -n $DISPLAY ]]; then
+  which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
+  if which xcape >/dev/null 2>&1; then
+    killall xcape >/dev/null 2>&1
+    xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
   fi
 fi
 #}}}

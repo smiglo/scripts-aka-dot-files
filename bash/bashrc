@@ -17,6 +17,7 @@ while [[ ! -z $1 ]]; do
   esac
   shift
 done
+$verbose && echo "wtd=[$what_to_do]" >/dev/stderr
 if ${RCSTUFF_BASHRC_INSTALLING:-false}; then
   $verbose && echo "Already being installed [$0, params=($@), tree=(${BASH_SOURCE[*]})]" >/dev/stderr
   unset what_to_do verbose
@@ -56,11 +57,18 @@ fi
 [[ -e $BASH_PATH/colors ]] && source $BASH_PATH/colors ''
 [[ -e $BASH_PATH/cfg ]] && source $BASH_PATH/cfg ''
 [[ -e $BASH_PATH/runtime-post ]] && source $BASH_PATH/runtime-post ''
-[[ -e $BASH_PATH/aliases ]] && source $BASH_PATH/aliases ''
 if [[ $what_to_do == 'full' ]]; then
+  [[ -e $BASH_PATH/aliases ]] && source $BASH_PATH/aliases ''
   [[ -x $BASH_PATH/completion ]] && source $BASH_PATH/completion ''
 fi
 [[ "$TERM" == 'cygwin' ]]        && source $BASH_PATH/cygwin ''
+# ZFZ # {{{
+if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
+  set -o vi
+  source $HOME/.fzf.bash ''
+  export RCSTUFF_FZF_INSTALLED=true
+fi # }}}
+# }}}
 # }}}
 # Remove duplicates from PATH # {{{
 export PATH="${PATH//@END@:}"
@@ -163,17 +171,10 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
   unset DEFINE_TICKET_TOOL_HELPER
   # }}}
 fi # }}}
-# ZFZ # {{{
-if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
-  set -o vi
-  source $HOME/.fzf.bash ''
-  export RCSTUFF_FZF_INSTALLED=true
-fi # }}}
-# }}}
 
 if [[ -n $TMUX ]]; then
   case "$(tmux display-message -p -t $TMUX_PANE -F '#W')" in
-  bash | '' | reattach-to-user-namespace) $BASH_PATH/aliases set_title --set-none --set-window --lock-force;;
+  bash | '' | reattach-to-user-namespace) $BASH_PATH/aliases set_title --set-none --set-window --unlock-force;;
   esac
 fi
 

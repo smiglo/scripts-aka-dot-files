@@ -182,13 +182,11 @@ initFromEnv() { # {{{
       sleep 0.1
     fi # }}}
     # Preconfigured Splits # {{{
-    if [[ ! -z $c ]]; then
-      makePreconfiguredSplits --wnd $w --cnt-panes 2 --pwd "$p" "$c"
-    elif [[ ! -z $t ]]; then
-      local preVar="${t^^}"
-      preVar="TMUX_${sessionName//-/_}_PRE_${preVar//-/_}"
-      [[ ! -z ${!preVar} ]] && makePreconfiguredSplits --wnd $w --cnt-panes 2 --pwd "$p" "${!preVar}"
-    fi # }}}
+    if [[ -z $c && ! -z $t ]]; then
+      c="${t^^}" && c="TMUX_${sessionName//-/_}_PRE_${c//-/_}"
+      c="${!c}"
+    fi
+    [[ ! -z $c ]] && makePreconfiguredSplits --wnd $w --cnt-panes 2 --pwd "$p" "$c" # }}}
     # Vim # {{{
     if [[ ! -z $t ]]; then
       local session_file="${t,,}"
@@ -215,7 +213,7 @@ initFromEnv() { # {{{
       done
       sleep 1
     fi # }}}
-    msgs+="Window [$t]: Created (${p/$HOME/\~})\n"
+    msgs+="Window [$t]: Created (${p/$HOME/~})\n"
     w=$(($w+1))
   done # }}}
   $BASH_PATH/aliases progress --unmark
@@ -341,12 +339,12 @@ initTmux_MAIN() { # {{{
     select-pane   -t $sessionName:2.1
   local isNet=false
   $BASH_PATH/aliases progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
   run_mc $sessionName:1.1
   run $sessionName:3.1 --hide --clear "sudo -s"
   makePreconfiguredSplits --wnd 2
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
 } # }}}
 initTmux_REMOTE() { # {{{
   eval $(init "$(getRemoteSessionName)" "${TMUX_STARTUP_DIR:-$HOME}")
