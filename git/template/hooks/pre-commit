@@ -23,7 +23,7 @@ check() {
   for f in $files; do
     [[ ! -e $f || -d $f ]] && continue
     _err=0
-    cd $dir; git diff --cached $f | command grep -q "^+.*$1" && _err=1
+    cd $dir; git diff --cached $f | command grep -q --color "^+.*$1" && _err=1
     if [[ $_err != 0 ]]; then
       skip=false
       cd $dir; command grep --color -Hn -E "$1" $f
@@ -92,7 +92,26 @@ displayTB() {
   return 0
 }
 
+source ~/.bashrc --do-min
+
 [[ ! -z $GIT_PRE_COMMIT_IGNORE ]] && echo "$PWD" | command grep -q -e "---$GIT_PRE_COMMIT_IGNORE" && exit 0
+
+if [[ ! -z $GIT_PRE_COMMIT_REPO_WHITELIST ]]; then
+  found=false
+  for i in $GIT_PRE_COMMIT_REPO_WHITELIST; do
+    echo "$PWD" | command grep -q -e "$i" && found=true
+    $found && break
+  done
+  ! $found && exit 0
+fi
+
+if [[ ! -z $GIT_PRE_COMMIT_REPO_BLACKLIST ]]; then
+  found=false
+  for i in $GIT_PRE_COMMIT_REPO_BLACKLIST; do
+    echo "$PWD" | command grep -q -e "$i" && found=true && break
+  done
+  $found && exit 0
+fi
 
 err=0
 

@@ -2,15 +2,19 @@
 # vim: fdl=0
 
 if [[ $1 == '@@' ]]; then # {{{
-  ret_val='--today --first --full --percentage --tmux --passed --store --store-force --clear --stats --stats-full --toggle --show-end --show-left --logins --remaining --clear-screen --loop --show-current-time --shutdown --plot --suspend --shutdown --cmd'
   if [[ $3 == '--cmd' ]]; then
-    echo 'quit margin comment check st backup sync fetch pause-toggle pause-mod suspend end e! shutdown End E! store plot'
+    echo 'quit margin comment check st backup sync fetch pause pause-toggle pause-mod store plot plot-full stats stats-full'
+    echo 'suspend end e! shutdown End E! refresh r reset R'
     exit 0
   fi
-  noes= i=
-  for i in $ret_val; do
-    noes+=" --no-${i/--}"
-  done
+  ret_val=
+  ret_val+=' --today --first --full --percentage --tmux --passed --store --store-force --clear --stats --stats-full'
+  ret_val+=' --toggle --show-end --show-left --logins --remaining --clear-screen --loop --show-current-time --shutdown'
+  ret_val+=' --plot --plot-full --suspend --shutdown --cmd'
+  # noes= i=
+  # for i in $ret_val; do
+  #   noes+=" --no-${i/--}"
+  # done
   extra='% +%'
   echo $ret_val $noes $ret_$extra
   exit 0
@@ -23,13 +27,9 @@ __util_loglast_extra() { # {{{
   suspend) $BASH_PATH/aliases tm --b-dump;;
   reset) # {{{
     if [[ -n $TMUX ]]; then
-      tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
-        tmux set-environment  ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
-      done
-      tmux show-environment -g | command grep "^TMUX_SB.*update_time" | while read i; do
-        tmux set-environment  -g ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
-      done
+      $HOME/.tmux.bash status_right_refresh
     fi;; # }}}
+  help) ;;
   esac
   for i in $BASH_PROFILES; do
     [[ -e "$BASH_PATH/profiles/$i/aliases" ]] && $BASH_PATH/profiles/$i/aliases __util_loglast_extra "$1"
@@ -112,13 +112,13 @@ loglast() { # {{{
       fi
       if [[ -z $startup_margin ]]; then
         case $dow in
-        1) startup_margin=5;;
-        *) startup_margin=2;;
+        1) startup_margin=${LOGLAST_SMARGIN_MON:-5};;
+        *) startup_margin=${LOGLAST_SMARGIN:-3};;
         esac
       fi
       if is_to_be_done 'loop'; then # {{{
         fix_caps
-        __util_loglast_extra 'refresh'
+        __util_loglast_extra 'reset'
         to_do_extra+=" store-force stats-main send "
         if [[ ! -e $FILE_DATA || $(command date -ud "@$(stat -c %Y $FILE_DATA)" +"%Y%m%d") != $TODAY_YMD ]]; then
           (
@@ -369,11 +369,12 @@ loglast() { # {{{
       [[ ! -z $LOGLAST_BACKUP_FILE ]] && rsync $RSYNC_DEFAULT_PARAMS $FILE $LOGLAST_BACKUP_FILE >/dev/null 2>&1
       __util_loglast_extra 'send'
     fi # }}}
-    if is_to_be_done 'plot'; then # {{{
+    if is_to_be_done 'plot' || is_to_be_done 'plot-full'; then # {{{
       ! type gnuplot 1>/dev/null 2>&1 && echo "\"gnuplot\" not installed" >/dev/stderr && return 1
-      local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res=
+      local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot='cat -'
+      is_to_be_done 'plot' && full_plot='tail -n100'
       printf "%6s %2s %6s %6s\n" 'No' '8h' 'W' 'A' >$FILE_PLOT
-      cat $FILE | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
+      cat $FILE | $full_plot | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
         printf "%-6s" '8'
         for i in $line; do
           local res="$(calc -q -- ${i/:*}+${i/*:}/60 | sed -e 's/~//' -e 's/\s//' | cut -c-5)"
@@ -398,8 +399,8 @@ loglast() { # {{{
       fi # }}}
       local was_break=false
       trap "was_break=true;" INT
-      eval "(                                                                                                                                                         \
-        progress --pv --cnt $end_delay                                                                                                                                \
+      eval "(                                                                                                                                                       \
+        progress --pv --cnt $end_delay                                                                                                                              \
           --color \"$(is_to_be_done "suspend" && echo "${CGold}" || echo "${CRed}")\"                                                                               \
           --msg \"${CBlue}Going into $(is_to_be_done "suspend" && echo "${CGold}sleep${CBlue}" || echo "${CRed}shutdown${CBlue}") in $end_delay seconds...${COff}\" \
       )"
@@ -407,7 +408,6 @@ loglast() { # {{{
       echo -en "${COff}"
       end_delay=
       if ! $was_break; then # {{{
-        [[ ! -z $LOGLAST_BEFORE_SUSPEND ]] && eval $LOGLAST_BEFORE_SUSPEND
         __util_loglast_extra 'suspend'
         pkill -x -u $USER 'ssh'
         if is_to_be_done 'suspend'; then
@@ -424,10 +424,10 @@ loglast() { # {{{
         fi
       else
         to_do_extra=
-        continue
+        echo "unpause" >$CMD_FILE
       fi # }}}
     fi # }}}
-    if is_to_be_done 'pause-show-message'; then # {{{
+    if $paused && $pause_msg_show; then # {{{
       local now=$(command date +"%s")
       if [[ $(($pause_msg_last_time + $pause_msg_delta)) -lt $now ]]; then
         notify-send 'Time Tracker: PAUSED' -u 'critical'
@@ -442,9 +442,10 @@ loglast() { # {{{
     while true; do # Wait for a key or input file {{{
       read -t $LOOP_KEY key && break
       if [[ -e $CMD_FILE ]]; then
-        key=$(cat $CMD_FILE)
-        rm -rf $CMD_FILE
-        break
+        key=$(head -n1 $CMD_FILE)
+        sed -i -e '1,1 d' $CMD_FILE
+        [[ ! -s $CMD_FILE ]] && rm -rf $CMD_FILE
+        [[ ! -z $key ]] && break
       fi
       delayed=$(($delayed + $LOOP_KEY))
       [[ $delayed -ge $LOOP_TIME ]] && continue 2
@@ -474,6 +475,7 @@ loglast() { # {{{
       bck|b)        cmd='backup';;
       r)            cmd='refresh';;
       R)            cmd='reset';;
+      h)            cmd='help';;
       *)            cmd="$cmd";;
       esac # }}}
       # Handle additional actions # {{{
@@ -484,7 +486,7 @@ loglast() { # {{{
         cmds="$cmd store"
         case $cmd in
         pause-toggle | pause | unpause)
-          cmds+=' reset refresh';;
+          cmds+=' refresh';;
         esac;;
       suspend | shutdown)
         [[ $cmdFull != *! ]] && cmds+=" check"
@@ -497,6 +499,33 @@ loglast() { # {{{
       esac # }}}
       for cmd in $cmds; do # {{{
         case $cmd in # {{{
+        help) # {{{
+          echo "Pause-Mod V C | pmV C | pm V C     - Adjust pause time (Value, Comment)"
+          echo "Margin V C    | mV  C | m  V C     - Adjust margin (Value, Comment)"
+          echo "Quit          | q                  - Quit"
+          echo "Pause-Toggle  | p                  - Toggle pause"
+          echo "Pause-Message | p-msg              - Hide pause message"
+          echo "Unpause                            - Unpause"
+          echo "Pause                              - Pause"
+          echo "Comment C     | c C                - Add a Comment"
+          echo "Store         | s                  - Store"
+          echo "Suspend       | e | e! | end       - Suspend (! - no check, no delay)"
+          echo "Shutdown      | E | E! | End       - Shutdown (! - no check, no delay)"
+          echo "Check         | chk | st           - Check git repos"
+          echo "Backup        | bck | b            - Do a backup of git repos"
+          echo "Sync                               - Sync git repos"
+          echo "Fetch                              - Fetch git repos"
+          echo "Refresh       | r                  - Refresh"
+          echo "Reset         | R                  - Reset"
+          echo "Plot          | Plot-full          - Draw chart"
+          echo "Stats         | Stats-full         - Show entries"
+          echo "Help          | h                  - Help"
+          echo "Extra V                            - Extra tasks:"
+          while read v vv; do
+            printf "  %-32s - %s\n" "$v" "$vv"
+          done <<< "$(__util_loglast_extra "help")"
+          read key
+          ;; # }}}
         quit) # {{{
           break 3;; # }}}
         margin) # {{{
@@ -556,7 +585,7 @@ loglast() { # {{{
           [[ ! -z $1 ]] && user_comment="$@" && shift $#
           ;; # }}}
         suspend|shutdown) # {{{
-          end_margin=1
+          end_margin=${LOGLAST_EMARGIN:-3}
           case $cmdFull in # {{{
           e!|E!) # {{{
             end_delay=3;; # }}}
@@ -605,7 +634,6 @@ loglast() { # {{{
         esac # }}}
       done # }}}
     done # }}}
-    $pause_msg_show && to_do_extra+=" pause-show-message"
     to_do_extra=" $to_do_extra "
     local mem_file=$TMP_MEM_PATH/.work_time.nfo
     (

@@ -2,4 +2,6 @@
 
 dashboard -layout assembly expressions history memory registers source stack threads
 dashboard -style syntax_highlighting 'rrt'
+dashboard source -style context 15
+alias -a db = dashboard
 

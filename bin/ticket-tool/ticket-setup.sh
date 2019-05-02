@@ -107,6 +107,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			
 			# env -# {{{
 			# tmux set-buffer -b "${issue}-desc"   ''
+			# echo "export var=val"
 			@@ ENV @@
 			# }}}
 			# -info # {{{
@@ -217,12 +218,25 @@ fi # }}}
 if $do_open; then # {{{
   [[ ! -z $TICKET_TMUX_SESSION ]] && tmux-startup.sh --do-env -- "$TICKET_TMUX_SESSION" "$issue"
   for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
-    $ext --open "$issue" "$@"
+    $ext --open "$issue"
   done # }}}
   if [[ ! -z $TICKET_TMUX_SESSION ]] && ! tmux list-windows -t $TICKET_TMUX_SESSION -F '#W' | command grep -qi "$issue"; then
     $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue tmux 'INIT'
   fi
 fi # }}}
-$do_eval && eval $($TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent)
-unset path_issue issue do_eval do_open fname fnameH
+if $do_eval; then # {{{
+  if [[ -n $TMUX ]]; then
+    if [[ $(tmux display-message -pF '#W') == "${issue^^}"* ]]; then
+      eval $($TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent)
+      if [[ ! -z $TICKET_TOOL_POST_ENV ]]; then # {{{
+        while read post_env; do
+          eval $post_env
+        done <<<"$(echo -e "$TICKET_TOOL_POST_ENV")"
+      fi # }}}
+    else
+      $TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent >/dev/null
+    fi
+  fi
+fi # }}}
+unset path_issue issue do_eval do_open fname fnameH post_env
 

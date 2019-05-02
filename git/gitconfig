@@ -43,10 +43,12 @@
   ci-fast = !"git-cmds.sh commit-fast"
   ciaa = commit --all --no-verify
   ciam = commit --amend --reuse-message=HEAD --no-verify
+  ciamb = !"git commit --amend --reuse-message=HEAD --no-verify && git backup"
   ciamp = !"git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
   ciamm = commit --amend --no-verify
   cim = commit -m
   co = checkout
+  d = diff
   dff = diff --relative
   dffc = !"git diffc --relative"
   dffp = !"git diffp --relative"

@@ -11,4 +11,6 @@ set history save on
 set history filename ~/.config/gdb/history
 set history size 32768
 set history expansion on
+set auto-load safe-path /
+
 

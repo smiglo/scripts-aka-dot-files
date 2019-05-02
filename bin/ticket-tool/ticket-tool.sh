@@ -56,17 +56,6 @@ export issue path_issue cmd params cmd_tt cmd_TT setup fzf_params
 for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
   eval "$($ext --env)"
 done # }}}
-info_pretty1() { # {{{
-  local title="$(printf "   %s" "${issue^^}: Additional Information")" len=60
-  [[ $(( ${#title} + $len)) -ge $(tput cols) ]] && len=$(($(tput cols)-${#title}-3))
-  [[ $len -lt 3 ]] && len=3
-  title+="$(printf " %.0s" $(eval echo {1..$len}))"
-  l1="$(eval printf "─%.0s"  {1..${#title}})"
-  l2="$(eval printf "═%.0s"  {1..${#title}})"
-  echo "┌$l1┐"
-  echo "│$title│"
-  echo "└$l1┘"
-} # }}}
 getFunctionBodyRaw() { # {{{
   sed -n "/^# $1 -\{0,1\}\# {{[{]/,/^# }}[}]/p" "$(getIssueFile)"
 } # }}}
@@ -122,9 +111,7 @@ case "$cmd" in
       if [[ ! -z $func ]]; then
         case $cmd in
         info*) # {{{
-          ret=
-          ${TICKET_CONF_INFO_HEADER:-false} && ret+=" --no-header" || ret+="--header"
-          ret+=" $(echo "$func" | sed -n '/^##\+ @ [A-Za-z0-9].*/ { /}\{3\}/!s/.*@ \([A-Za-z0-9][^ ]*\).*/\L\1/p }')";; # }}}
+          ret=" $(echo "$func" | sed -n '/^##\+ @ [A-Za-z0-9].*/ { /}\{3\}/!s/.*@ \([A-Za-z0-9][^ ]*\).*/\L\1/p }')";; # }}}
         *) # {{{
           echo "$func" | head -n1 | command grep -qa '@@' && ret=$(bash -c "$(echo "$func" | sed -e '/^# /d')" - @@ "$@") ;; # }}}
         esac
@@ -149,7 +136,7 @@ case "$cmd" in
     while [[ ! -z $1 ]]; do
       cmd="$(mapCommand "$1")" && shift
       case $cmd in
-      info*) $add_prefix && $0 --issue $issue "$cmd" --no-header | sed "s/^/$cmd:/" || $0 --issue $issue "$cmd" --no-header;;
+      info*) $add_prefix && $0 --issue $issue "$cmd" | sed "s/^/$cmd:/" || $0 --issue $issue "$cmd";;
       *)     $add_prefix && getFunctionBody $cmd --plain | sed "s/^/$cmd:/" || getFunctionBody $cmd --plain;;
       esac
     done
@@ -216,7 +203,7 @@ browser) # {{{
   all=true
   while [[ ! -z $1 ]]; do
     case $1 in
-    @ff | @chrome | @chromium) browser="${1#@}";;
+    @ff | @chrome | @chromium | @brave) browser="${1#@}";;
     @*) cmd="${1#@}"; shift; params="$@"; shift $#; break;;
     -1) all=false;;
     *)  break;;
@@ -241,6 +228,9 @@ browser) # {{{
     ff)       firefox -new-tab -url $i;;
     chrome)   /opt/google/chrome $i;;
     chromium) chromium-browser $i;;
+    brave)    browser="${TICKET_CONF_BROWSER_BRAVE_PATH:-/opt/brave.com/brave/brave}"
+              [[ ! -f $browser ]] && echo "Brave not found at [$browser]" >/dev/stderr && exit 1
+              $browser $i;;
     open)     open $i;;
     esac
   done;; # }}}
@@ -464,7 +454,7 @@ setup) # {{{
     silent=false
     [[ $1 == '--silent' ]] && shift && silent=true
     for b in $(tmux list-buffers -F '#{buffer_name}' | command grep -a "^${issue}-" | sort); do
-      $silent || echo -n "$b: $(tmux show-buffer -b $b)" && echo
+      $silent || echo "# $b: $(tmux show-buffer -b $b)"
       tmux delete-buffer -b $b
     done
     unset silent
@@ -475,14 +465,10 @@ setup) # {{{
     func="$(getFunctionBody $cmd)"
     if [[ ! -z $func ]]; then
       func="${func#source*; }"
-      # Print header ? # {{{
-      printHeader="${TICKET_CONF_INFO_HEADER:-false}"
-      case $1 in
-      --no-header) printHeader=false; shift;;
-      --header)    printHeader=true;  shift;;
-      esac
-      $printHeader && info_pretty1
-      # }}}
+      len="$(tput cols)"
+      [[ $len -gt 60 ]] && len=60
+      l1="$(eval printf "─%.0s"  {1..$len})"
+      l2="$(eval printf "═%.0s"  {1..$len})"
       multi=$((${#l1} / 4))
       multi="$(printf "\\\\0%.s" $(eval echo {1..$multi}))"
       [[ -t 1 ]] || unset $(command grep "^C" $BASH_PATH/colors | sed -e 's/=.*//' | tr '\n' ' ')
@@ -497,20 +483,21 @@ setup) # {{{
             echo -ne "$func\n" | sed -n -e "/^##\+ @ $s .*{{[{]/,/^##\+ @ $s .*}}[}]/p" | sed -e "s/^\(##\+ @\).*}}[}]/\1/"
           else
             indent="$(echo -ne "$func\n" | command grep -a "^##\+ @ $s" | head -n1 | sed -e 's/^\(##\+\) .*/\1/')"
-            if [[ $indent == \#\#\#* ]]; then
-              echo -ne "$func\n" | sed -n -e "/^##\+ @ $s/,/^#\{2,${#indent}\} @/p"
-            else
-              echo -ne "$func\n" | sed -n -e "/^##\+ @ $s/,/^##\+ @ \|^#\+ }}[}]/p"
-            fi | sed -e "s/##\+ @ $s/--@@\0/" -e "s/^#\{2,${#indent}\} @.*/$indent @/" -e 's/^--@@//'
+            max="$((${#indent}-1))"
+            [[ $max -lt 2 ]] && max=2
+            echo -ne "$func\n" | sed -n -e "/^##\+ @ $s/,/^#\{2,$max\}$\|^$indent @\|^$indent @ }}[}]/p" \
+            | sed -e "s/##\+ @ $s/--@@\0/" -e "s/^#\{2,$max\}$\|^#\{2,${#indent}\} @.*/$indent @/" -e 's/^--@@//'
           fi
           shift
         done
       fi | sed \
         -e '/^"\+$/ d' \
+        -e "/^'''$/ d" \
         -e "s/^---$/$l1/" -e "s/^===$/$l2/" -e "s/^\(.\)\1\{3\}$/$multi/" \
         -e 's/^## \([^@]*$\)/# \1/' \
         -e "s/^\(##\+\) @ \([a-zA-Z0-9][^ ]*\).*/\1 ${CGold}\2${COff}/g" \
-        -e '/^##\+ [@#].*/ d'
+        -e '/^##\+ [@#].*/ d' \
+        -e '/^##\+$/ d'
     fi;; # }}}
   [a-z]*) # {{{
     export DO_SOURCE=true

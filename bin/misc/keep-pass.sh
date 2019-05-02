@@ -24,21 +24,29 @@ if [[ $1 == '--complete' ]]; then # {{{
     --journal) # {{{
       ;; # }}}
     --key) # {{{
-      local journalFile="${KEEP_PASS_JOURNAL:-$PWD/keep-pass.journal}"
-      [[ -e "$journalFile" ]] && opts+="$(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$journalFile")";; # }}}
+      local journalFiles="$KEEP_PASS_JOURNALS" f=
+      [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+      [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles+=" $PWD/keep-pass.journal"
+      for f in $journalFiles; do
+        [[ -e "$f" ]] && opts+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f")"
+      done;; # }}}
     --save) # {{{
       ;; # }}}
     *) # {{{
       case $first in
       --gen) # {{{
-        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --no-padding"
+        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --update --padding --no-padding --plain"
         opts+=" --in --in="
-        opts+=" --pass --pass=";; # }}}
+        opts+=" --pass --pass= --no-pass";; # }}}
       --get | '') # {{{
-        opts+=" --pass --pass= --key --seq" ;;& # }}}
+        opts+=" --pass --pass= --key --seq --no-intr" ;;& # }}}
+      --list-keys) # {{{
+        opts+=" --all";& # }}}
+      --list-all-keys) # {{{
+        opts+=" -d -dd";; # }}}
       '') # {{{
         opts+=" -v -vv -vvv --journal"
-        opts+=" --gen --get --has-key --list-keys";; # }}}
+        opts+=" --gen --get --has-key --list-keys --list-all-keys";; # }}}
       esac;; # }}}
     esac
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
@@ -51,8 +59,8 @@ fi # }}}
 
 LC_ALL=C
 dictFile="${KEEP_PASS_DICT:-$(dirname "$(readlink -f "$0")")/keep-pass.dict}"
+journalMainFile=
 [[ ! -e "$dictFile" ]] && echo "Dictionary file not found ($dictFile)" >/dev/stderr && exit 1
-journalFile="${KEEP_PASS_JOURNAL:-$PWD/keep-pass.journal}"
 end="65433"
 letters=(11111 13161 15553 22241 23664 25136 26515 32225 33466 34323 35143 35561 41351 43251 44146 44611 46624 51223 52513 56326 62265 62533 63334 64532 64626 65255)
 # info:      a     b     c     d     e     f     g     h     i     j     k     l     m     n     o     p     q     r     s     t     u     v     w     x     y     z
@@ -64,11 +72,18 @@ verbose=0
 if [[ ! -z "$KEEP_PASS_KEYS" ]]; then # {{{
   if [[ -e "$KEEP_PASS_KEYS" ]]; then
     source "$KEEP_PASS_KEYS"
-  elif [[ "$KEEP_PASS_KEYS" != /* ]]; then
+  elif [[ "$KEEP_PASS_KEYS" != /* || "$KEEP_PASS_KEYS" == //* ]]; then
     source <(eval "$KEEP_PASS_KEYS")
   fi
 fi # }}}
 
+getJournals() { # {{{
+  [[ ! -z $journalMainFile ]] && echo "$journalMainFile" && return 0
+  local journalFiles="$KEEP_PASS_JOURNALS"
+  [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+  [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
+  echo "$journalFiles"
+} # }}}
 getRand() { # {{{
   echo "$(($1 + $RANDOM % ($2-$1+1)))"
 }
@@ -151,86 +166,113 @@ encode() { # {{{
   echo "$ret"
 } # }}}
 encrypt() { # {{{
-  local src= ret= decrypt=false pass= params=
+  local src= ret= decrypt=false pass= params= interactive=
   [[ $1 == '-d' ]] && decrypt=true && shift
-  src="$1" pass="$2"
+  src="$1" pass="$2" interactive="${3:-true}"
   params="enc -aes-256-cbc -salt -a -A"
-  [[ ! -z $pass ]] && params+=" -pass pass:'$pass'"
+  if [[ ! -z $pass ]]; then
+    if $decrypt && [[ $pass == @* ]]; then
+      local mkey="$KEEP_PASS_MASTER_KEY"
+      if [[ -z $mkey ]]; then
+        $interactive || { echo '---'; return 0; }
+        read -r -s -p "Enter Master Key: " mkey && echo
+        [[ -z $mkey ]] && return 1
+      fi
+      pass="$(echo "${pass:1}" | eval openssl $params -d -pass pass:'$mkey' 2>/dev/null)" || return 1
+    fi
+    params+=" -pass pass:'$pass'"
+  elif ! $interactive; then
+    echo '---'
+    return 0
+  fi
   $decrypt && params+=" -d" || params+=" -e"
-  ret="$(echo "$src" | eval openssl $params)"
+  ret="$(echo "$src" | eval openssl $params 2>/dev/null)" || return 1
   echo "$ret"
 } # }}}
 getPass() { # {{{
   local i= w= oldIFS="$IFS" phrase= \
-    seq= upper= spaces= upper_first= IFS= use_pass=false pass= padding=
+    seq= upper= spaces= upper_first= IFS="$IFS" use_pass=false pass= padding= do_encode=true interactive=true
   set -- $KEEP_PASS_GET_PARAMS "$@"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --key)    phrase="$2"; shift;;
-    --seq)    seq="$2"; shift;;
-    --pass=*) pass="${1#--pass=}";&
-    --pass)   use_pass=true;;
-    *)        phrase="$1";;
+    --key)     phrase="$2"; shift;;
+    --seq)     seq="$2"; shift;;
+    --pass=*)  pass="${1#--pass=}";&
+    --pass)    use_pass=true;;
+    --no-intr) interactive=false;;
+    *)         phrase="$1";;
     esac
     shift
   done # }}}
   if [[ ! -z $phrase ]]; then # {{{
-    [[ ! -e "$journalFile" ]] && return 1
-    local line="$(command grep "^$phrase\(:.*\)\{0,1\}:\s\+" "$journalFile" | head -n1)"
+    local f= line=
+    for f in $(getJournals); do
+      [[ ! -e $f ]] && continue
+      line="$(command grep "^$phrase\(:.*\)\{0,1\}:\s\+" "$f" | head -n1)"
+      [[ ! -z $line ]] && break
+    done
     seq="$(echo "$line" | sed 's/.*:\s\+//')"
     [[ -z $seq ]] && return 1
     if [[ ${seq:0:1} == '*' && -z $pass ]]; then
       local passV="$(echo "$line" | sed 's/\(.*\):\s\+.*$/\1/')"
       passV="${passV#*:}"
       passV="KEEP_PASS_KEY_${passV^^}"
+      passV="${passV//-/_}"
       pass="${!passV}"
     fi
   fi # }}}
   [[ ${seq:0:1} == '*' ]] && use_pass=true && seq="${seq:1}"
   if $use_pass; then # {{{
-    seq="$(encrypt -d "$seq" "$pass")"
+    seq="$(encrypt -d "$seq" "$pass" "$interactive")"
+    [[ $? != 0 || -z $seq ]] && echo "Error during encryption" >/dev/stderr && return 1
     [[ $verbose -ge 1 ]] && echo "$seq"
+    [[ $seq == '---' ]] && echo "$seq" && return 0
   fi # }}}
-  seq="$(encode -d "$seq")"
+  [[ ${seq:0:1} != '+' ]] && seq="$(encode -d "$seq")" || { seq="${seq:1}"; do_encode=false; }
   [[ $verbose -ge 2 ]] && echo "$seq"
   IFS=":" read -r seq upper spaces upper_first padding <<< "$seq"
   IFS="$oldIFS"
   [[ -z $seq ]] && return 0
-  seq="$(echo "${seq// }" | sed 's/.\{5\}/& /g')"
-  [[ $spaces == 1 ]] && spaces=true || spaces=false
-  [[ $upper_first == 1 ]] && upper_first=true || upper_first=false
-  ! $spaces && words='-'
-  for i in $seq; do # {{{
-    w="$(getWord "$i")"
-    [[ $verbose -ge 3 ]] && echo "$i: [$w]"
-    $upper_first && w="$(echo "$w" | sed 's/\(.\)\(.*\)/\U\1\L\2/')"
-    $spaces && words+=" "
-    words+="$w"
-  done # }}}
-  words="${words:1}"
-  if [[ ! -z $upper ]]; then # {{{
-    for upper in ${upper//,/ }; do
-      upper="$(($upper%${#words}))"
-      local f= i= t= first=$upper
-      f="${words::$upper}"
-      i="${words:$upper:1}"
-      while [[ ! $i =~ [a-z] ]]; do
-        f+="$i"
-        upper="$(($upper+1))"
-        [[ $upper == $first ]] && break
-        [[ $upper == ${#words} ]] && f= && upper=0
+  if $do_encode; then # {{{
+    seq="$(echo "${seq// }" | sed 's/.\{5\}/& /g')"
+    [[ $spaces == 1 ]] && spaces=true || spaces=false
+    [[ $upper_first == 1 ]] && upper_first=true || upper_first=false
+    ! $spaces && words='-'
+    for i in $seq; do # {{{
+      w="$(getWord "$i")"
+      [[ $verbose -ge 3 ]] && echo "$i: [$w]"
+      $upper_first && w="$(echo "$w" | sed 's/\(.\)\(.*\)/\U\1\L\2/')"
+      $spaces && words+=" "
+      words+="$w"
+    done # }}}
+    words="${words:1}"
+    if [[ ! -z $upper ]]; then # {{{
+      for upper in ${upper//,/ }; do
+        upper="$(($upper%${#words}))"
+        local f= i= t= first=$upper
+        f="${words::$upper}"
         i="${words:$upper:1}"
+        while [[ ! $i =~ [a-z] ]]; do
+          f+="$i"
+          upper="$(($upper+1))"
+          [[ $upper == $first ]] && break
+          [[ $upper == ${#words} ]] && f= && upper=0
+          i="${words:$upper:1}"
+        done
+        t="${words:$(($upper+1))}"
+        words="${f}${i^^}${t}"
       done
-      t="${words:$(($upper+1))}"
-      words="${f}${i^^}${t}"
-    done
+    fi # }}}
+    # }}}
+  else # {{{
+    words="$seq"
   fi # }}}
   echo "$words"
 } # }}}
 genPass() { # {{{
   local cnt=4 i= v= seq= words= pass= params= input= info= \
     upper=false special=false digit=false spaces=true upper_first=false use_pass=false read_input=false \
-    save=false add_padding=true
+    save=false add_padding=true do_encode=true update=false check=
   set -- $KEEP_PASS_GEN_PARAMS "$@"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -242,10 +284,14 @@ genPass() { # {{{
     --upper-first) upper_first=true;;
     --pass=*)      pass="${1#--pass=}";&
     --pass)        use_pass=true;;
+    --no-pass)     use_pass=false;;
     --in=*)        input="${1#--in=}";&
     --in)          read_input=true; spaces=false;;
-    --save)        save=true; info="$2"; shift;;
+    --update)      update=true;&
+    --save)        save=true; info="$2"; pass=true; shift;;
     --no-padding)  add_padding=false;;
+    --padding)     add_padding=true;;
+    --plain)       do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
     *)             seq="$1";;
     esac
     shift
@@ -286,7 +332,8 @@ genPass() { # {{{
         seq+="$v"
         i="$(($i+1))" ;; # }}}
       *) # {{{
-        v="$(getWordValue $v)"
+        v="${v//\*/\\*}" v="${v//\?/\\?}"
+        v="$(getWordValue "$v")"
         seq+="$v"
         i="$(($i+1))";; # }}}
       esac
@@ -334,7 +381,7 @@ genPass() { # {{{
     fi # }}}
   fi # }}}
   [[ $verbose -ge 2 ]] && echo "$(basename "$0") --seq $seq"
-  seq="$(encode "$seq")"
+  $do_encode && seq="$(encode "$seq")" || seq="+$seq"
   if $use_pass; then # {{{
     [[ $verbose -ge 2 ]] && echo "$(basename "$0") --seq $seq"
     if [[ -z $pass && $info == *:* ]]; then # {{{
@@ -343,28 +390,90 @@ genPass() { # {{{
       passV="KEEP_PASS_KEY_${passV^^}"
       pass="${!passV}"
     fi # }}}
-    [[ -z $pass ]] && read -r -s -p "Enter pass: " pass && echo
-    seq="$(encrypt "$seq" "$pass")"
-    params="--pass"
-    [[ ! -z $pass ]] && params+="=$pass"
+    while [[ -z $pass ]]; do # {{{
+      read -r -s -p "Enter pass: " pass && echo
+      [[ ! -z $pass ]] && break
+      read -p 'No pass specified, proceed without encryption [y/n] ? ' i
+      case ${i,,} in
+      y) break;;
+      esac
+    done # }}}
+    if [[ ! -z $pass ]]; then # {{{
+      seq="*$(encrypt "$seq" "$pass")"
+      params="--pass=$pass"
+    fi # }}}
   fi # }}}
   [[ $verbose -ge 1 ]] && echo -e "$(basename "$0") ${params:-\b} --seq $seq" || echo "$seq"
   if $save; then # {{{
     [[ -z $info ]] && info="$(command date +"%Y%m%d-%H%M%S")"
-    local entry="${info// /-}:"
+    local entry="${info// /-}:" journalFile="$KEEP_PASS_JOURNAL"
+    if [[ ! -z $journalMainFile ]]; then
+      journalFile="$journalMainFile"
+    elif [[ -e "$PWD/keep-pass.journal" ]]; then
+      journalFile="$PWD/keep-pass.journal"
+    fi
+    [[ -z $journalFile ]] && echo "Journal file not found" >/dev/stderr && return 1
     while [[ ${#entry} -lt 18 ]]; do entry+=' '; done
     entry+="\t"
-    $use_pass && entry+="*"
     entry+="$seq"
+    if $update; then
+      sed -i -e "/^${entry%%:*}\(:.*\)\{0,1\}:\s\+.*/ d" "$journalFile"
+    elif hasKey "${entry%%:*}"; then
+      echo "The key '${entry%%:*}' already exists"
+    fi
     echo -e "$entry" >> "$journalFile"
   fi # }}}
-  getPass $params --seq $seq
+  check="$(getPass $params --seq $seq)"
+  [[ $verbose -ge 1 ]] && echo "$check"
+  check="$(echo "$check" | tail -n1)"
+  if [[ "$check" != "$input" && ! -z $input ]]; then
+   echo "Decrypted phrase does not match input"
+   echo "Input  : $input"
+   echo "Phrase : $check"
+   return 1
+ fi
 } # }}}
 hasKey() { # {{{
-  command grep -q "^$1\(:.*\)\{0,1\}:\s\+" "$journalFile"
+  local f=
+  for f in $(getJournals); do
+    [[ -e $f ]] && command grep -q "^$1\(:.*\)\{0,1\}:\s\+" "$f" && return 0
+  done
+  return 1
 } # }}}
 listKeys() { # {{{
-  [[ -e "$journalFile" ]] && sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$journalFile"
+  local f= i= d= files="$KEEP_PASS_JOURNAL" all=false details=0
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --all) all=true;;
+    -d)    details=1;;
+    -dd)   details=2;;
+    esac
+    shift
+  done # }}}
+  if $all; then # {{{
+    files="$(getJournals)"
+  elif [[ ! -z $journalMainFile ]]; then
+    files="$journalMainFile"
+  elif [[ -e "$PWD/keep-pass.journal" ]]; then
+    files="$PWD/keep-pass.journal"
+  fi # }}}
+  for f in $files; do # {{{
+    [[ -e "$f" ]] || continue
+    if [[ $details -gt 0 ]]; then # {{{
+      d="$(dirname "$f")"
+      d="${d/$HOME/\~}"
+      [[ $details == 1 ]] && d="${d##*/}"
+    fi # }}}
+    for i in $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f"); do # {{{
+      if [[ $details == 2 ]]; then
+        printf "%-60s : %s\n" "$d/${f##*/}" "$i"
+      elif [[ $details == 1 ]]; then
+        printf "%-35s : %s\n" "$d/${f##*/}" "$i"
+      else
+        echo "$i"
+      fi
+    done # }}}
+  done | sort -u # }}}
 } # }}}
 set -- $KEEP_PASS_PARAMS "$@"
 while [[ ! -z $1 ]]; do # {{{
@@ -372,17 +481,18 @@ while [[ ! -z $1 ]]; do # {{{
   -v)        verbose=1;;
   -vv)       verbose=2;;
   -vvv)      verbose=3;;
-  --journal) journalFile="$2"; shift;;
+  --journal) journalMainFile="$2"; shift;;
   *)         break;;
   esac
   shift
 done # }}}
 case $1 in
---get)       shift; getPass "$@";;
---gen)       shift; genPass "$@";;
---has-key)   hasKey "$2";;
---list-keys) listKeys;;
---test)      shift; $@;;
-*)           getPass "$@";;
+--get)             shift; getPass "$@";;
+--gen)             shift; genPass "$@";;
+--has-key)         shift; hasKey "$1";;
+--list-keys)       shift; listKeys $@;;
+--list-all-keys)   shift; listKeys --all $@;;
+--test)            shift; $@;;
+*)                 getPass "$@";;
 esac
 

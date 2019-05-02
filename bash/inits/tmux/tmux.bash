@@ -361,6 +361,14 @@ status_right_extra() { # {{{
   done
   printf "%s" "$ret "
 } # }}}
+status_right_refresh() { # {{{
+  tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
+    tmux set-environment  ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
+  done
+  tmux show-environment -g | command grep "^TMUX_SB.*update_time" | while read i; do
+    tmux set-environment  -g ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
+  done
+} # }}}
 status_right() { # {{{
   tmux set -qg status-right "#[fg=colour10,bold] | #[fg=colour12,none]#S:#I.#P#($HOME/.tmux.bash status_right_extra '#S:#I.#P' '%H:%M')"
 } # }}}
@@ -599,8 +607,21 @@ switch_window() { # {{{
   fi
   return 0
 } # }}}
+scratch_pane() { # {{{
+  local cwd="$1" params="$2" pane_id=
+  [[ -z $params ]] && params="-h -p 50"
+  [[ -e "$cwd" ]] && params+=" -c \"$cwd\""
+  pane_id="$(eval tmux split-window $params -P -F "'#{pane_id}'")"
+  sleep 0.5
+  tmux send-keys -t $pane_id "pt hn; clear"
+} # }}}
 pasteKey_worker() { # {{{
-  local buff="$1" v="$(source $HOME/.bashrc --do-basic; keep-pass.sh --list-keys | fzf +m --prompt='Key> ' -0)"
+  local buff="$1" v="$(source $HOME/.bashrc --do-basic; \
+    keep-pass.sh --list-keys \
+    | fzf \
+      --preview="keep-pass.sh --key '{1}' --no-intr" \
+      +m --prompt='Key> ' -0 \
+  )"
   [[ $? == 0 && ! -z "$v" ]] || return 1
   v="$(keep-pass.sh --key "$v")"
   [[ ! -z $v ]] || return 1

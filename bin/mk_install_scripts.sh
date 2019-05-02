@@ -320,6 +320,18 @@ if install 'colors'; then # {{{
   dbg "  br.cyan    : #8EC07C"
   dbg "  br.white   : #EBDBB2"
   dbg "  -- From: https://github.com/morhetz/gruvbox"
+  if ! ${IS_MAC:-false}; then
+    dbg "  dconf write"
+    dbg "    '/org/gnome/terminal/legacy/profiles:/:PROFILE_ID/palette'"
+    dbg "    \"["
+    dbg "        'rgb(18,18,18)',    'rgb(237,101,92)', 'rgb(152,151,26)', 'rgb(215,153,33)', 'rgb(69,133,136)',  'rgb(177,98,134)',  'rgb(104,157,106)', 'rgb(251,241,199)',"
+    dbg "        'rgb(146,131,116)', 'rgb(251,73,52)',  'rgb(184,187,38)', 'rgb(250,189,47)', 'rgb(131,165,152)', 'rgb(211,134,155)', 'rgb(142,192,124)', 'rgb(235,219,178)'"
+    dbg "     ]\""
+    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/background-color'   \"'rgb(18,18,18)'\""
+    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/bold-color'         \"'rgb(168,153,132)'\""
+    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/foreground-color'   \"'rgb(235,219,178)'\""
+    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/font'               \"'Fira Mono 13'\""
+  fi
   dbg "[DONE]"
 fi # }}}
 if install 'vim'; then # {{{

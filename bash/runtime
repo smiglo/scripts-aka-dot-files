@@ -1,7 +1,7 @@
 #!/bin/bash
 # vim: fdl=0
 
-# Check for MC # {{{
+# Check for OS/X # {{{
 export IS_MAC=false
 [[ $(uname) == 'Darwin' ]] && IS_MAC=true
 # }}}
@@ -33,17 +33,32 @@ export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
 export GIT_PRE_COMMIT_IGNORE=
+export GIT_PRE_COMMIT_REPO_WHITELIST=
+export GIT_PRE_COMMIT_REPO_BLACKLIST=
 export GIT_REPOS=
 export GREP_EXCLUDES=
+export HISTIGNORE=
+export HISTIGNORE+=" *"
+export HISTIGNORE+=":ls:ll:pwd:pwd *:cd"
+export HISTIGNORE+=":fg:bg:jobs:ps"
+export HISTIGNORE+=":echo:reset:clear:exit*"
+export HISTIGNORE+=":keep-pass.sh*:./keep-pass.sh*"
 export HL_DEFAULTS=
 export INSTALL_FEATURES=
 export KB_PATHS=
+export KEEP_PASS_JOURNALS=
 export MANPATH=
 export PHISTORY_IGNORED_COMMANDS=
+export PHISTORY_IGNORED_COMMANDS+="exec"
+export PHISTORY_IGNORED_COMMANDS+=":ls:ll:cd"
+export PHISTORY_IGNORED_COMMANDS+=":@vi@:@vim@:vim-session"
+export PHISTORY_IGNORED_COMMANDS+=":$BIN_PATH/*:$BASH_PATH/*:./bash/aliases\ *:\$BIN_PATH/*:\$BASH_PATH/*"
 export PS1_ENV_PWD=
 export SCRIPT_PATH=
 export SET_TITLE_GETTER_MAP=
 export SSH_KEYS=
+export TICKET_J_PREDEFINED=
+export TICKET_TOOL_POST_ENV=
 export TMUX_FINGERS_PREDEFINED=
 export TMUX_FINGERS_PREDEFINED+=" ([[:digit:]]{4,})"                                                                                  # Number
 export TMUX_FINGERS_PREDEFINED+=" 0x([0-9a-f]+)"                                                                                      # Hex
@@ -138,6 +153,7 @@ fi
 export PS1_SSH_CHANGE=true
 export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
 [[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
+export REMINDER_DIR="$RUNTIME_PATH/reminders"
 # }}}
 # Dropbox setup {{{
 export SHARED_BASH_PATH=

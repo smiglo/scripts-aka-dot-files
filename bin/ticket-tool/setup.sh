@@ -67,7 +67,7 @@ for i in $ISSUES; do # {{{
   i="${i%%:*}"
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && ${dbg:-false} && echo "Shall be sourced to source env for [$i]" >/dev/stderr
   source $TICKET_TOOL_PATH/ticket-setup.sh $($open && echo '--open') "$i"
-  if [[ -n $TICKET_CURRENT_TICKETS && ! -e "$TICKET_CURRENT_TICKETS/$i" ]]; then
+  if [[ -n $TICKET_CURRENT_TICKETS && ! -e "$TICKET_CURRENT_TICKETS/$i" && ( ! -n $TMUX || $(tmux display-message -p -t $TMUX_PANE -F '#P') == '1' ) ]]; then
     t="$(command find $TICKET_PATH -maxdepth 4 -name "$i" | head -n1)"
     [[ ! -z $t ]] && ln -sf "$t" "$TICKET_CURRENT_TICKETS/$i"
   fi

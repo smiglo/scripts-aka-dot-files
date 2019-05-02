@@ -2,14 +2,16 @@
 
 python
 import os
+import re
 
 for root, dirs, files in os.walk(os.path.expanduser('~/.config/gdb')):
     for file in sorted(files):
         path = os.path.join(root, file)
         _, ext = os.path.splitext(path)
+        _, filename = os.path.split(path)
         # either load Python files or GDB
-        if ext == '.py' or ext == '.gdb':
-            # print(path)
+        if ( ext == '.py' or ext == '.gdb') and (re.match('.*\.ign.*', filename) is None):
+            print(path)
             gdb.execute('source ' + path)
 end
 

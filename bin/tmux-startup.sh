@@ -134,6 +134,7 @@ makeNiceSplits() { # {{{
     co="$(($co+1))"
     if [[ $co -gt $max_c ]]; then # {{{
       $dbg && echo "HORZ: next-row" >/dev/stderr
+      [[ ! -z $1 ]] && splits+="RUN:p=$p_no cd "$1"\n"
       co=1
       [[ $row -gt 0 ]] && row="$(($row+1))"
     fi # }}}
@@ -142,18 +143,23 @@ makeNiceSplits() { # {{{
   echo "$splits"
 } # }}}
 initFromEnv() { # {{{
-  local sessionName="$sessionName" setup= silent=true
+  local sessionName="$sessionName" setup= silent=true change_window=true
   [[ ! -z $1 ]] && sessionName="$1" && shift
   [[ ! -z $sessionName ]] || return 1
   [[ $sessionName == 'REMOTE' ]] && sessionName=$(getRemoteSessionName)
   tmux has-session -t "$sessionName" >/dev/null 2>&1 || return 1
   case $1 in
   @*) setup=${1#@};;
-  --) shift;;&
   '' | --)
+    [[ $1 == '--' ]] && shift
     setup="TMUX_${sessionName//-/_}_ENV_SETUP"
     if type $setup >/dev/null 2>&1; then
-      $setup "$@"
+      if [[ $1 == '.' ]]; then
+        $setup "$(tmux display-message -p -t $TMUX_PANE -F '#W')"
+        change_window=false
+      else
+        $setup "$@"
+      fi
     else
       setup="${!setup}"
       [[ ${setup:0:1} == '@' ]] && ${setup#@}
@@ -171,11 +177,19 @@ initFromEnv() { # {{{
     [[ -z $p ]] && p="$t" && t=
     [[ ! -e $p ]] && msgs+="Window[$t]: Path ($p) does not exists\n" && continue
     p=$(command cd $p; pwd -P)
-    [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | command grep -q "^$t\$" && msgs+="Window [$t]: Already created\n" && continue
-    tmux \
-      new-window -t $sessionName:$w $([[ ! -z $t ]] && echo "-n $t") -d -c "$p" \; \
-      set-option -t $sessionName:$w -w @locked_title 1 \; \
-      split-window -t $sessionName:$w -v -p 20 -d -c "$p"
+    local create=true pane_cnt=2
+    if [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | command grep -q "^$t\$"; then
+      $change_window && msgs+="Window [$t]: Already created\n" && continue
+      create=false
+      w="$(tmux list-window -t $sessionName -F '#I. #W' | command grep " $t\$" | sed 's/\..*//')"
+      pane_cnt="$(tmux display-message -t $sessionName:$w -p -F '#{window_panes}')"
+    fi
+    if $create; then
+      tmux \
+        new-window -t $sessionName:$w $([[ ! -z $t ]] && echo "-n $t") -d -c "$p" \; \
+        set-option -t $sessionName:$w -w @locked_title 1 \; \
+        split-window -t $sessionName:$w -v -p 20 -d -c "$p"
+    fi
     # Title {{{
     if [[ ! -z $t ]]; then
       $BASH_PATH/aliases set_title --from-tmux $sessionName:$w --lock "$t"
@@ -186,7 +200,7 @@ initFromEnv() { # {{{
       c="${t^^}" && c="TMUX_${sessionName//-/_}_PRE_${c//-/_}"
       c="${!c}"
     fi
-    [[ ! -z $c ]] && makePreconfiguredSplits --wnd $w --cnt-panes 2 --pwd "$p" "$c" # }}}
+    [[ ! -z $c ]] && makePreconfiguredSplits --wnd $w --cnt-panes $pane_cnt --pwd "$p" "$c" # }}}
     # Vim # {{{
     if [[ ! -z $t ]]; then
       local session_file="${t,,}"
@@ -218,7 +232,7 @@ initFromEnv() { # {{{
   done # }}}
   $BASH_PATH/aliases progress --unmark
   ! $silent && sleep 0.1 && echo -e "$msgs" | sed 's/^/  /'
-  tmux select-window -t $sessionName:1
+  $change_window && tmux select-window -t $sessionName:1
 } # }}}
 setBuffer() { # {{{
   local force=false
@@ -337,14 +351,14 @@ initTmux_MAIN() { # {{{
     set-option    -t $sessionName:3 -w "@mark_auto" 'false' \; \
     select-window -t $sessionName:2 \; \
     select-pane   -t $sessionName:2.1
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
+  $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
   local isNet=false
   $BASH_PATH/aliases progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
   run_mc $sessionName:1.1
   run $sessionName:3.1 --hide --clear "sudo -s"
   makePreconfiguredSplits --wnd 2
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
 } # }}}
 initTmux_REMOTE() { # {{{
   eval $(init "$(getRemoteSessionName)" "${TMUX_STARTUP_DIR:-$HOME}")
@@ -393,9 +407,11 @@ while [[ ! -z $1 ]]; do # {{{
                if [[ $2 == '--' ]]; then
                  shift 2
                  sessionName="$1"
+                 [[ -z $sessionName || $sessionName == '.' ]] && sessionName="${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}"
                  sessions="$sessionName"
                  shift
-                 sessionEnvParams="$sessionName -- $@"
+                 sessionEnvParams="$sessionName"
+                 [[ ! -z $1 ]] && sessionEnvParams+=" -- $@"
                  shift $#
                fi ;;
   --todo)      todo="$2"; shift;;

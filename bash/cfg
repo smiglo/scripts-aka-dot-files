@@ -194,6 +194,8 @@ if [[ "$what_to_do" == 'full' ]]; then
     bind '"\C-kme":   call-last-kbd-macro'
     bind '"\C-k/":    edit-and-execute-command'
     bind '"\C-ke":    edit-and-execute-command'
+    bind -x \
+         '"\C-kj":    READLINE_LINE="#$(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
     pre=
     case $i in
     emacs)
@@ -225,6 +227,7 @@ if [[ "$what_to_do" == 'full' ]]; then
     esac
     bind '"\C-kl":  "'${pre}' \C-g logout\C-m'
     bind '"\C-kr":  "'${pre}' \C-g reset\C-m'
+    bind '"\C-kh":  "'${pre}' \C-g pt ht; clear\C-m'
     bind '"\C-l":   "'${pre}' \C-g clr\C-m'
     if $FZF_INSTALLED; then
       bind -x '"\C-f": "'${pre}'fzfwr iRC"'

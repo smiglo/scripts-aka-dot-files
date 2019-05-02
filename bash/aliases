@@ -31,12 +31,12 @@ _aliases_dbg() { # {{{
 } # }}}
 # Check ALIASES_MAP {{{
 TO_INSTALL=''
-ALIASES_MAP_BASIC="ls-colors rsync less cp-recur cd-stuff date du df zipf find-short diff rmf-basic grep hl mkdir \
+ALIASES_MAP_BASIC="vim-aliases ls-colors rsync less cp-recur cd-stuff date du df zipf find-short diff rmf-basic grep hl mkdir \
   ack-wrapper mg extract tmux-tm logout exit sshh ps1 bash_phistory set-title progress weather bash-hist mutex-locking \
   run-for-some-time for-do clear-screen smart-alias get-file-list remember cpp lolcat kb-open"
 $FZF_INSTALLED && ALIASES_MAP_BASIC+=' fzf-tools'
 ALIASES_MAP_EXT="gitst truecrypt shlock clang grc xclip rmf-trash print-colors encryptor www sshh-add \
-  simple-http auto-sudo radare2"
+  simple-http auto-sudo radare2 reminder"
 ! $IS_MAC && ALIASES_MAP_EXT+=" caps-ctrl"
 [[ $ALIASES_MAP == 'NONE' ]] && exit 0
 TO_INSTALL=" $ALIASES_MAP_BASIC $ALIASES_MAP_EXT "
@@ -59,6 +59,9 @@ TO_INSTALL=" $TO_INSTALL "
 # }}}
 # }}}
 # Aliases {{{
+if install 'vim-aliases'; then # {{{
+  alias vv='vim --fast'
+fi # }}}
 if install 'ls-colors'; then # {{{
   # Enable color support of ls and also add handy aliases {{{
   if [ -x /usr/bin/dircolors ]; then
@@ -137,7 +140,7 @@ if install 'grc'; then # {{{
       sudo=
       [[ $i == *::* ]] && { def=${i//*::}; def=${def//:/ }; i=${i/::*}; } || def=
       [[ $i == sudo-* ]] && i="${i#sudo-}" && sudo="sudo"
-      alias ${i/:*}="__util_grc_f() { [[ -t 1 ]] && $sudo grc ${i//:/ } \${@:-$def} || $sudo command ${i//:/ } \${@:-$def}; }; __util_grc_f"
+      alias ${i/:*}="__util_grc_f() { if [[ -t 1 ]]; then $sudo grc ${i//:/ } \${@:-$def}; else $sudo command ${i//:/ } \${@:-$def}; fi; }; __util_grc_f"
     done
     unset i grc_prgs def sudo
   fi
@@ -156,6 +159,7 @@ if install 'bash-hist'; then # {{{
   fi
   alias H="hist"
   alias h="phist"
+  export HISTIGNORE+=":h:h *:H:H *:hist:hist *:history*"
 fi # }}}
 if install 'mkdir'; then # {{{
   alias mkdir='mkdir -pv'
@@ -292,18 +296,73 @@ if install 'get-file-list:@@:getFileList'; then # {{{
     done # }}}
     local no_files=false
     [[ $pwd != '.' ]] && command cd "$pwd"
-    [[ "$(eval echo "$1")" == "$1" ]] && no_files=true
+    [[ "$(eval echo "${1:-*}")" == "${1:-*}" ]] && no_files=true
     if $no_files; then
       [[ $pwd != '.' ]] && command cd - >/dev/null 2>&1
       return 1
     fi
-    cmd="$cmd $1"
+    cmd="$cmd ${1:-*}"
     [[ ! -z $narrow ]] && cmd+=" | head -n $narrow"
     ! $silent && echo "$(eval $cmd)" >/dev/stderr
-    eval $cmd
+    eval "$cmd"
     [[ $pwd != '.' ]] && command cd - >/dev/null 2>&1
     return 0
   }
+fi # }}}
+if install 'reminder:@@'; then # {{{
+  reminder() {
+    local i= ret="-v" tool='notify-send' verbose=">/dev/null 2>&1"
+    if [[ $1 == @@ ]]; then # {{{
+      if [[ ! -z $REMINDER_DIR && -e $REMINDER_DIR ]]; then
+        for i in $(command cd "$REMINDER_DIR"; ls -d *); do
+          [[ -f $REMINDER_DIR/$i && -x $REMINDER_DIR/$i ]] && ret+=" $i"
+        done
+      fi
+      echo "$ret"
+      return 0
+    fi # }}}
+    $IS_MAC && tool='terminal-notifier'
+    type $tool >/dev/null 2>&1 || { echo "Notifier tool [$tool] not found" >/dev/stderr; return 1; }
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -v) verbose=;;
+      *)  break;;
+      esac
+      shift
+    done # }}}
+    local msg="$1" ts="${2#+}" h= m= s= file=false err=0 params=
+    if [[ $# -gt 2 ]]; then
+      ts="${@:$#:$#}"
+      params="${@:2:$#-2}"
+    fi
+    shift $#
+    [[ ! -z $msg && ! -z $ts ]] || { echo "Argument missing [$@]" >/dev/stderr && return 1; }
+    [[ ! -z "$REMINDER_DIR" && -e "$REMINDER_DIR/$msg" ]] && msg="$REMINDER_DIR/$msg"
+    [[ "$msg" == ./* ]] && msg="$PWD/$msg"
+    [[ "$msg" == /* && -e "$msg" ]] && file=true
+    if [[ $ts =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then # {{{
+      h="${BASH_REMATCH[1]%h}" m="${BASH_REMATCH[2]%m}" s="${BASH_REMATCH[3]%s}"
+      [[ ! -z $h ]] && h="$h hour"
+      [[ ! -z $m ]] && m="$m minute"
+      ts="now + $h $m"
+    fi # }}}
+    if $file; then # {{{
+      echo $msg $params | ( command cd $HOME; eval at $ts $verbose )
+      err="$?"
+      ! command grep -q "^$tool" "$msg" && msg="Script [${msg##*/}] executed" && file=false
+    fi # }}}
+    if ! $file && [[ $err == '0' ]]; then # {{{
+      if ! $IS_MAC; then
+        echo "$tool 'Reminder: $msg' -i 'starred' -u 'critical'"
+      else
+        echo "$tool -title 'Reminder' -message '$msg'"
+      fi | ( command cd $HOME; eval at $ts $verbose )
+      err="$?"
+    fi # }}}
+    [[ $err != 0 ]] && echo "Failed to schedule the reminder" >/dev/stderr
+    return $err
+  }
+  export PHISTORY_IGNORED_COMMANDS+=":reminder:at"
 fi # }}}
 if install 'remember:@@:rem:r:rr'; then # {{{
   rem() {
@@ -717,9 +776,11 @@ if install 'remember:@@:rem:r:rr'; then # {{{
   }
   alias r="rem"
   alias rr="rem -r"
+  export HISTIGNORE+=":rr"
+  export PHISTORY_IGNORED_COMMANDS+=":r:rem"
 fi # }}}
 if install 'cpp:@@'; then # {{{
-  cpp() {
+  cpp() { # {{{
     local default_params="--no-edit --file --append --no-reset --no-keep --no-abs --ign --split --fzf"
     local setup="--var CPP --mask cpp --quiet" i=
     if [[ $1 == '@@' ]]; then # {{{
@@ -815,7 +876,8 @@ if install 'cpp:@@'; then # {{{
     fi # }}}
     [[ $dbg_level -ge 2 ]] && set +xv
     return 0
-  }
+  } # }}}
+  export PHISTORY_IGNORED_COMMANDS+=":cpp"
 fi # }}}
 if install 'clear-screen:@@:clr'; then # {{{
   clr() { # {{{
@@ -1294,15 +1356,15 @@ if install 'date:@@'; then # {{{
     local p=
     while [[ ! -z $1 ]]; do
       case $1 in
-      +t)       p="+'$TIME_FMT'";;
-      +d)       p="+'$DATE2_FMT'";;
-      +dt)      p="+'$DATE_FMT'";;
-      +)        shift; p="+'$1'";;
+      +t)       p="+$TIME_FMT";;
+      +d)       p="+$DATE2_FMT";;
+      +dt)      p="+$DATE_FMT";;
+      +)        shift; p="+$1";;
       *)        break;;
       esac
       shift
     done
-    eval command date $p "$@"
+    command date $p "$@"
   } # }}}
 fi # }}}
 if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
@@ -1870,6 +1932,7 @@ if install 'cd-stuff:@@:cd:cd_wrapper:cd_no_expansion'; then # {{{
   alias .4='cd -- .4'
   alias .5='cd -- .5'
   alias  recd='command cd && command cd - >/dev/null 2>&1'
+  export HISTIGNORE+=":recd"
   # }}}
 fi # }}}
 if install 'rmf-trash:@@:rmfTrash:rmf'; then # {{{
@@ -2691,9 +2754,12 @@ fi # }}}
 if install 'encryptor:@@'; then # {{{
   encryptor() { # {{{
     local src= dst=
-    local cipher="aes-256-cbc" params= encode="-e" use_hash_pass=true pass= verbose=false
+    local cipher="aes-256-cbc" params= encode="-e" use_hash_pass=true pass= verbose=false edit=false
     if [[ $1 == '@@' ]]; then # {{{
-      echo '--stdin --stdout --no-hash-pass -d --hash-pass --pass --key'
+      case $3 in
+      --key)  which keep-pass.sh >/dev/null 2>&1 && keep-pass.sh --list-all-keys;;
+      *)      echo '--stdin --stdout --no-hash-pass -d --hash-pass --pass --key --edit';;
+      esac
       return 0
     fi # }}}
     while [[ ! -z $1 ]]; do # {{{
@@ -2704,6 +2770,7 @@ if install 'encryptor:@@'; then # {{{
       --no-hash-pass) use_hash_pass=false;;
       --pass) pass="$2"; shift;;
       --key)  pass="$($BIN_PATH/misc/keep-pass.sh --key "$2")"; shift;;
+      --edit) edit=true; encode="-d";;
       -v) verbose=true;;
       -d) encode="-d";;
       -*) params+=" $1";;
@@ -2729,6 +2796,7 @@ if install 'encryptor:@@'; then # {{{
       fi
       params+=" -in $src"
     fi # }}}
+    $edit && dst="$TMP_MEM_PATH/${src##*/}"
     [[ ! -z $dst ]] && params+=" -out $dst"
     if $use_hash_pass; then # {{{
       if [[ -z $pass ]]; then # {{{
@@ -2752,15 +2820,25 @@ if install 'encryptor:@@'; then # {{{
           pass=$pass$pass
       fi # }}}
     fi # }}}
-    local cmd="openssl enc -$cipher $encode -a $params"
+    local cmd="openssl enc -$cipher $encode -a $params" shaCmd="sha256sum" err=0
     $verbose && _aliases_dbg $cmd
-    local shaCmd="sha256sum"
     $use_hash_pass && cmd+=" -pass file:<(echo $pass | $shaCmd | cut -c1-64)"
-    eval $cmd
-    local err=$?
+    eval $cmd || err=1
+    if [[ $err == 0 ]] && $edit; then
+      chmod go-rwx "$dst"
+      if $EDITOR "$dst"; then
+        cmd="$(echo "$cmd" | sed -e 's/ -d / -e /' -e 's/ -out / -IN /' -e 's/ -in / -out /' -e 's/ -IN / -in /')"
+        eval $cmd || err=1
+      else
+        err=1
+      fi
+      sed -i -e 's/.*/a/g' -e 's/\x0a/a/' "$dst"
+      # rm -rf "$dst"
+    fi
     pass="$(head -c 10 /dev/random | $shaCmd | cut -c1-40)"
     return $err
   } # }}}
+  HISTIGNORE+=":encryptor:encryptor *"
 fi # }}}
 if install 'tmux-tm:@@:tm'; then # {{{
   tm() { # {{{
@@ -3094,30 +3172,29 @@ if install 'exit'; then # {{{
 fi # }}}
 if install 'www'; then # {{{
   www() { # {{{
-    local params=
-    local query=
-    local DEFAULT_SITE="${WWW_DEFAULT_SITE:-"www.google.pl"}"
-    local title="www"
+    local params="-s" query= site="${WWW_DEFAULT_SITE:-"www.google.pl"}" title="www"
     while [[ ! -z "$1" ]]; do
       case "$1" in
-      --) shift; params+="$@"; break;;
-      www*) params+=" -N $1"; title+=" $1";;
-      -*) params+=" $1";;
-      *) query+="+${1// /%20}";;
+      --)         shift; params+="$@"; break;;
+      www* | *.*) params+=" -N $1"; title+=" $1";;
+      -*)         params+=" $1";;
+      *)
+        [[ ! -z $query ]] && query+="%20"
+        query+="${1// /%20}"
+        [[ $title == "www" ]] && title+=" ?"
+        title+=" $1";;
       esac
       shift
     done
-    if [[ ! -z $query ]]; then
-      params+=" -N $DEFAULT_SITE/search?q=${query:1}"
-      title+=" ?${query//+/ }"
-    fi
+    [[ ! -z $query ]] && params+=" -N $site/search?q=$query"
     if [[ -z $params ]]; then
-      params="-N $DEFAULT_SITE"
-      title+=" $DEFAULT_SITE"
+      params="-N $site"
+      title+=" $site"
     fi
     set_title --set-pane "$title"
     ( set -x; w3m $params )
   } # }}}
+  export HISTIGNORE+=":www:www *"
 fi # }}}
 if install 'sshh:@@'; then # {{{
   __util_ssh_getParams() { # {{{
@@ -3170,8 +3247,15 @@ if install 'sshh:@@'; then # {{{
     if [[ $1 == '@@' ]]; then # {{{
       case $2 in
       1) echo "$(__util_ssh_getHosts)";;
-      2) echo "-key -cp -?";;
-      3) echo "@@-f";;
+      2) echo "-key -cp -? cat";;
+      3) # {{{
+         for i in $BASH_PROFILES; do
+           [[ -e $BASH_PATH/profiles/$i/aliases ]] || continue
+           host="$($BASH_PATH/profiles/$i/aliases __util_ssh_getHost $4)"
+           [[ ! -z $host ]] || continue
+           $BASH_PATH/profiles/$i/aliases __util_ssh_getParams @@ $host $4
+           break
+         done ;; # }}}
       esac
       return 0
     fi # }}}
@@ -3214,12 +3298,15 @@ if install 'sshh:@@'; then # {{{
         _aliases_dbg
         return 0
         ;; # }}}
-      -*) # {{{
+      -?*) # {{{
         params+=" $1";; # }}}
       *) # {{{
         host="$1"
         cmd=$(__util_ssh_getParams $host true)
-        [[ -z $cmd ]] && return 1;; # }}}
+        [[ -z $cmd ]] && return 1
+        shift
+        cmd+=" $@"
+        break;; # }}}
       esac
       shift
     done # }}}
@@ -3272,7 +3359,7 @@ if install 'sshh-add:@@'; then # {{{
     while [[ ! -z $1 ]]; do # {{{
       case $1 in # {{{
       --lock) # {{{
-        local colors=( 'green' 'blue' 'yellow' 'cyan' )
+        local colors=( 'green' 'blue' 'yellow' 'cyan' ) tmp=
         local c1="$(($RANDOM % ${#colors[*]}))"
         local c2="$(( ($c1 + 1 + $RANDOM % (${#colors[*]} - 1)) % ${#colors[*]} ))"
         local cmatrix_cmd='nice -n 15 cmatrix -u 5 -b'
@@ -3306,7 +3393,7 @@ if install 'sshh-add:@@'; then # {{{
           if [[ ! -z $timeout && $timeout != 0 ]]; then
             [[ $timeout -lt 5 ]] && timeout=5
             $BASH_PATH/aliases run_for_some_time --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --cnt $(( ( timeout - 2) * 2 )) --sleep 0.5
-            [[ $? != 255 ]] && { mutex_unlock; mutex_deinit; return 0; }
+            [[ $? != 255 ]] && { read -s -n 10000 -t 0.5 tmp; mutex_unlock; mutex_deinit; return 0; }
           fi
           { # {{{
             /usr/bin/expect - <<-EOE
@@ -3432,7 +3519,7 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
     return 0
   } # }}}
   PS1_setter() { # {{{
-    local error=$?
+    BASH_LAST_ERR=$?
     set +xv
     local cOff="$(PS1_getColor 'off')"
     PS1=
@@ -3506,7 +3593,7 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
       git) # {{{
         PS1+="$(PS1_getColor 'git')$(__git_ps1 "(%s)")$cOff";; # }}}
       err) # {{{
-        PS1+="$(PS1_getColor "err-$error")\\\$$cOff ";; # }}}
+        PS1+="$(PS1_getColor "err-$BASH_LAST_ERR")\\\$$cOff ";; # }}}
       cursor) # {{{
         PS1+="$(PS1_getColor 'cursor')";; # }}}
       env) # {{{
@@ -3545,7 +3632,7 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
     local fullName=, shortName=
     local oldIFS=$IFS
     if [[ $1 == '@@' ]]; then # {{{
-      local ret="next hn $(echo hist-{local,no,no-pers,restore,stat})"
+      local ret="next hn hr ht $(echo hist-{local,no,no-pers,restore,stat})"
       for i in ${PS1_MODES[*]}; do
         IFS=':' read fullName shortName <<<"$i"
         ret+=" $fullName"
@@ -3556,8 +3643,12 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
     fi # }}}
     # History switches # {{{
     case $1 in
-    hist-local | hist-no | hn | hist-no-pers | hist-restore | hist-stat)
-      case $1 in
+    hist-local | hist-no | hist-no-pers | hist-restore | hist-stat | hn | ht | hr)
+      local cmd="$1"
+      if [[ "$cmd" == 'ht' ]]; then
+        [[ ! -z $BASH_PHISTORY_FILE ]] && cmd='hn' || cmd='hr'
+      fi
+      case $cmd in
       hist-local) # {{{
         [[ -z $BASH_ORIG_PHISTORY_FILE ]] && export BASH_ORIG_PHISTORY_FILE="$BASH_PHISTORY_FILE"
         [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"
@@ -3566,16 +3657,15 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
       hist-no | hn) # {{{
         [[ -z $BASH_ORIG_PHISTORY_FILE ]] && export BASH_ORIG_PHISTORY_FILE="$BASH_PHISTORY_FILE"
         [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"
-        unset BASH_PHISTORY_FILE HISTFILE
-        [[ $1 == 'hn' ]] && return 0 ;; # }}}
+        unset BASH_PHISTORY_FILE HISTFILE;; # }}}
       hist-no-pers) # {{{
         [[ -z $BASH_ORIG_PHISTORY_FILE ]] && export BASH_ORIG_PHISTORY_FILE="$BASH_PHISTORY_FILE"
         unset BASH_PHISTORY_FILE ;; # }}}
-      hist-restore) # {{{
+      hist-restore | hr) # {{{
         [[ ! -z $BASH_ORIG_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$BASH_ORIG_PHISTORY_FILE"
-        [[ ! -z $BASH_ORIG_HISTFILE ]] && export HISTFILE="$BASH_ORIG_HISTFILE"
-        ;; # }}}
+        [[ ! -z $BASH_ORIG_HISTFILE ]] && export HISTFILE="$BASH_ORIG_HISTFILE";; # }}}
       esac
+      [[ "$cmd" == 'hn' || "$cmd" == 'hr' ]] && return 0
       echo "ph=[$BASH_PHISTORY_FILE]"
       echo "hi=[$HISTFILE]"
       return 0;;
@@ -3613,6 +3703,7 @@ if install 'ps1:@@:ps1_toggle:pt'; then # {{{
     IFS=$oldIFS
   }
   alias pt='ps1_toggle'
+  export HISTIGNORE+=":pt:pt *"
   # }}}
   ps1_fix() { # {{{
     local current=$PROMPT_COMMAND
@@ -3624,19 +3715,29 @@ fi # }}}
 if install 'bash_phistory:@@:phist:h'; then # {{{
   bash_phistory() { # {{{
     [[ ! -z $BASH_PHISTORY_FILE ]] || return
+    [[ ${BASH_LAST_ERR:-0} != 0 ]] && return
     [[ $(history 1) =~ ^\ *[0-9]+\ +([0-9]+-[0-9]+)\ +(.*)$ ]] || return
     local date_part="$(command date +"$DATE_FMT")"
     local command_part="${BASH_REMATCH[2]%"${BASH_REMATCH[2]##*[![:space:]]}"}"
     [[ ! -z "$command_part" && "$BASH_PHISTORY_LAST" != "$command_part" ]] || return
-    local ignored_commands="h:phist:H:hist:history:exec:exit:pt:ls:ll:echo:print:reset:clear:keep-pass.sh:@vim@:vim-session:@vi@:cd:recd:r:rem:cpp:command:fzf*:LL:$BIN_PATH/*:$BASH_PATH/*:./bash/aliases\ *:j:$PHISTORY_IGNORED_COMMANDS"
+    local ignored_commands=
+    ignored_commands+=":$PHISTORY_IGNORED_COMMANDS"
+    ignored_commands="${ignored_commands#:}"
     local i= oldIFS=$IFS IFS=':'
-    for i in $ignored_commands; do
+    for i in ${HISTIGNORE#:}; do # {{{
+      [[ -z $i ]] && continue
+      case $i in
+      *\*) [[ "$command_part" =~ ^${i//\*/.*} ]] && return 0;;
+      *)   [[ $command_part == ${i} ]] && return 0;;
+      esac
+    done # }}}
+    for i in $ignored_commands; do # {{{
       [[ -z $i ]] && continue
       case $i in
       @*@) [[ "@$command_part@" == $i ]] && return 0;;
-      *)   [[ $command_part == $i || $command_part == ${i}\ * ]] && return 0;;
+      *)   [[ $command_part == ${i} || $command_part == ${i}\ * ]] && return 0;;
       esac
-    done
+    done # }}}
     IFS=$oldIFS
     [[ $(id -u) == 0 ]] && command_part="$command_part #[Root]"
     export BASH_PHISTORY_LAST="$command_part"
@@ -3777,7 +3878,9 @@ if install 'bash_phistory:@@:phist:h'; then # {{{
         eval $cmd
       fi
     fi # }}}
-  } # }}}
+  }
+  export HISTIGNORE+=":phist*"
+  # }}}
 fi # }}}
 if install 'set-title:@@:set_title'; then # {{{
   set_title() { # {{{
@@ -3969,42 +4072,6 @@ if install 'ovpn'; then # {{{
     return $err
   } # }}}
 fi # }}}
-if install 'dum'; then # {{{
-  dum() { # {{{
-    if [[ $1 == @@ ]]; then
-      local i=
-      local ret=
-      for i in $(command mount | command grep "/Volumes" | awk '{ print $3 }'); do
-        [[ $i == *MobileBackups ]] && continue
-        ret+=" $i"
-      done
-      for i in $(command mount | command grep "/Volumes" | awk '{ print $1 }'); do
-        [[ $i == localhost* ]] && continue
-        ret+=" $i"
-      done
-      echo $ret
-      return 0
-    fi
-    source $BIN_PATH/bash/colors
-    if [[ $1 == /Volumes/* ]]; then
-      diskutil unmount "$1"
-    elif [[ $1 == /dev/* ]]; then
-      diskutil unmountDisk $1
-      diskutil eject $1
-    fi
-    local err=$?
-    local msg="DONE"
-    local color=$CGreen
-    [[ $err != 0 ]] && msg="HOLD" && color=$CRed
-    _aliases_dbg "${color}----   $msg   ----${COff}"
-    return $err
-  } # }}}
-fi # }}}
-if install 'kdiff3'; then # {{{
-  kdiff3() { # {{{
-    ~/Applications/kdiff3.app/Contents/MacOS/kdiff3
-  } # }}}
-fi # }}}
 if install 'progress:@@'; then # {{{
   progress() { # {{{
     if [[ $1 == '@@' ]]; then # {{{
@@ -4052,7 +4119,12 @@ if install 'progress:@@'; then # {{{
       --mark-raw | \
       --mark-f)     touch $mark_file; cmd="[[ ! -e $mark_file ]]"; every=true;;
       --unmark)     [[ ! -z $2 ]] && mark_file="$TMP_MEM_PATH/progress-$2.tmp"; rm -f $mark_file; sleep 0.1; return 0;;
-      --wait)       shift; endTime="$(($1 + $(command date +'%s')))"; every=true;;
+      --wait)       shift; local w="$1" h= m= s=
+                    if [[ $w =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then
+                      h="${BASH_REMATCH[1]%h}" m="${BASH_REMATCH[2]%m}" s="${BASH_REMATCH[3]%s}"
+                      w="$((${h:-0}*60*60 + ${m:-0}*60 + ${s:-0}))"
+                    fi
+                    endTime="$(($w + $(command date +'%s')))"; every=true;;
       --dbg)        dbg="l1";;
       --dbg2)       dbg="l2";;
       *)            msg="$1";;

@@ -70,14 +70,10 @@ check_special() {
 }
 
 check_debugs() {
-  check '//\\<TB].*'
-  [[ "$?" != "0" ]] && return 1
-  check '\<printf'
-  [[ "$?" != "0" ]] && return 1
-  check 'Thread\.dumpStack()'
-  [[ "$?" != "0" ]] && return 1
-  check '\<System\.\(out\|err\)\.print'
-  [[ "$?" != "0" ]] && return 1
+  local i= debugs="//\\<TB].* \<printf( \<cout\> \<cerr\> Thread\.dumpStack() \<System\.\(out\|err\)\.print $GIT_PRE_COMMIT_DEBUGS"
+  for i in $debugs; do
+    check "$i" || return 1
+  done
   return 0
 }
 
@@ -95,6 +91,27 @@ displayTB() {
   echo -e "$sep"
   return 0
 }
+
+source ~/.bashrc --do-min
+
+[[ ! -z $GIT_PRE_COMMIT_IGNORE ]] && echo "$PWD" | command grep -q -e "---$GIT_PRE_COMMIT_IGNORE" && exit 0
+
+if [[ ! -z $GIT_PRE_COMMIT_REPO_WHITELIST ]]; then
+  found=false
+  for i in $GIT_PRE_COMMIT_REPO_WHITELIST; do
+    echo "$PWD" | command grep -q -e "$i" && found=true
+    $found && break
+  done
+  ! $found && exit 0
+fi
+
+if [[ ! -z $GIT_PRE_COMMIT_REPO_BLACKLIST ]]; then
+  found=false
+  for i in $GIT_PRE_COMMIT_REPO_BLACKLIST; do
+    echo "$PWD" | command grep -q -e "$i" && found=true && break
+  done
+  $found && exit 0
+fi
 
 err=0
 

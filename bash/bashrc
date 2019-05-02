@@ -37,15 +37,16 @@ if [[ ! -z "$PS1" ]] && ! declare -f ___rcstuff_bashrc_markup >/dev/null 2>&1; t
 fi
 # }}}
 # If not running interactively and not forced, don't do anything # {{{
+# Set paths # {{{
+export BIN_PATH="${BIN_PATH:-$HOME/.bin}"
+export BASH_PATH="${BASH_PATH:-$BIN_PATH/bash}"
+# }}}
 if [[ "$what_to_do" == 'min' ]]; then
+  [[ -e $BASH_PATH/runtime ]] && source $BASH_PATH/runtime ''
   [[ -e $BASH_PATH/colors ]] && source $BASH_PATH/colors ''
   unset what_to_do verbose RCSTUFF_BASHRC_INSTALLING
   return
 fi # }}}
-# Set paths # {{{
-export BIN_PATH=~/.bin
-export BASH_PATH=$BIN_PATH/bash
-# }}}
 # Source basics # {{{
 [[ -e $BASH_PATH/runtime ]] && source $BASH_PATH/runtime ''
 if ${IS_IN_MC:-false}; then
@@ -57,8 +58,8 @@ fi
 [[ -e $BASH_PATH/colors ]] && source $BASH_PATH/colors ''
 [[ -e $BASH_PATH/cfg ]] && source $BASH_PATH/cfg ''
 [[ -e $BASH_PATH/runtime-post ]] && source $BASH_PATH/runtime-post ''
+[[ -e $BASH_PATH/aliases ]] && source $BASH_PATH/aliases ''
 if [[ $what_to_do == 'full' ]]; then
-  [[ -e $BASH_PATH/aliases ]] && source $BASH_PATH/aliases ''
   [[ -x $BASH_PATH/completion ]] && source $BASH_PATH/completion ''
 fi
 [[ "$TERM" == 'cygwin' ]]        && source $BASH_PATH/cygwin ''
@@ -143,7 +144,7 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
         p="$PWD" ticket_data=".ticket-data.sh"
         while true; do # {{{
           if [[ -e "$p/$ticket_data" ]]; then # {{{
-            unset $(echo ${!TICKET_*} | sed 's/TICKET_TOOL_PATH//')
+            unset $(echo ${!TICKET_*} | sed 's/TICKET_\(TOOL_PATH\|J_PREDEFINED\)//g')
             export TICKET_PATH="$p"
             source "$p/$ticket_data" ''
             DEFINE_TICKET_TOOL_HELPER=true
@@ -157,7 +158,7 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
       if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
           function j() {
             case $1 in
-            --env)  shift; eval $($TICKET_TOOL_PATH/j-cmd.sh "$@");;
+            --env)  shift && eval "$($TICKET_TOOL_PATH/j-cmd.sh "${@:-env --silent}")";;
             @@)     [[ $2 == 1 ]] &&  echo '--env'
                     [[ $3 == '--env' && $4 == '--env' ]] && set -- '@@' 1
                     ;;&
@@ -165,6 +166,7 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
             esac
           }
           complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic j
+          export PHISTORY_IGNORED_COMMANDS+=":j"
       fi # }}}
     fi # }}}
   fi

@@ -154,6 +154,37 @@ fi # }}}
 readConfiguration
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
+  @@) # {{{
+    params=($@) i=3 first=true
+    [[ -z ${params[$i]} ]] && i=$(($i-1))
+    while [[ ! -z ${params[$i]} ]]; do
+      [[ ${params[$i]} == [0-9]* && $first == 'true' ]] && wNr="${params[$i]}" && break
+      [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj' ]] && issue="${params[$(($i+1))]}" && break
+      [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)" && break
+      i=$(($i+1))
+      first=false
+    done
+    break;; # }}}
+  -h) # {{{
+    echo "Extra switches:"
+    echo "  -r         - reset configuration"
+    echo "  [0-9]+     - get issue from window number"
+    echo "  -l         - get issue from last selected window"
+    echo "  -j, -jj    - specify the issue"
+    echo "  -J, -Jj    - specify the issue, set it as default for next calls"
+    echo "  ??         - browse through all issues"
+    echo "  --kb       - set knowledge base"
+    echo "  --KB       - set knowledge base, set it as default for next calls"
+    echo "  --setup    - setup an issue"
+    echo "  --init     - more-less like '--setup' but for a list of issues"
+    echo "  --pred     - use one of predefined shortcuts"
+    echo "  -v         - verbosity, level 1"
+    echo "  -vv        - verbosity, level 2"
+    echo "  -vvv       - verbosity, level 3"
+    echo
+    exit 0;; # }}}
+  \?\?) # {{{
+    do_grep=true; shift; [[ ! -z $1 ]] && issue="$@" && shift $#;; # }}}
   [0-9]*)   wNr=$1;;
   -v)       verbose=1;;
   -vv)      verbose=2;;
@@ -221,36 +252,23 @@ while [[ ! -z $1 ]]; do # {{{
     $TICKET_TOOL_PATH/setup.sh --open "${@//\/}"
     [[ ! -z $issue ]] && ISSUE_FALLBACK="$issue" && saveConfiguration
     exit 0;; # }}}
-  \?\?) # {{{
-    do_grep=true; shift; [[ ! -z $1 ]] && issue="$@" && shift $#;; # }}}
-  -h) # {{{
-    echo "Extra switches:"
-    echo "  -r         - reset configuration"
-    echo "  [0-9]+     - get issue from window number"
-    echo "  -l         - get issue from last selected window"
-    echo "  -j, -jj    - specify the issue"
-    echo "  -J, -Jj    - specify the issue, set it as default for next calls"
-    echo "  ??         - browse through all issues"
-    echo "  --kb       - set knowledge base"
-    echo "  --KB       - set knowledge base, set it as default for next calls"
-    echo "  --setup    - setup an issue"
-    echo "  --init     - more-less like '--setup' but for a list of issues"
-    echo "  -v         - verbosity, level 1"
-    echo "  -vv        - verbosity, level 2"
-    echo "  -vvv       - verbosity, level 3"
-    echo
+  --pred | -p | @* ) # {{{
+    [[ $1 == @* ]] && { key="${1#@}"; shift 1; } || { key="$2"; shift 2; }
+    [[ -z $key ]] && key="$(while read v; do [[ ! -z $v ]] && echo "${v%%:*}"; done < <(echo -e "$TICKET_J_PREDEFINED") | fzf -0)"
+    [[ -z $key ]] && exit 0
+    found=false v=
+    while read v; do
+      [[ $key == ${v%%:*} ]] && found=true && break
+    done < <(echo -e "$TICKET_J_PREDEFINED")
+    if $found; then
+      body=${v#*:}
+      if [[ $1 == '-' ]]; then
+        body="$(echo "$body" | sed 's/\(.*\s\+-[jJ]\{1,2\}\s\+[^ ]\+\).*/\1/')"
+        shift
+      fi
+      $0 $body "$@"
+    fi
     exit 0;; # }}}
-  @@) # {{{
-    params=($@) i=3 first=true
-    [[ -z ${params[$i]} ]] && i=$(($i-1))
-    while [[ ! -z ${params[$i]} ]]; do
-      [[ ${params[$i]} == [0-9]* && $first == 'true' ]] && wNr="${params[$i]}" && break
-      [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj' ]] && issue="${params[$(($i+1))]}" && break
-      [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)" && break
-      i=$(($i+1))
-      first=false
-    done
-    break;; # }}}
   *) break;;
   esac
   shift
@@ -354,7 +372,7 @@ export verbose
 if [[ $1 == '@@' ]]; then # {{{
   ret= param="$3"
   if [[ $2 == 1 || ${@: -2:1} == '--kb' || ${@: -2:1} == '--KB' ]]; then # {{{
-    ret="-h ?? -j -jj -J -Jj -l -r --kb --KB --setup --init"
+    ret="-h ?? -j -jj -J -Jj -l -r --kb --KB --setup --init --pred -p"
     if [[ -z "$(getIssue "$(tmux display-message -p -t $TMUX_PANE -F '#W')" true)" ]]; then
       i=1 is= issue_list=":"
       for is in $(tmux list-windows -F '#W'); do
@@ -366,6 +384,10 @@ if [[ $1 == '@@' ]]; then # {{{
         i=$(($i+1))
       done
     fi
+    while read v; do
+      [[ -z $v ]] && continue
+      ret+=" @${v%%:*}"
+    done < <(echo -e "$TICKET_J_PREDEFINED")
   fi # }}}
   kb="$(echo " $@ " | sed -n -e 's/.* --kb \+\([^ ]\+\).*/\1/Ip')"
   kb="$(echo " $KB_PATHS " | sed -ne "s/.* $kb:\([^ ]*\) .*/\1/p")"
@@ -375,6 +397,11 @@ if [[ $1 == '@@' ]]; then # {{{
   --setup | --init) param="$4";;
   esac # }}}
   case $param in
+  --pred) # {{{
+    ret=
+    while read v; do
+      ret+="${v%%:*} "
+    done < <(echo -e "$TICKET_J_PREDEFINED") ;; # }}}
   --kb | --KB) # {{{
     ret="$( echo " $KB_PATHS " | sed 's/:[^ ]* / /g')" ;; # }}}
   --setup) # {{{
@@ -389,7 +416,7 @@ if [[ $1 == '@@' ]]; then # {{{
     touch -t $(command date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
     files="$(getIssues -newer $marker)"
     rm $marker
-    files+=" $(command grep -lF '^# j-info: .*[^-]ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/||' -e 's|-data\.txt||')"
+    files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/||' -e 's|-data\.txt||')"
     ret+=" $files" ;; # }}}
   -jj | -JJ | -Jj | --setup | --init | \?\?) # {{{
     files="$(getIssues)"
