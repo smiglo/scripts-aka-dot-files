@@ -18,9 +18,10 @@ cleanUp() { # {{{
 } # }}}
 get_app_name() { # {{{
   local IFS=':'
-  read name inst prg <<<"$1"
+  read name inst prg ppa <<<"$1"
   [[ -z $inst ]] && inst=$name
   [[ -z $prg ]] && prg=$inst
+  [[ $prg = '-' ]] && prg=$name
   return 0
 } # }}}
 install() { # {{{
@@ -66,6 +67,7 @@ do_install() { # {{{
   if $IS_MAC; then
     brew install $inst || INSTALL_FAILED+="$inst "
   elif type apt-get >/dev/null 2>&1; then
+    [[ ! -z $ppa ]] && sudo add-apt-repository ppa:$ppa && sudo apt update
     sudo apt-get -y install $inst || INSTALL_FAILED+="$inst "
   elif type yum >/dev/null 2>&1; then
     sudo yum install -y $inst || INSTALL_FAILED+="$inst "
@@ -165,13 +167,13 @@ PROFILES_FILE=$TMP_PATH/.setup_profiles
 dbg -n "Loading cfg file... "
 set +e
 [[ -e $script_path/bash/runtime ]] && source $script_path/bash/runtime >/dev/null 2>&1
-if [[ ! -e $BASH_PATH/profiles/$i ]]; then
+if [[ ! -e $PROFILES_PATH/$i ]]; then
   for p in $SETUP_PROFILES; do
     [[ -e $script_path/bash/profiles/$p/runtime ]] && source $script_path/bash/profiles/$p/runtime >/dev/null 2>&1
   done
 fi
 [[ -e $script_path/bash/cfg ]] && source $script_path/bash/cfg >/dev/null 2>&1
-if [[ ! -e $BASH_PATH/profiles/$i ]]; then
+if [[ ! -e $PROFILES_PATH/$i ]]; then
   for p in $SETUP_PROFILES; do
     [[ -e $script_path/bash/profiles/$p/cfg ]] && source $script_path/bash/profiles/$p/cfg >/dev/null 2>&1
   done
@@ -297,7 +299,7 @@ if install 'fonts'; then # {{{
   $IS_MAC && dst="$HOME/Library/Fonts"
   for f in $fonts; do
     [[ "$(command cd $dst; echo $f*)" == "$f"'*' ]] || continue
-    unzip -q -d "$dst" "$DROPBOX_PATH/rozne/backups/fonts/${f}.zip" \*.ttf
+    unzip -q -d "$dst" "$DROPBOX_PATH/sharable/fonts/${f}.zip" \*.ttf
   done
   dbg "[DONE]"
 fi # }}}
@@ -321,16 +323,33 @@ if install 'colors'; then # {{{
   dbg "  br.white   : #EBDBB2"
   dbg "  -- From: https://github.com/morhetz/gruvbox"
   if ! ${IS_MAC:-false}; then
-    dbg "  dconf write"
-    dbg "    '/org/gnome/terminal/legacy/profiles:/:PROFILE_ID/palette'"
-    dbg "    \"["
-    dbg "        'rgb(18,18,18)',    'rgb(237,101,92)', 'rgb(152,151,26)', 'rgb(215,153,33)', 'rgb(69,133,136)',  'rgb(177,98,134)',  'rgb(104,157,106)', 'rgb(251,241,199)',"
-    dbg "        'rgb(146,131,116)', 'rgb(251,73,52)',  'rgb(184,187,38)', 'rgb(250,189,47)', 'rgb(131,165,152)', 'rgb(211,134,155)', 'rgb(142,192,124)', 'rgb(235,219,178)'"
-    dbg "     ]\""
-    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/background-color'   \"'rgb(18,18,18)'\""
-    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/bold-color'         \"'rgb(168,153,132)'\""
-    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/foreground-color'   \"'rgb(235,219,178)'\""
-    dbg " dconf write '/org/gnome/terminal/legacy/profiles:/PROFILE_ID/font'               \"'Fira Mono 13'\""
+    if [[ -z $TERMINAL_PROFILE ]]; then
+      TERMINAL_PROFILE="$(dconf list "/org/gnome/terminal/legacy/profiles:/" | head -n1)"
+      TERMINAL_PROFILE="${TERMINAL_PROFILE#:}"
+      TERMINAL_PROFILE="${TERMINAL_PROFILE%/}"
+    fi
+    if [[ ! -z $TERMINAL_PROFILE ]]; then
+      dconf write "/org/gnome/terminal/legacy/profiles:/:$TERMINAL_PROFILE/palette" \
+          "[ \
+              'rgb(18,18,18)',    'rgb(237,101,92)', 'rgb(152,151,26)', 'rgb(215,153,33)', 'rgb(69,133,136)',  'rgb(177,98,134)',  'rgb(104,157,106)', 'rgb(251,241,199)', \
+              'rgb(146,131,116)', 'rgb(251,73,52)',  'rgb(184,187,38)', 'rgb(250,189,47)', 'rgb(131,165,152)', 'rgb(211,134,155)', 'rgb(142,192,124)', 'rgb(235,219,178)'  \
+           ]"
+      dconf write "/org/gnome/terminal/legacy/profiles:/:$TERMINAL_PROFILE/background-color"   "'rgb(18,18,18)'"
+      dconf write "/org/gnome/terminal/legacy/profiles:/:$TERMINAL_PROFILE/bold-color"         "'rgb(168,153,132)'"
+      dconf write "/org/gnome/terminal/legacy/profiles:/:$TERMINAL_PROFILE/foreground-color"   "'rgb(235,219,178)'"
+      dconf write "/org/gnome/terminal/legacy/profiles:/:$TERMINAL_PROFILE/font"               "'Fira Mono 13'"
+    else
+      dbg "  dconf write"
+      dbg "    '/org/gnome/terminal/legacy/profiles:/:\$TERMINAL_PROFILE/palette'"
+      dbg "    \"["
+      dbg "        'rgb(18,18,18)',    'rgb(237,101,92)', 'rgb(152,151,26)', 'rgb(215,153,33)', 'rgb(69,133,136)',  'rgb(177,98,134)',  'rgb(104,157,106)', 'rgb(251,241,199)',"
+      dbg "        'rgb(146,131,116)', 'rgb(251,73,52)',  'rgb(184,187,38)', 'rgb(250,189,47)', 'rgb(131,165,152)', 'rgb(211,134,155)', 'rgb(142,192,124)', 'rgb(235,219,178)'"
+      dbg "     ]\""
+      dbg " dconf write '/org/gnome/terminal/legacy/profiles:/:\$TERMINAL_PROFILE/background-color'   \"'rgb(18,18,18)'\""
+      dbg " dconf write '/org/gnome/terminal/legacy/profiles:/:\$TERMINAL_PROFILE/bold-color'         \"'rgb(168,153,132)'\""
+      dbg " dconf write '/org/gnome/terminal/legacy/profiles:/:\$TERMINAL_PROFILE/foreground-color'   \"'rgb(235,219,178)'\""
+      dbg " dconf write '/org/gnome/terminal/legacy/profiles:/:\$TERMINAL_PROFILE/font'               \"'Fira Mono 13'\""
+    fi
   fi
   dbg "[DONE]"
 fi # }}}
@@ -655,9 +674,13 @@ if install 'install-tools'; then
   tools="$(echo " $tools" | sed -e 's/ -[^ ]*//g')"
   tools="$(echo $tools)"
   if [[ -z $tools ]]; then
-    tools="git tig pv at tmux w3m cmatrix mc cscope grc vlock jq expect colordiff column htop"
+    tools="git tig pv at tmux w3m cmatrix mc cscope grc vlock jq expect colordiff column htop curl"
     if ! $IS_MAC; then
-      tools+=" apcalc:calc vim:vim-gtk:vim.gtk xclip ack:ack-grep cryptsetup ctags:exuberant-ctags:ctags clang valgrind openvpn unclutter dconf-cli vipe:moreutils:vipe gnuplot5-x11 pstree ag:silversearcher-ag:ag"
+      tools+=" apcalc:calc vim:vim-gtk:vim.gtk xclip ack:ack-grep cryptsetup ctags:exuberant-ctags:- clang valgrind openvpn unclutter dconf-cli \
+        vipe:moreutils:- gnuplot5-x11 pstree ag:silversearcher-ag:- \
+        notify-send:notify-osd:-:leolik/leolik notifyosdconf:notifyosdconfig:-:nilarimogard/webupd8 \
+        compiz:compizconfig-settings-manager:ccsm unity-tweak-tool gnome-tweak-tool \
+        "
     else
       tools+=" calc ack pbcopy:tmux-pasteboard:pbcopy ctags ag:the_silver_searcher"
     fi
@@ -669,9 +692,10 @@ if install 'install-tools'; then
   for i in $tools; do
     [[ $i == -* ]] && continue
     echo " $to_remove " | command grep -q " -${i} " && continue
+    name= inst= prg= ppa=
     get_app_name $i
     dbg -n "Checking [$name]... "
-    if ! which $prg >/dev/null 2>&1 && ! which $name >/dev/null 2>&1; then
+    if ! which $prg >/dev/null 2>&1; then
       do_install
     else
       dbg "[DONE]"

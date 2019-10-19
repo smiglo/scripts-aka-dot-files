@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Exec=\sgnome-terminal --maximize
+Exec=gnome-terminal --maximize --hide-menubar --full-screen
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true

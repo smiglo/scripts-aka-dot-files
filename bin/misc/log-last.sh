@@ -24,21 +24,24 @@ is_to_be_done() { # {{{
 } # }}}
 __util_loglast_extra() { # {{{
   case $1 in
-  suspend) $BASH_PATH/aliases tm --b-dump;;
+  suspend)
+    $BASH_PATH/aliases tm --b-dump
+    $BASH_PATH/aliases tm --l-dump --all --file "susp-$(command date +"$DATE_FMT").layout";;
   reset) # {{{
+    $BASH_PATH/runtime --force --clean-tmp-silent
     if [[ -n $TMUX ]]; then
       $HOME/.tmux.bash status_right_refresh
     fi;; # }}}
   help) ;;
   esac
-  for i in $BASH_PROFILES; do
-    [[ -e "$BASH_PATH/profiles/$i/aliases" ]] && $BASH_PATH/profiles/$i/aliases __util_loglast_extra "$1"
+  for i in $BASH_PROFILES_FULL; do
+    [[ -e "$i/aliases" ]] && $i/aliases __util_loglast_extra "$1"
   done
 } # }}}
 loglast() { # {{{
   source $BASH_PATH/aliases
   local FILE=$LOGLAST_FILE
-  [[ -z $FILE ]] && FILE=$TMP_PATH/.work_time.default
+  [[ -z $FILE ]] && FILE=$APPS_CFG_PATH/.work_time.default
   local FILE_DATA=${FILE}.nfo CMD_FILE=$TMP_MEM_PATH/.loglast.cmd
   local LOOP_TIME=$(( 10 * 60 ))
   local PARAMS_DEFAULT='--logins --first --remaining --passed --show-left --show-end --show-current-time'
@@ -129,7 +132,6 @@ loglast() { # {{{
             echo "pause_margin=\"$pause_margin\""
           ) >$FILE_DATA
         fi
-        __util_loglast_extra 'reset'
       fi # }}}
     fi # }}}
     [[ -e $FILE_DATA ]] && source $FILE_DATA
@@ -374,7 +376,7 @@ loglast() { # {{{
       local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot='cat -'
       is_to_be_done 'plot' && full_plot='tail -n100'
       printf "%6s %2s %6s %6s\n" 'No' '8h' 'W' 'A' >$FILE_PLOT
-      cat $FILE | $full_plot | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
+      cat $FILE | $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
         printf "%-6s" '8'
         for i in $line; do
           local res="$(calc -q -- ${i/:*}+${i/*:}/60 | sed -e 's/~//' -e 's/\s//' | cut -c-5)"

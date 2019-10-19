@@ -4,7 +4,7 @@
 # Check arguments and do really basics # {{{
 what_to_do='full'
 verbose=false
-[[ -z "$PS1" ]] && what_to_do="min"
+[[ -z "$PS1" ]] && what_to_do="min" && $verbose && echo "Not interactive shell" >/dev/stderr
 while [[ ! -z $1 ]]; do
   case $1 in
   --force)    unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs);;
@@ -70,7 +70,6 @@ if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
   export RCSTUFF_FZF_INSTALLED=true
 fi # }}}
 # }}}
-# }}}
 # Remove duplicates from PATH # {{{
 export PATH="${PATH//@END@:}"
 export PATH="${PATH//::/:}"
@@ -106,7 +105,7 @@ if [[ $(id -u) == 0 && ! -n $BASH_START_EXTRA_FEATURES ]]; then
 fi # }}}
 # Start extra features # {{{
 if ${BASH_START_EXTRA_FEATURES:-true}; then
-  [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES='ssh-agent update-repo tmux-startup knowledge-base-dir'
+  [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES='ssh-agent update-repo tmux-startup knowledge-base-dir messages'
   # Set up ssh-agent # {{{
   if [[ $BASH_EXTRA_FEATURES == *ssh-agent* ]]; then
     if [[ ! -n "$SSH_CLIENT" ]]; then
@@ -114,10 +113,19 @@ if ${BASH_START_EXTRA_FEATURES:-true}; then
     else
       source $BIN_PATH/fix_ssh_agent.sh fix_ssh_agent
     fi
+    [[ ! -n $TMUX && ! -z $SSH_KEYS ]] && $BASH_PATH/aliases sshh-add ${SSH_KEYS/STOP}
   fi # }}}
   # Update repo # {{{
-  if [[ ! -n $TMUX  && $BASH_EXTRA_FEATURES == *update-repo* ]]; then
-      $BIN_PATH/setup_updater.sh && exec bash
+  if [[ ! -n $TMUX && $BASH_EXTRA_FEATURES == *update-repo* ]]; then
+    $BIN_PATH/setup_updater.sh && exec bash
+  fi # }}}
+  # Messages # {{{
+  if [[ $BASH_EXTRA_FEATURES == *messages* && -e "$BASH_PATH/messages.sh" ]]; then
+    if [[ ! -n $TMUX ]] && ! pgrep -f messages.sh >/dev/null 2>&1; then
+      $BASH_PATH/messages.sh login &
+      disown
+    fi
+    source $BASH_PATH/messages.sh
   fi # }}}
   # Start TMUX # {{{
   if [[ ! -n $TMUX ]]; then
@@ -176,7 +184,7 @@ fi # }}}
 
 if [[ -n $TMUX ]]; then
   case "$(tmux display-message -p -t $TMUX_PANE -F '#W')" in
-  bash | '' | reattach-to-user-namespace) $BASH_PATH/aliases set_title --set-none --set-window --unlock-force;;
+  bash | '' | reattach-to-user-namespace) $BASH_PATH/aliases set_title --set-window --unlock-force;;
   esac
 fi
 

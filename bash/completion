@@ -43,16 +43,21 @@ _completion_generic() { # {{{
                opts+=" ${i// /\\ }"
              done < <(compgen ${1:2} -- "$cur");; # }}}
          esac;; # }}}
+    ---) opts="---"; break;;
     *) opts+=" $1";;
     esac
     shift
   done # }}}
   COMPREPLY=()
-  i=0
-  while read opts; do # {{{
-    COMPREPLY[$i]="${opts// /\\ }"
-    i=$(($i+1))
-  done < <(compgen -W "$opts" -- "$cur") # }}}
+  if [[ "$opts" != '---' ]]; then
+    i=0
+    while read opts; do # {{{
+      COMPREPLY[$i]="${opts// /\\ }"
+      i=$(($i+1))
+    done < <(compgen -W "$opts" -- "$cur") # }}}
+  else
+    COMPREPLY[0]=""
+  fi
   __ltrim_colon_completions "$cur"
 }
 # }}}
@@ -151,8 +156,8 @@ if [[ -e $RUNTIME_PATH/completion.d ]]; then
 fi
 # }}}
 # Source profile specic completions {{{
-for i in $BASH_PROFILES; do
-  [[ -e $BASH_PATH/profiles/$i/completion ]] && source $BASH_PATH/profiles/$i/completion
+for i in $BASH_PROFILES_FULL; do
+  [[ -e $i/completion ]] && source $i/completion
 done
 # }}}
 

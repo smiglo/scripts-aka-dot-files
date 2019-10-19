@@ -127,11 +127,11 @@ export SVN_EDITOR=$EDITOR
 # }}}
 # }}}
 # Shell setup {{{
-export HISTCONTROL="ignoreboth:erasedups"
-export HISTTIMEFORMAT="$DATE_FMT "
+export HISTCONTROL="erasedups:ignoreboth"
 export HISTFILESIZE=1000
 export HISTFILE=$HOME/.bash_history
 [[ -n $TMUX_SESSION ]] && export HISTFILE=$TMUX_SESSION_PATH/bash_history
+unset HISTTIMEFORMAT
 export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
 export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
 shopt -s histappend
@@ -141,6 +141,11 @@ shopt -s cdspell
 # }}}
 # InputRC: Bash shortcuts {{{
 if [[ "$what_to_do" == 'full' ]]; then
+  goto_vi_command() { # {{{
+    [[ $READLINE_POINT == ${#READLINE_LINE} && $READLINE_POINT -gt 0 && ${READLINE_LINE:$((READLINE_POINT-1)):1} != ' ' ]] && READLINE_LINE="$READLINE_LINE " && READLINE_POINT=$((READLINE_POINT+1))
+    bind 'set keymap vi-command'
+    return 0
+  }
   bind 'set bell-style none'
   bind 'set colored-stats on'
   bind 'set completion-ignore-case on'
@@ -193,7 +198,6 @@ if [[ "$what_to_do" == 'full' ]]; then
     bind '"\C-km-":   print-last-kbd-macro'
     bind '"\C-kme":   call-last-kbd-macro'
     bind '"\C-k/":    edit-and-execute-command'
-    bind '"\C-ke":    edit-and-execute-command'
     bind -x \
          '"\C-kj":    READLINE_LINE="#$(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
     pre=
@@ -218,11 +222,14 @@ if [[ "$what_to_do" == 'full' ]]; then
     vi-insert) # vi-editing-mode
       bind '"\C-kE":   emacs-editing-mode'
       bind '"JJ":      vi-movement-mode'
+      bind -x '"KK":   goto_vi_command'
       bind '"\e[1;5C": vi-next-word'
       bind '"\e[1;5D": vi-prev-word'
       if $FZF_INSTALLED; then
         bind '"\el":"$(!!|fzf)\C-a \C-m"'
       fi
+      bind -x '"\C-kk":"history -r"'
+      bind '"\C-ke":"\C-gexec bash\C-m"'
       ;;
     esac
     bind '"\C-kl":  "'${pre}' \C-g logout\C-m'
@@ -251,7 +258,7 @@ if [[ -e $GIT_PATH ]]; then
   done
 fi
 
-! declare -F __git_ps1 &>/dev/null && echo "Using internal __git_ps1" && source $BASH_PATH/completion.d/git/git-prompt.sh
+! declare -F __git_ps1 &>/dev/null && echo "Using internal __git_ps1" >/dev/stderr && source $BASH_PATH/completion.d/git/git-prompt.sh
 # }}}
 # Less {{{
 if [[ -z $LESSOPEN ]]; then
@@ -278,7 +285,7 @@ export LESS_TERMCAP_ue="$COff"
 # }}}
 # }}}
 # PS1 {{{
-export PROMPT_COMMAND="set_title --set-none --set-terminal --tmux-session; bash_phistory; history -a"
+export PROMPT_COMMAND="set_title --set-terminal --tmux-session; bash_phistory; history -a"
 export PROMPT_DIRTRIM=3
 
 if [[ -n $STY || -n $TMUX ]]; then
@@ -307,8 +314,8 @@ if type stty >/dev/null 2>&1; then
   stty -ixon
 fi # }}}
 # Source profiles' configurations {{{
-for i in $BASH_PROFILES; do
-  [[ -e $BASH_PATH/profiles/$i/cfg ]] && source $BASH_PATH/profiles/$i/cfg
+for i in $BASH_PROFILES_FULL; do
+  [[ -e $i/cfg ]] && source $i/cfg
 done
 export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
 # }}}

@@ -29,21 +29,32 @@ defaults() { # {{{
   if [[ $TMUX_VERSION -lt 24 ]]; then
     tmux bind-key '?' list-keys
   else
-    tmux bind-key -T prefix '?' display-message "2nd key(h)..." \\\; switch-client -T ext1
-    tmux bind-key -T ext1   '?' list-keys -T prefix
-    tmux bind-key -T ext1   'r' list-keys -T root
-    tmux bind-key -T ext1   'c' list-keys -T copy-mode-vi
-    tmux bind-key -T ext1   'p' display-panes
-    tmux bind-key -T ext1   'h' list-keys -T ext1
-    tmux bind-key -T ext1   'R' display-message "Reloading..." \\\; source-file ~/.tmux.conf
+    tmux bind-key -T prefix '?'     display-message "2nd key(h)..." \\\; switch-client -T ext1
+    tmux bind-key -n        'M-/'   switch-client -T ext1
+    tmux bind-key -T ext1   '?'     list-keys -T prefix
+    tmux bind-key -T ext1   'r'     list-keys -T root
+    tmux bind-key -T ext1   'c'     list-keys -T copy-mode-vi
+    tmux bind-key -T ext1   'p'     display-panes
+    tmux bind-key -T ext1   'h'     list-keys -T ext1
+    tmux bind-key -T ext1   'R'     display-message "Reloading..." \\\; source-file ~/.tmux.conf
+    tmux bind-key -T ext1 -r 'C-h'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-h" "select-pane -L"'
+    tmux bind-key -T ext1 -r 'C-j'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-j" "select-pane -D"'
+    tmux bind-key -T ext1 -r 'C-k'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-k" "select-pane -U"'
+    tmux bind-key -T ext1 -r 'C-l'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-l" "select-pane -R"'
     tmux unbind -T prefix   'R'
+    local params=
+    [[ $TMUX_VERSION -gt 16 ]] && params="-c \"#{pane_current_path}\""
+    tmux bind-key -T ext1 \| run-shell "~/.tmux.bash smarter_nest '|'  'split-window -h -p 25 $params'"
+    tmux bind-key -T ext1 -  run-shell "~/.tmux.bash smarter_nest '-'  'split-window -v -p 20 $params'"
+    tmux bind-key -T ext1 \\ run-shell "~/.tmux.bash smarter_nest '\\' 'split-window -h       $params'"
+    tmux bind-key -T ext1 _  run-shell "~/.tmux.bash smarter_nest '_'  'split-window -v       $params'"
   fi
   if [[ $TMUX_VERSION -lt 26 ]]; then
     tmux bind-key 's' choose-tree
     tmux bind-key '=' run-shell '~/.tmux.bash smarter_nest "=" "choose-buffer"'
   else
     tmux bind-key 's' choose-tree -sN
-    tmux bind-key '=' run-shell '~/.tmux.bash smarter_nest "=" "choose-buffer -O name -NF ##{buffer_sample}"'
+    tmux bind-key '=' run-shell '~/.tmux.bash smarter_nest --no-eval "=" "choose-buffer -O name -NF ##{buffer_sample}"'
   fi
   tmux set -g @mark_auto true
   local i=
@@ -54,7 +65,7 @@ defaults() { # {{{
     tmux set-environment  -g ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
   done
 } # }}}
-battery() { # {{{
+battery() { # @@ {{{
   is_ac() { # {{{
     if $IS_MAC; then
       pmset -g batt  | command grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
@@ -77,7 +88,7 @@ battery() { # {{{
   local thresholds="${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95}" colors="1 3 2 14"
   local update_time= value= battery_info="$(tmux show-environment -g "TMUX_SB_BATTERY_INFO" 2>/dev/null)"
   battery_info="${battery_info#*=}"
-  if [[ ! -z $battery_info ]]; then # {{{
+  if ! $testing && [[ ! -z $battery_info ]]; then # {{{
     eval "$battery_info"
     if [[ $cur_time -lt $(( $update_time + $delta )) ]]; then
       printf "%s" "$value"
@@ -113,12 +124,12 @@ battery() { # {{{
   unset is_ac get_percentage
   printf "%s" "$value"
 } # }}}
-cpu() { # {{{
+cpu() { # @@ {{{
   local delta="${TMUX_SB_CPU_DELTA:-$((1*60))}" # 1 minute
   local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
   local update_time= value= cpu_info="$(tmux show-environment -g "TMUX_SB_CPU_INFO" 2>/dev/null)" cpu_1m= cpu_5m= c= i=
   cpu_info="${cpu_info#*=}"
-  if [[ ! -z $cpu_info ]]; then # {{{
+  if ! $testing && [[ ! -z $cpu_info ]]; then # {{{
     eval "$cpu_info"
     if [[ $cur_time -lt $(( $update_time + $delta )) ]]; then # {{{
       printf "%s" "$value"
@@ -157,11 +168,9 @@ cpu() { # {{{
   tmux set-environment -g "TMUX_SB_CPU_INFO" "update_time=$cur_time;value=\"$value\";delta=\"$delta\""
   printf "%s" "$value"
 } # }}}
-weather_tmux() { # {{{
+weather_tmux() { # @@ {{{
   local delta="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}" # One hour
   local update_time= value= weather_info="$(tmux show-environment -g "TMUX_SB_WEATHER_INFO" 2>/dev/null)"
-  local testing=false
-  [[ $1 == '--test' ]] && testing=true && shift
   weather_info="${weather_info#*=}"
   if ! $testing && [[ ! -z $weather_info ]]; then # {{{
     eval "$weather_info"
@@ -172,24 +181,39 @@ weather_tmux() { # {{{
   fi # }}}
   weather_icon() { # {{{
     # Icons: [ 🌣  (  🌞  )  🌤  🌥  ☁️  🌦  🌧  🌨  ⛈  🌩  🌪  🌫  🌬  ]
-    case $1 in
-    800) ! $IS_MAC &&                        echo '#[fg=colour226]🌣 ' \
-                                          || echo '#[fg=colour226]🌞 ';;
-    801|802)                                 echo '#[fg=colour228]🌤 ';;
-    803)                                     echo '#[fg=colour254]🌥 ';;
-    804)                                     echo '#[fg=colour251]☁️ ';;
-    500|501|520|521|531)                     echo '#[fg=colour228]🌦 ';;
-    600|601|602|611|612|\
-        615|616|620|621|622)                 echo '#[fg=colour74 ]🌨 ';;
-    300|301|302|310|311|\
-        312|313|314|321|\
-    502|503|504|511|522)                     echo '#[fg=colour74 ]🌧 ';;
-    200|201|202|210|211|\
-        212|221|230|231|232)                 echo '#[fg=colour250]⛈ ';;
-    701|711|721|731|741|\
-        751|761|762|771)                     echo '#[fg=colour250]🌫 ';;
-    *)                                       echo "$1";;
-    esac
+    local icon=
+    [[ -z $TMUX_DEFAULT_WEATHER_ICONS ]] &&
+      local TMUX_DEFAULT_WEATHER_ICONS=" \
+        800::🌣  \
+        801:802::🌤 \
+        803::🌥 \
+        804::☁️  \
+        500:501:520:521:531::🌦 \
+        600:601:602:611:612:615:616:620:621:622::🌨 \
+        300:301:302:310:311:312:313:314:321:502:503:504:511:522::🌧 \
+        200:201:202:210:211:212:221:230:231:232::⛈  \
+        701:711:721:731:741:751:761:762:771::🌫 \
+      "
+    [[ ! -z "$TMUX_WEATHER_ICONS" ]] && [[ " $TMUX_WEATHER_ICONS " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] \
+      && icon="${BASH_REMATCH[2]}"
+    [[ -z "$icon" ]] && [[ " $TMUX_DEFAULT_WEATHER_ICONS " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] \
+      && icon="${BASH_REMATCH[2]}"
+    [[ -z $icon ]] \
+      && icon="$1"
+    local colors=" \
+      800::#[fg=colour226] \
+      801:802::#[fg=colour228] \
+      803::#[fg=colour254] \
+      804::#[fg=colour251] \
+      500:501:520:521:531::#[fg=colour228] \
+      600:601:602:611:612:615:616:620:621:622::#[fg=colour74] \
+      300:301:302:310:311:312:313:314:321:502:503:504:511:522::#[fg=colour74] \
+      200:201:202:210:211:212:221:230:231:232)::#[fg=colour250] \
+      701:711:721:731:741:751:761:762:771::#[fg=colour250] \
+    "
+    local c=
+    [[ " $colors " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] && c="${BASH_REMATCH[2]}"
+    echo "$c$icon"
   } # }}}
   weather_wind_arrow() { # {{{
     local out=()
@@ -273,7 +297,7 @@ weather_tmux() { # {{{
   $err && return 1
   return 0
 } # }}}
-system_notifications() { # {{{
+system_notifications() { # @@ {{{
   local ntf_file="${NOTIFICATION_FILE:-$TMP_MEM_PATH/notifications.txt}" c_time="$(command date +"%s")" icon= delta=$((5*60))
   if [[ ! -e "$ntf_file" ]]; then
     icon='#'
@@ -283,9 +307,11 @@ system_notifications() { # {{{
   fi
   printf "%s" "$icon"
 } # }}}
-status_right_extra() { # {{{
+status_right_extra() { # @@ {{{
   [[ -z "$TMUX_STATUS_RIGHT_EXTRA_SORTED" ]] && printf " " && return 0
   local tm_info="$1" tm_time="$2"
+  [[ -z $tm_info ]] && tm_info="$(tmux display-message -pF '#S:#I.#P')"
+  [[ -z $tm_time ]] && tm_time="$(command date +'%H:%M')"
   local session="${tm_info%%:*}" l= ret=
   local cur_time=$(command date +%s) update_time= value= do_update= weather_info=
   local logtime_params="$(tmux show-environment -t $session "TMUX_SB_LOGTIME_PARAMS" 2>/dev/null)"
@@ -302,10 +328,10 @@ status_right_extra() { # {{{
         local delta="$((10 * 60))" time_params="$(tmux show-environment -g "TMUX_SB_TIME_PARAMS" 2>/dev/null)"
         time_params="${time_params#*=}"
         [[ ! -z $time_params ]] && eval "$time_params"
-        if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]]; then
+        if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]] || $testing; then
           value=$($BIN_PATH/misc/log-last.sh --tmux %)
           value=${value/]*/]}
-          tmux set-environment -g "TMUX_SB_TIME_PARAMS" "update_time=$cur_time;value=$value"
+          tmux set-environment -g "TMUX_SB_TIME_PARAMS" "update_time=$cur_time;value=\"$value\""
         fi
         value="${value}${tm_time}"
         # }}}
@@ -316,13 +342,13 @@ status_right_extra() { # {{{
           params="${logtime_params#*|}"
           [[ $params = *%* ]] && delta=$((5*60))
           eval "${logtime_params%%|*}"
-          if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]]; then
+          if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]] || $testing; then
             value=$($BIN_PATH/misc/log-last.sh --tmux --passed --store $params)
           else
             do_update=false
           fi
         fi
-        $do_update && tmux set-environment -t $session "TMUX_SB_LOGTIME_PARAMS" "update_time=$cur_time;value=$value|$params"
+        $do_update && tmux set-environment -t $session "TMUX_SB_LOGTIME_PARAMS" "update_time=$cur_time;value=\"$value\"|$params"
       fi # }}}
       ret+=" $value"
       ;; # }}}
@@ -347,8 +373,8 @@ status_right_extra() { # {{{
       ;; # }}}
     *) # {{{
       local out= i=
-      for i in $BASH_PROFILES; do
-        [[ -e $BASH_PATH/profiles/$i/aliases ]] && out="$($BASH_PATH/profiles/$i/aliases __util_tmux_extra $l)"
+      for i in $BASH_PROFILES_FULL; do
+        [[ -e $i/aliases ]] && out="$($i/aliases __util_tmux_extra $l)"
         [[ ! -z $out ]] && break
       done
       if ! ${dbg:-false}; then
@@ -361,7 +387,7 @@ status_right_extra() { # {{{
   done
   printf "%s" "$ret "
 } # }}}
-status_right_refresh() { # {{{
+status_right_refresh() { # @@ {{{
   tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
     tmux set-environment  ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
   done
@@ -425,17 +451,18 @@ edit_mode() { # {{{
 } # }}}
 splitting() { # {{{
   local params=
-  [[ $TMUX_VERSION -gt 16 ]] && params="-c #{pane_current_path}"
-  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest '|'  'split-window -h -p 25 $params'"
-  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest '-'  'split-window -v -p 20 $params'"
-  tmux bind-key \\ run-shell "~/.tmux.bash smarter_nest '\\' 'split-window -h       $params'"
-  tmux bind-key _  run-shell "~/.tmux.bash smarter_nest '_'  'split-window -v       $params'"
+  [[ $TMUX_VERSION -gt 16 ]] && params="-c \"#{pane_current_path}\""
+  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '|'  'split-window -h -p 25 $params'"
+  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '-'  'split-window -v -p 20 $params'"
+  tmux bind-key \\ run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '\\' 'split-window -h       $params'"
+  tmux bind-key _  run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '_'  'split-window -v       $params'"
+  # tmux bind-key p  run-shell "~/.tmux.bash smarter_nest --dbg=$TMP_MEM_PATH/tm-bash.log -z#{window_zoomed_flag} 'p'  'split-window -v -p 20 $params'"
 } # }}}
 new_window() { # {{{
   local params=
-  [[ $TMUX_VERSION -gt 16 ]] && params="-c #{pane_current_path}"
+  [[ $TMUX_VERSION -gt 16 ]] && params="-c \"#{pane_current_path}\""
   tmux bind-key Enter   run-shell "~/.tmux.bash smarter_nest 'Enter' 'new-window -a $params'"
-  tmux bind-key c       run-shell "~/.tmux.bash smarter_nest 'c'     'new-window -a $params; split-window -v -p 20 -d $params'"
+  tmux bind-key c       run-shell "~/.tmux.bash smarter_nest 'c'     'new-window -a $params\\; split-window -v -p 20 -d $params'"
   tmux bind-key M-Enter new-window -a $params
   tmux bind-key K       choose-window -F 'Kill: #W (#{window_panes})' 'kill-window -t %%'
 } # }}}
@@ -450,57 +477,67 @@ get_marked_pane() { # {{{
   echo "$pane"
 } # }}}
 mark_toggle() { # {{{
-  local delay=
-  local delayed=false
-  local local_set=false
-  while [[ ! -z $1 ]]; do
+  local delay= delayed=false local_set=false zoom=0
+  while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -D)  delayed=true;;
     -d*) delay=${1/-d}; [[ -z $delay ]] && delay=3;;
-    -l)  local_set=true;
+    -l)  local_set=true;;
+    -z0 | -z1) zoom=${1#-z};;
     esac
     shift
-  done
-  local auto_check_nest=$(tmux show-options -wqv @mark_auto)
-  [[ -z $auto_check_nest ]] && auto_check_nest=$(tmux show-options -gqv @mark_auto)
-  if $local_set; then
+  done # }}}
+  local auto_check_nest=$(tmux show-options -wqv @mark_auto) auto_check_nest_g=$(tmux show-options -gqv @mark_auto)
+  if [[ $zoom == 1 && $auto_check_nest == 'false' && $auto_check_nest_g == 'true' ]]; then
+    auto_check_nest=true
+  fi
+  [[ -z $auto_check_nest ]] && auto_check_nest=$auto_check_nest_g
+  if $local_set; then # {{{
     case $auto_check_nest in
     true)           tmux set-option -w @mark_auto false;;
     false|toggling) tmux set-option -wqu @mark_auto;;
     esac
-  else
+    # }}}
+  else # {{{
     case $auto_check_nest in
     true)     ! $delayed && [[ -z $delay ]] && tmux set-option -g @mark_auto false;;
     false)    ! $delayed && tmux set-option -g @mark_auto true;;
     toggling) $delayed && tmux set-option -g @mark_auto true;;
     esac
-  fi
-  if [[ ! -z $delay ]]; then
+  fi # }}}
+  if [[ ! -z $delay ]]; then # {{{
     [[ $auto_check_nest == 'true' ]] && tmux set-option -g @mark_auto toggling
     tmux run-shell -b "sleep $delay; ~/.tmux.bash mark_toggle -D"
-  fi
+  fi # }}}
   local interval=$(tmux show-options -gqv status-interval)
   tmux set -qg status-interval 1
   tmux run-shell -b "sleep 1; tmux set -qg status-interval $interval"
 } # }}}
-smarter_nest() { # {{{
-  local send_prefix=
-  local key=
-  local version=
-  while [[ ! -z $1 ]]; do
+smarter_nest() { # @@ {{{
+  local send_prefix= key= version= do_eval=true dbg=false log_f= err= zoom= keep_zoom=false
+  [[ $1 == --dbg ]] && dbg=true && shift
+  [[ $1 == --dbg=* ]] && dbg=true && log_f="${1#--dbg=}" && shift
+  $dbg && [[ ! -z $log_f ]] && exec 2>>$log_f
+  while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --no-prefix) send_prefix='NONE';;
     --ver)       shift; version=$1;;
+    --no-eval)   do_eval=false;;
+    -z0 | -z1)   zoom=${1#-z};;
+    -Z0 | -Z1)   zoom=${1#-Z}; keep_zoom=true;;
+    --keep-zoom) keep_zoom=true;;
     *)           key=$1; shift; break;;
     esac
     shift
-  done
+  done # }}}
   [[ ! -z $version && $TMUX_VERSION -le $version ]] && return 0
   [[ -z $send_prefix ]] && send_prefix=${TMUX_PREFIX_2:-$(tmux show-options -gv prefix2)} || send_prefix=
-  local pane_info=
-  local auto_check_nest=$(tmux show-options -wqv @mark_auto)
-  [[ -z $auto_check_nest ]] && auto_check_nest=$(tmux show-options -gqv @mark_auto)
-  if [[ $auto_check_nest == 'true' ]]; then
+  local pane_info= auto_check_nest=$(tmux show-options -wqv @mark_auto) auto_check_nest_g=$(tmux show-options -gqv @mark_auto)
+  if [[ $zoom == 1 && $auto_check_nest == 'false' ]]; then
+    [[ $auto_check_nest_g == 'false' || $auto_check_nest_g == 'toggling' ]] && auto_check_nest=false || auto_check_nest=true
+  fi
+  [[ -z $auto_check_nest ]] && auto_check_nest=$auto_check_nest_g
+  if [[ $auto_check_nest == 'true' ]]; then # {{{
     pane_info=$(tmux display-message -p -t $TMUX_PANE -F '#P:#{pane_pid}')
     if ! $IS_MAC; then
       local ps_out="$(command ps -o args -g ${pane_info/*:})"
@@ -519,27 +556,35 @@ smarter_nest() { # {{{
     else
       pane_info=
     fi
-  elif [[ $auto_check_nest == 'toggling' ]]; then
-    tmux set-option -g @mark_auto true
-  fi
-  if [[ ! -z $pane_info ]]; then
+  fi # }}}
+  [[ $auto_check_nest_g == 'toggling' ]] && tmux set-option -g @mark_auto true
+  if [[ ! -z $pane_info ]]; then # {{{
     pane_info=${pane_info/:*}
     [[ ! -z $send_prefix ]] && tmux send-keys -t .$pane_info $send_prefix
     tmux send-keys -t .$pane_info $key
-  else
+    # }}}
+  else # {{{
     if [[ ! -z $1 ]]; then
-      todo="${@//@@\'}"
-      if [[ $todo =~ .*\ -c\ *$ ]]; then
-        tmux $todo "$(tmux show -v @tmux_path)"
+      todo="$@"
+      todo="${todo//@TMUX_PATH@/\"$(tmux show -v @tmux_path)\"}"
+      todo="${todo//@@/\'}"
+      $dbg && set -xv
+      if [[ ! -z $zoom ]] && $keep_zoom; then
+        preserve_zoom $(! $do_eval && echo "--no-eval") $zoom $todo
+      elif $do_eval; then
+        eval tmux $todo
       else
-        tmux ${@//@@/\'}
+        tmux $todo
       fi
-      [[ $? == 0 ]] || tmux display-message "Cannot do '${@//@@/\'}'"
+      err=$?
+      $dbg && set +xv
+      [[ $err == 0 ]] || tmux display-message "Cannot do '$todo'"
     elif [[ ! -z $CMD ]]; then
       eval tmux $CMD
-      [[ $? == 0 ]] || tmux display-message "Cannot do '$CMD'"
+      err=$?
+      [[ $err == 0 ]] || tmux display-message "Cannot do '$CMD'"
     fi
-  fi
+  fi # }}}
   return 0
 } # }}}
 lock_toggle() { # {{{
@@ -615,22 +660,27 @@ scratch_pane() { # {{{
   sleep 0.5
   tmux send-keys -t $pane_id "pt hn; clear"
 } # }}}
-pasteKey_worker() { # {{{
-  local buff="$1" v="$(source $HOME/.bashrc --do-basic; \
-    keep-pass.sh --list-keys \
+pasteKey_worker() { # @@ {{{
+  source $HOME/.bashrc --do-basic
+  local auto=$1 buff="$2" v="$( \
+    keep-pass.sh --list-all-keys \
     | fzf \
       --preview="keep-pass.sh --key '{1}' --no-intr" \
       +m --prompt='Key> ' -0 \
   )"
   [[ $? == 0 && ! -z "$v" ]] || return 1
-  v="$(keep-pass.sh --key "$v")"
+  v="$(source $HOME/.bashrc --do-basic; keep-pass.sh --key "$v")"
   [[ ! -z $v ]] || return 1
+  if $auto; then
+    [[ $v == *'..' ]] && v="${v%..}" || v+=""
+  fi
   tmux set-buffer -b $buff "$v"
 } # }}}
-pasteKey() { # {{{
-  local buff="key.$$" pane_id=
+pasteKey() { # @@ {{{
+  local buff="key.$$" pane_id= auto=true
+  [[ $1 == '-m' ]] && auto=false && shift
   tmux delete-buffer -b "$buff" >/dev/null 2>&1
-  pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker '$buff'")"
+  pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker $auto '$buff'")"
   while tmux display-message -p -t "$pane_id" -F '#{pane_id}' >/dev/null 2>&1; do
     sleep 0.5
   done
@@ -638,14 +688,50 @@ pasteKey() { # {{{
     && tmux paste-buffer -d -b "$buff"
   return 0
 } # }}}
+preserve_zoom() { # {{{
+  local do_eval=true zoomed=0
+  [[ $1 == "--no-eval" ]] && do_eval=false && shift
+  zoomed="$1"; shift
+  if $do_eval; then
+    if [[ $zoomed == 0 ]]; then
+      eval tmux "$@"
+    else
+      eval tmux "$@" \\\; resize-pane -Z
+    fi
+  else
+    if [[ $zoomed == 0 ]]; then
+      tmux "$@"
+    else
+      tmux "$@" \; resize-pane -Z
+    fi
+  fi
+} # }}}
 
 [[ -z $TMUX_VERSION ]] && TMUX_VERSION="$(tmux -V | sed 's/\.//' | cut -c6-7)"
-if [[ $1 == --dbg || $1 == --dbg2 ]]; then
-  dbgFull=false sTime=false
-  [[ $1 == --dbg2 ]] && dbgFull=true
-  shift
-  [[ $1 == --time ]] && sTime=true && shift
+export testing=false
+case $1 in
+@@) # {{{
+  case $3 in
+  --dbg | --dbg2 | --test | --time) # {{{
+    sed -n 's/^\([a-z].*\)() { # @@ .*/\1/p' tmux.bash
+    ;;& # }}}
+  *) # {{{
+    echo --{dbg{,2},test,time};; # }}}
+  esac;; # }}}
+--dbg  |  --dbg2 | --test | --time) # {{{
   export dbg=true
+  dbgFull=false sTime=false testing=false
+  while true; do
+    case $1 in
+    --test) testing=true;;
+    --time) sTime=true;;
+    --dbg2) dbgFull=true;;
+    --dbg)  ;;
+    *)      break;;
+    esac
+    shift
+  done
+  export testing
   (
     echo "$@"
     $dbgFull && set -xv
@@ -653,7 +739,7 @@ if [[ $1 == --dbg || $1 == --dbg2 ]]; then
     $sTime && { time "$@"; } || { $@; }
     echo
   ) 2>&1
-else
-  "$@"
-fi
+  ;; # }}}
+*) "$@";;
+esac
 

@@ -11,7 +11,7 @@ export find_cmd=/bin/find
 export PATH=/bin:$PATH
 export LANG=en_US.UTF-8
 # }}}
-for i in $BASH_PROFILES; do # {{{
-  [[ -e $BASH_PATH/profiles/$i/cygwin ]] && source $BASH_PATH/profiles/$i/cygwin
+for i in $BASH_PROFILES_FULL; do # {{{
+  [[ -e $i/cygwin ]] && source $i/cygwin
 done # }}}
 

@@ -28,15 +28,22 @@ if [[ $1 == '--complete' ]]; then # {{{
       [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
       [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles+=" $PWD/keep-pass.journal"
       for f in $journalFiles; do
-        [[ -e "$f" ]] && opts+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f")"
+        [[ -e "$f" ]] || continue
+        if [[ " ${COMP_WORDS[*]} " == *" --gen "* ]]; then
+          opts+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*.*\):\s\+.*/\1/' "$f")"
+        else
+          opts+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f")"
+        fi
       done;; # }}}
     --save) # {{{
       ;; # }}}
+    -t) # {{{
+      opts+="- 0 60 120";; # }}}
     *) # {{{
       case $first in
       --gen) # {{{
-        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --update --padding --no-padding --plain"
-        opts+=" --in --in="
+        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --key --update --padding --no-padding --plain --pwd-save --no-pwd-save"
+        opts+=" --in --in= --seq --seq="
         opts+=" --pass --pass= --no-pass";; # }}}
       --get | '') # {{{
         opts+=" --pass --pass= --key --seq --no-intr" ;;& # }}}
@@ -44,9 +51,11 @@ if [[ $1 == '--complete' ]]; then # {{{
         opts+=" --all";& # }}}
       --list-all-keys) # {{{
         opts+=" -d -dd";; # }}}
+      --set-master-key) # {{{
+        opts+=" -t";; # }}}
       '') # {{{
         opts+=" -v -vv -vvv --journal"
-        opts+=" --gen --get --has-key --list-keys --list-all-keys";; # }}}
+        opts+=" --gen --get --key --save --has-key --list-keys --list-all-keys --set-master-key --help";; # }}}
       esac;; # }}}
     esac
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
@@ -57,10 +66,19 @@ if [[ $1 == '--complete' ]]; then # {{{
   return 0
 fi # }}}
 
+dbg() { # {{{
+  local l=$1; shift
+  [[ $l -gt $verbose ]] && return 0
+  [[ -z $1 ]] && echo >/dev/stderr || echo "DBG#$(printf '%02d' $l): $@" >/dev/stderr
+  return 0
+} # }}}
+err() { # {{{
+  echo "ERR: $@" >/dev/stderr
+} # }}}
 LC_ALL=C
 dictFile="${KEEP_PASS_DICT:-$(dirname "$(readlink -f "$0")")/keep-pass.dict}"
 journalMainFile=
-[[ ! -e "$dictFile" ]] && echo "Dictionary file not found ($dictFile)" >/dev/stderr && exit 1
+[[ ! -e "$dictFile" ]] && err "Dictionary file not found ($dictFile)" && exit 1
 end="65433"
 letters=(11111 13161 15553 22241 23664 25136 26515 32225 33466 34323 35143 35561 41351 43251 44146 44611 46624 51223 52513 56326 62265 62533 63334 64532 64626 65255)
 # info:      a     b     c     d     e     f     g     h     i     j     k     l     m     n     o     p     q     r     s     t     u     v     w     x     y     z
@@ -124,6 +142,7 @@ getWord() { # {{{
   awk '/^'$1'\s/ {print $2}' "$dictFile"
 } # }}}
 getWordValue() { # {{{
+  [[ $1 == ' ' ]] && echo "66563" && return 0
   local v="${1,,}"
   case $v in
     . | \? | / | [ | ] | \\ | \| | ^ | \( | \) | $ | +)
@@ -165,23 +184,84 @@ encode() { # {{{
   fi # }}}
   echo "$ret"
 } # }}}
+setMasterKey() { # {{{
+  local mkey= timeout=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -t) timeout="$2"; [[ $timeout == '-' || $timeout == '0' ]] && timeout=''; shift;;
+    *)  mkey="$1";;
+    esac
+    shift
+  done # }}}
+  if [[ ! -z $KEEP_PASS_MASTER_KEY && $KEEP_PASS_MASTER_KEY != //*  ]]; then
+    rm -f "$KEEP_PASS_MASTER_KEY"
+  fi
+  [[ -z $mkey ]] && read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p 'Enter master key: ' mkey >/dev/stderr
+  [[ -z $mkey ]] && return 1
+  if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then
+    dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
+    local python= i=
+    for i in python{3,2,}; do which $i >/dev/null 2>&1 && python=$i && break; done
+    [[ -z $python ]] && err "Python not installed" && return 1
+    mkey="$(bash -c \
+      "f() { \
+        $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
+      }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
+      | cut -c32-62 \
+    )"
+  fi
+  if [[ -z $KEEP_PASS_MASTER_KEY || $KEEP_PASS_MASTER_KEY == //*  ]]; then
+    echo "export KEEP_PASS_MASTER_KEY=\"$mkey\""
+    mkey="$(echo "$mkey" | sha1sum)"
+    return 0
+  fi
+  echo -n "$mkey" >"$KEEP_PASS_MASTER_KEY"
+  chmod 400 $KEEP_PASS_MASTER_KEY
+  mkey="$(echo "$mkey" | sha1sum)"
+  return 0
+} # }}}
+getMasterkey() { # {{{
+  local mkey="$KEEP_PASS_MASTER_KEY" interactive="${1:-true}"
+  if [[ ! -z $mkey && $mkey == /* && $mkey != //*  ]]; then
+    [[ -e $mkey ]] && mkey="$(cat "$mkey")" || mkey=
+  elif [[ $mkey == //* ]]; then
+    mkey="${mkey:1}"
+  fi
+  [[ ! -z $mkey ]] && echo "$mkey" && return 0
+  $interactive || return 1
+  read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echo >/dev/stderr
+  [[ -z $mkey ]] && return 1
+  if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then
+    dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
+    local python= i=
+    for i in python{3,2,}; do which $i >/dev/null 2>&1 && python=$i && break; done
+    [[ -z $python ]] && err "Python not installed" && return 1
+    mkey="$(bash -c \
+      "f() { \
+        $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
+      }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
+    )"
+  fi
+  echo "$mkey"
+} # }}}
 encrypt() { # {{{
   local src= ret= decrypt=false pass= params= interactive=
   [[ $1 == '-d' ]] && decrypt=true && shift
   src="$1" pass="$2" interactive="${3:-true}"
   params="enc -aes-256-cbc -salt -a -A"
   if [[ ! -z $pass ]]; then
-    if $decrypt && [[ $pass == @* ]]; then
-      local mkey="$KEEP_PASS_MASTER_KEY"
-      if [[ -z $mkey ]]; then
-        $interactive || { echo '---'; return 0; }
-        read -r -s -p "Enter Master Key: " mkey && echo
-        [[ -z $mkey ]] && return 1
+    if [[ $pass == @* ]]; then
+      pass="${pass:1}"
+      if [[ $pass != @* ]]; then
+        local mkey="$(getMasterkey $interactive)"
+        dbg 2 "Master key: $mkey"
+        [[ -z $mkey ]] && ! $interactive && { echo '---'; return 0; }
+        pass="$(echo "$pass" | eval openssl $params -d -pass pass:'$mkey' 2>/dev/null)" || return 1
+        dbg 2 "Decrypted password: $pass"
       fi
-      pass="$(echo "${pass:1}" | eval openssl $params -d -pass pass:'$mkey' 2>/dev/null)" || return 1
     fi
     params+=" -pass pass:'$pass'"
-  elif ! $interactive; then
+  elif ! $interactive && $decrypt; then
     echo '---'
     return 0
   fi
@@ -224,12 +304,12 @@ getPass() { # {{{
   [[ ${seq:0:1} == '*' ]] && use_pass=true && seq="${seq:1}"
   if $use_pass; then # {{{
     seq="$(encrypt -d "$seq" "$pass" "$interactive")"
-    [[ $? != 0 || -z $seq ]] && echo "Error during encryption" >/dev/stderr && return 1
-    [[ $verbose -ge 1 ]] && echo "$seq"
+    [[ $? != 0 || -z $seq ]] && err "Error during decryption" && return 1
+    dbg 1 "$seq"
     [[ $seq == '---' ]] && echo "$seq" && return 0
   fi # }}}
   [[ ${seq:0:1} != '+' ]] && seq="$(encode -d "$seq")" || { seq="${seq:1}"; do_encode=false; }
-  [[ $verbose -ge 2 ]] && echo "$seq"
+  dbg 2 "$seq"
   IFS=":" read -r seq upper spaces upper_first padding <<< "$seq"
   IFS="$oldIFS"
   [[ -z $seq ]] && return 0
@@ -240,7 +320,7 @@ getPass() { # {{{
     ! $spaces && words='-'
     for i in $seq; do # {{{
       w="$(getWord "$i")"
-      [[ $verbose -ge 3 ]] && echo "$i: [$w]"
+      dbg 3 "$i: [$w]"
       $upper_first && w="$(echo "$w" | sed 's/\(.\)\(.*\)/\U\1\L\2/')"
       $spaces && words+=" "
       words+="$w"
@@ -272,32 +352,36 @@ getPass() { # {{{
 genPass() { # {{{
   local cnt=4 i= v= seq= words= pass= params= input= info= \
     upper=false special=false digit=false spaces=true upper_first=false use_pass=false read_input=false \
-    save=false add_padding=true do_encode=true update=false check=
+    save=false add_padding=true do_encode=true update=false check= save_pass= passV=
   set -- $KEEP_PASS_GEN_PARAMS "$@"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --cnt)         cnt="$2"; shift;;
-    --upper)       upper=true;;
-    --special)     special=true;;
-    --digit)       digit=true;;
-    --no-sp)       spaces=false;;
-    --upper-first) upper_first=true;;
-    --pass=*)      pass="${1#--pass=}";&
-    --pass)        use_pass=true;;
-    --no-pass)     use_pass=false;;
-    --in=*)        input="${1#--in=}";&
-    --in)          read_input=true; spaces=false;;
-    --update)      update=true;&
-    --save)        save=true; info="$2"; pass=true; shift;;
-    --no-padding)  add_padding=false;;
-    --padding)     add_padding=true;;
-    --plain)       do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
-    *)             seq="$1";;
+    --cnt)             cnt="$2"; shift;;
+    --upper)           upper=true;;
+    --special)         special=true;;
+    --digit)           digit=true;;
+    --no-sp)           spaces=false;;
+    --upper-first)     upper_first=true;;
+    --pass=*)          pass="${1#--pass=}";&
+    --pass)            use_pass=true;;
+    --no-pass)         use_pass=false;;
+    --in=*)            input="${1#--in=}";&
+    --in)              read_input=true; spaces=false;;
+    --seq=*)           seq="${1#--seq=}";;
+    --seq)             seq="$2"; shift;;
+    --update | --key)  update=true;&
+    --save)            save=true; info="$2"; use_pass=true; shift;;
+    --no-padding)      add_padding=false;;
+    --padding)         add_padding=true;;
+    --pwd-save)        save_pass=true;;
+    --no-pwd-save)     save_pass=false;;
+    --plain)           do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
+    *)                 input="$1"; read_input=true; spaces=false;;
     esac
     shift
   done # }}}
   if $read_input; then # {{{
-    [[ -z $input ]] && read -r -p 'Enter input: ' input
+    [[ -z $input ]] && read -r -p 'Enter input: ' input >/dev/stderr
     seq=
     local uppers= vv= j= k=
     i=0
@@ -322,7 +406,7 @@ genPass() { # {{{
             [[ ! -z $vv ]] && seq+="$vv" && break
             k="$(($k-1))"
           done
-          [[ $verbose -ge 3 ]] && echo "${input:$i:$k-$i}: [$vv]"
+          dbg 3 "${input:$i:$k-$i}: [$vv]"
           i="$k"
         done # }}}
         ;; # }}}
@@ -380,30 +464,53 @@ genPass() { # {{{
       done
     fi # }}}
   fi # }}}
-  [[ $verbose -ge 2 ]] && echo "$(basename "$0") --seq $seq"
+  dbg 2 "$(basename "$0") --seq $seq"
   $do_encode && seq="$(encode "$seq")" || seq="+$seq"
   if $use_pass; then # {{{
-    [[ $verbose -ge 2 ]] && echo "$(basename "$0") --seq $seq"
+    dbg 2 "$(basename "$0") --seq $seq"
     if [[ -z $pass && $info == *:* ]]; then # {{{
-      local passV="$(echo "$info" | sed 's/\(.*\):\s\+.*$/\1/')"
+      passV="$(echo "$info" | sed 's/\(.*\):\s\+.*$/\1/')"
       passV="${passV#*:}"
       passV="KEEP_PASS_KEY_${passV^^}"
       pass="${!passV}"
+      dbg 2 "Pass: $pass from var $passV"
+      ${save_pass:-true} && [[ -z $pass ]] && save_pass=true
     fi # }}}
     while [[ -z $pass ]]; do # {{{
-      read -r -s -p "Enter pass: " pass && echo
+      read -r -s -p "Enter pass: " pass >/dev/stderr && echo >/dev/stderr
       [[ ! -z $pass ]] && break
-      read -p 'No pass specified, proceed without encryption [y/n] ? ' i
+      read -p 'No pass specified, proceed without encryption [y/n] ? ' >/dev/stderr
       case ${i,,} in
       y) break;;
       esac
     done # }}}
     if [[ ! -z $pass ]]; then # {{{
+      if ${save_pass:-false} \
+         && [[ ! -z "$KEEP_PASS_KEYS" ]] && [[ -e "$KEEP_PASS_KEYS" || ( "$KEEP_PASS_KEYS" == /* && "$KEEP_PASS_KEYS" != //* ) ]]; then # {{{
+        local mkey="$(getMasterkey true)"
+        [[ -z $mkey ]] && err "Failed to save passphrase" && return 1
+        if [[ ! -z $mkey ]]; then
+          echo "export $passV=\"@$(encrypt "$pass" "$mkey")\"" >>"$KEEP_PASS_KEYS"
+        fi
+      fi # }}}
       seq="*$(encrypt "$seq" "$pass")"
       params="--pass=$pass"
     fi # }}}
   fi # }}}
-  [[ $verbose -ge 1 ]] && echo -e "$(basename "$0") ${params:-\b} --seq $seq" || echo "$seq"
+  if [[ $verbose -ge 1 ]]; then
+    dbg 1 -e "$(basename "$0") ${params:-\b} --seq $seq"
+  else
+    ! $save && echo "$seq"
+  fi
+  check="$(getPass $params --seq $seq)"
+  dbg 1 "$check"
+  check="$(echo "$check" | tail -n1)"
+  if [[ "$check" != "$input" && ! -z $input ]]; then # {{{
+   err "Decrypted phrase does not match input"
+   err "Input  : $input"
+   err "Phrase : $check"
+   return 1
+  fi # }}}
   if $save; then # {{{
     [[ -z $info ]] && info="$(command date +"%Y%m%d-%H%M%S")"
     local entry="${info// /-}:" journalFile="$KEEP_PASS_JOURNAL"
@@ -412,26 +519,18 @@ genPass() { # {{{
     elif [[ -e "$PWD/keep-pass.journal" ]]; then
       journalFile="$PWD/keep-pass.journal"
     fi
-    [[ -z $journalFile ]] && echo "Journal file not found" >/dev/stderr && return 1
+    [[ -z $journalFile ]] && err "Journal file not found" && return 1
     while [[ ${#entry} -lt 18 ]]; do entry+=' '; done
     entry+="\t"
     entry+="$seq"
     if $update; then
       sed -i -e "/^${entry%%:*}\(:.*\)\{0,1\}:\s\+.*/ d" "$journalFile"
     elif hasKey "${entry%%:*}"; then
-      echo "The key '${entry%%:*}' already exists"
+      dbg 0 "The key '${entry%%:*}' already exists"
     fi
     echo -e "$entry" >> "$journalFile"
   fi # }}}
-  check="$(getPass $params --seq $seq)"
-  [[ $verbose -ge 1 ]] && echo "$check"
-  check="$(echo "$check" | tail -n1)"
-  if [[ "$check" != "$input" && ! -z $input ]]; then
-   echo "Decrypted phrase does not match input"
-   echo "Input  : $input"
-   echo "Phrase : $check"
-   return 1
- fi
+  return 0
 } # }}}
 hasKey() { # {{{
   local f=
@@ -487,11 +586,19 @@ while [[ ! -z $1 ]]; do # {{{
   shift
 done # }}}
 case $1 in
+--help) # {{{
+  echo "Usage:"
+  echo "  $(basename "$0") --gen --save name:env-pwd phrase"
+  echo "  $(basename "$0") --get --key name"
+  # echo "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
+  exit 0;; # }}}
 --get)             shift; getPass "$@";;
 --gen)             shift; genPass "$@";;
+--save)            genPass "$@";;
 --has-key)         shift; hasKey "$1";;
 --list-keys)       shift; listKeys $@;;
 --list-all-keys)   shift; listKeys --all $@;;
+--set-master-key)  shift; setMasterKey $@;;
 --test)            shift; $@;;
 *)                 getPass "$@";;
 esac

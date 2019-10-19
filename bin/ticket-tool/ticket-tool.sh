@@ -11,7 +11,7 @@ mapCommand() { # {{{
   s)    ret='setup';;
   tm)   ret='tmux';;
   *)    # {{{
-        for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do
+        for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do
           ret="$($ext --map-cmd "$cmd")"
           [[ ! -z $ret ]] && break
         done;; # }}}
@@ -37,7 +37,7 @@ esac
 getIssueFile() { # {{{
   [[ -e "$path_issue/${issue}-data.txt" ]] && echo "$path_issue/${issue}-data.txt" && return 0
   [[ -e "$path_issue/.${issue}-data.txt" ]] && echo "$path_issue/.${issue}-data.txt" && return 0
-  echo "Cannot find issue file for issue '$issue'/'$path_issne'" >/dev/stderr
+  echo "Cannot find issue file for issue '$issue'/'$path_issue'" >/dev/stderr
   return 1
 } # }}}
 # Path to issue # {{{
@@ -45,15 +45,27 @@ path_issue="$($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$issue" true)"
 ! getIssueFile >/dev/null 2>&1 && echo "Issue [$issue] not present" >/dev/stderr && exit 1
 path_issue="${path_issue/$PWD/.}"
 # }}}
+if [[ -z $orig_cmd ]]; then
+  case $1 in
+  @@ | \? ) # {{{
+    orig_cmd="$2";; # }}}
+  *) orig_cmd="$1";;
+  esac
+  export orig_cmd
+fi
 cmd="$(mapCommand "$1")" && shift
-[[ ! -z $ret ]] && cmd="$ret"
 params="$@"
+if [[ $cmd == *\ * ]]; then
+  params="${cmd#* } $params"
+  set -- ${cmd#* } "$@"
+  cmd="${cmd%% *}"
+fi
 cmd_TT="${0/$PWD\/} --issue"
 cmd_tt="$cmd_TT $issue"
 setup="$cmd_tt setup"
 fzf_params="--no-multi --cycle --ansi --tac --layout=default --height=100%"
 export issue path_issue cmd params cmd_tt cmd_TT setup fzf_params
-for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
   eval "$($ext --env)"
 done # }}}
 getFunctionBodyRaw() { # {{{
@@ -76,12 +88,12 @@ case "$cmd" in
 @@)  # {{{
   [[ $verbose -ge 2 ]] && set -xv
   if [[ -z $1 || $1 == 1 ]]; then # {{{
-    ret="? cd edit env archive clean setup browser"
+    ret="? cd edit env archive clean setup browser layout"
     if [[ $PWD == $TICKET_PATH* ]]; then
       ret+=" tmux"
       git -C $TICKET_PATH rev-parse 2>/dev/null && ret+=" commit"
     fi
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
       ret+=" $($ext @@)"
     done # }}}
     ret+=" $(getFunctions)"
@@ -94,16 +106,22 @@ case "$cmd" in
       echo "--all --all-all --clean --pkg --test";; # }}}
     browser) # {{{
       echo "@ff @chrome @chromium -1";; # }}}
-    cd | edit) # {{{
+    cd) # {{{
+      echo "-v --get"
+      [[ -e $path_issue ]] && echo "$(command cd $path_issue && find . -maxdepth 2 -type d | sed -e '/^\.$/d' -e 's|^\./||' -e '/^\./d')"
+      ;; # }}}
+    edit) # {{{
       echo "-v";; # }}}
     commit) # {{{
       echo "-p -b";; # }}}
+    layout) # {{{
+      echo "save restore -q --stdin --stdout -e";; # }}}
     setup) # {{{
       $cmd_tt setup @@ "$@";; # }}}
     \?) # {{{
       getFunctions;; # }}}
     *) # {{{
-      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         $ext @@ $cmd $@ && exit 0
       done # }}}
       ret=
@@ -126,7 +144,7 @@ case "$cmd" in
     ret=
     ret+=" env info setup"
     ret+=" $(getFunctions)"
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
       ret+=" $($ext ?)"
     done # }}}
     echo "$ret" | tr ' ' '\n' | sort -u | tr '\n' ' '
@@ -219,7 +237,7 @@ browser) # {{{
     else
       urls="$($cmd_tt $cmd $params)"
     fi
-    urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\L\1/p')"
+    urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\1/p')"
     [[ -z $urls ]] && echo -e "No ULRs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
     ! $all && urls="$(echo "$urls" | head -n1)"
   fi
@@ -235,7 +253,19 @@ browser) # {{{
     esac
   done;; # }}}
 cd) # {{{
-  [[ $1 == "-v" ]] && ( cd $path_issue; pwd; ) || { cd "$path_issue"; exec bash; }
+  cmd='exec bash' p="$path_issue"
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -v)    cmd='pwd';;
+    --get) shift; eval tar -cf - "$1" | $cmd_tt cd "$2"; exit $?;;
+    *)     p+="/$1";;
+    esac
+    shift
+  done
+  [[ ! -e $p ]] && echo command mkdir -p $p
+  [[ ! -t 1 ]] && cmd="pwd"
+  [[ ! -t 0 ]] && cmd="tar xf -"
+  ( command cd $p; eval $cmd; )
   ;; # }}}
 clean) # {{{
   is_git=false
@@ -284,6 +314,62 @@ edit) # {{{
   [[ -e "$(dirname "$f")/Session.vim" ]] && (command cd "$(dirname "$f")"; vim-session;) && exit 0
   vim $f
   ;; # }}}
+layout) # {{{
+  f="$(getIssueFile)" quiet=false use_stdin=false use_stdout=false todo= entry="${TICKET_CONF_LAYOUT_ENTRY:-LAYOUT}"
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    save | restore) todo="$1";;
+    -q)             quiet=true;;
+    --stdin)        use_stdin=true;;
+    --stdout)       use_stdout=true;;
+    -e)             entry="$2"; shift;;
+    *)              break;;
+    esac
+    shift
+  done # }}}
+  layoutSaved="$(sed -n "s|^# j-info: $entry: \(.*\)$|\1|p" "$f")"
+  layout="$(tmux display-message -t $TMUX_PANE -pF '#{window_layout}')"
+  if [[ -z $todo ]]; then
+    todo='save'
+    [[ ! -z "$layoutSaved" ]] && todo='restore'
+  fi
+  [[ ! -t 1 ]] && use_stdout=true && todo='save'
+  [[ ! -t 0 ]] && use_stdin=true && todo='restore'
+  case $todo in
+  save) # {{{
+    if ! $use_stdout; then
+      if ! command grep -q "^# j-info: -*$entry:" "$f"; then
+        $quiet || ( echo "No '$entry' section in the header"; echo "Add '# j-info: -$entry:' there first"; ) >/dev/stderr
+        exit 1
+      fi
+      sed -i "s|^# j-info: -*$entry:.*$|# j-info: $entry: |" "$f"
+      sed -i "s|^\(# j-info: $entry:\).*$|\1 $layout|" "$f"
+    else
+      echo "$layout"
+    fi
+    ;; # }}}
+  restore) # {{{
+    tmux display-message -t $TMUX_PANE -pF '#{window_flags}' | command grep -q "Z" && exit 0
+    layout_old="$layout"
+    if ! $use_stdin; then
+      if [[ -z "$layoutSaved" ]]; then
+        $quiet || ( echo "Layout not defined"; ) >/dev/stderr
+        exit 1
+      fi
+      layout="$layoutSaved"
+    else
+      [[ ! -t 0 ]] && read layout || layout="$@"
+    fi
+    [[ -z "$layout" ]] && exit 1
+    if [[ "$layout" != "$layout_old" ]]; then
+      $quiet || echo "layout=\"$layout_old\""
+      tmux select-layout -t $TMUX_PANE "$layout" >/dev/null 2>&1
+      exit $?
+    fi
+    exit 0
+    ;; # }}}
+  esac
+  ;; # }}}
 tmux) # {{{
   [[ $PWD != $TICKET_PATH* ]] && exit 1
   title="${issue}"
@@ -304,7 +390,7 @@ tmux) # {{{
       set-option   -t $w -w @locked_title 1    \; \
       split-window -t $w.1 -d -c $pl_abs -v -p30
     $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
-    func="$(getFunctionBody "tmux-init")"
+    func="$(getFunctionBody "tmux-init" --plain)"
     [[ ! -z $func ]] && bash -c "$func" - "$@"
     sleep 1
     cmd="${@:-vim-session}"
@@ -315,12 +401,13 @@ tmux) # {{{
   else # {{{
     func="$(getFunctionBody "tmux-splits")"
     if [[ ! -z $func ]]; then
-      bash -c "$func" - "$@"
-      tmux select-pane -t $w.1
-      $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
-      sleep 1
-      func="$(getFunctionBody "tmux-cmds")"
-      [[ ! -z $func ]] && bash -c "$func" - "$@"
+      if bash -c "$func" - "$@"; then
+        tmux select-pane -t $w.1
+        $BASH_PATH/aliases set_title --from-tmux $w --lock-force "$title"
+        sleep 1
+        func="$(getFunctionBody "tmux-cmds")"
+        [[ ! -z $func ]] && bash -c "$func" - "$@"
+      fi
     fi
   fi # }}}
   exit 0;; # }}}
@@ -333,7 +420,7 @@ setup) # {{{
       case $1 in
       *) # {{{
         handled=false
-        for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
           v="$($ext $cmd $1)"
           [[ ! -z $v ]] && { eval "$v"; handled=true; break; }
         done # }}}
@@ -352,8 +439,9 @@ setup) # {{{
       shift
     done # }}}
     if [[ -z $1 || $1 == --full ]]; then # {{{
-      ret="--loop ?"
-      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ret=
+      [[ $orig_cmd == 'setup' ]] && ret+=" --loop ?"
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         ret+=" $($ext $cmd "get-ext-commands" $1)"
         ret+=" $($ext $cmd "get-ext-switches")"
       done # }}}
@@ -361,7 +449,7 @@ setup) # {{{
       # }}}
     else # {{{
       ret=
-      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         ret="$($ext $cmd @@ "$@")"
         [[ -z $ret ]] || break
       done # }}}
@@ -383,7 +471,7 @@ setup) # {{{
       echo  "Quit";; # }}}
     *) # {{{
       source $BASH_PATH/colors
-      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         ret="$($ext $cmd "$@")"
         [[ -z $ret ]] || break
       done # }}}
@@ -407,7 +495,7 @@ setup) # {{{
         [[ ! -z "$l" ]] && l+="\n"
       fi # }}}
       ext_cmds=
-      for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         ext_cmds+=" $($ext $cmd "get-ext-commands")"
       done # }}}
       ext_cmds="$(echo "$ext_cmds" | tr ' ' '\n')\n"
@@ -442,8 +530,8 @@ setup) # {{{
       done # }}}
     done;; # }}} # }}}
   *) # {{{
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
-      $ext $cmd $@ && exit 0
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      $ext $cmd "$@" && exit 0
     done # }}}
     [[ ! -z "$func" ]] && bash -c "$func" - "$@" ;; # }}}
   esac
@@ -501,7 +589,7 @@ setup) # {{{
     fi;; # }}}
   [a-z]*) # {{{
     export DO_SOURCE=true
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
       $ext $cmd "$@"
       err=$?
       [[ $err != 255 ]] && exit $err

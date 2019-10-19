@@ -16,7 +16,7 @@ do_update() { # {{{
   for i in $BASH_UPDATE_REPOS; do
     [[ ! -e $i ]] && echo "Repository ($i) does not exist" && continue
     cd $i
-    git sync --skip-backup
+    git sync --interactive --skip-backup
   done
   cd $pwd
 } # }}}

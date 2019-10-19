@@ -57,6 +57,14 @@
   diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f "$@";'" -
   dc    = !"git diffc"
   dp    = !"git diffp"
+  dr    = !"bash -c 'f() { ups=""; \
+              if [[ -z $1 ]]; then ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; \
+              elif [[ $1 == */* ]]; then ups="$1"; \
+              else ups="$1/$(git rev-parse --abbrev-ref HEAD)"; \
+              fi; \
+              [[ -z $ups ]] && return 1; \
+              git diff $ups..@; \
+            }; f "$@";'" -
   info = log --pretty=fuller -1
   lg   = !"bash -c 'f() { local b=$1; [[ $b == -* ]] && b= || shift; if [[ ! -z $b ]]; then local c=$(($(git rev-list --count $b)-1)); [[ $c -gt 15 ]] && c=15; git lgf $@ $b~$c..$b; else git lgf $@; fi; true; }; f "$@";'" -
   lga  = !"git lg  $GIT_LOG_ALL_PARAMS --all"

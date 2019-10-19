@@ -9,6 +9,8 @@ newfs_hfs -v 'memfs' $ramdisk_dev
 command mkdir -p $mount_point
 mount -o noatime,nobrowse -t hfs $ramdisk_dev $mount_point
 touch $mount_point/mounted.txt
+command mkdir -p $mount_point/.desktop
+ln -sf $mount_point/.desktop $HOME/Desktop/tmp/mem
 
 # echo "remove with:"
 # echo "umount $mount_point"

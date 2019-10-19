@@ -323,59 +323,54 @@ svn_rb() { # {{{
   return 0
 } # }}}
 do_sync() { # {{{
-  local params=$@
-  local parRemote=
-  local parBranch=
-  local skipBackup=false
-  local verbose=false
-  local quiet=false
-  local resetH=false
-  local dots=true
-  while [[ ! -z $1 ]]; do
+  local params=$@ parRemote= parBranch= skipBackup= verbose=false quiet=false resetH=false interactive=false dots=true
+  while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --skip-backup) skipBackup=true;;
+    --do-backup) skipBackup=false;;
     --remote) shift; parRemote+=" $1";;
     --branch) shift; parBranch=$1;;
-    --reset)  resetH=true;;
+    --reset)  resetH=true; [[ -z $skipBackup ]] && skipBackup=true;;
     --verbose|-v) verbose=true;;
     --quiet) quiet=true; verbose=false;;
     --no-dots) dots=false;;
+    --interactive) interactive=true;;
     esac
     shift
-  done
+  done # }}}
+  [[ -z $skipBackup ]] && skipBackup=false
   $verbose && dots=false
-  if [[ -z $parBranch ]]; then
+  if [[ -z $parBranch ]]; then # {{{
     parBranch="$(git rev-parse --abbrev-ref HEAD)"
     [[ $parBranch == 'HEAD' ]] && parBranch=
-  fi
+  fi # }}}
   [[ -z $parBranch ]] && parBranch='master'
   local remotes="$parRemote origin _backup-gl _backup-gw _backup-hdd _backup-usb tom _backup"
-  local done_remotes
-  local remote
+  local done_remotes= remote
   local cmd="git-cmds.sh --test do_sync $params --skip-backup $(! $verbose && echo "--quiet")"
   export cmd
   source $BIN_PATH/bash/colors
   local dir=${PWD/$HOME/~}
-  if ! $quiet; then
+  if ! $quiet; then # {{{
     if $dots; then
       $BASH_PATH/aliases progress --mark --msg "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+3)) 3)"
     elif ! $verbose; then
       echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
     fi
-  fi
+  fi # }}}
   git submodule --quiet foreach 'cd $PWD; $cmd || true'
   $verbose && echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
   for remote in $remotes; do
     local remoteUrl=$(git config --get remote.$remote.url)
     remoteUrl=${remoteUrl/\~/$HOME}
-    if [[ $remoteUrl == http* ]]; then
+    if [[ $remoteUrl == http* ]]; then # {{{
       $verbose && echo "[${CGold}FOREIGN${COff}]"
       return 0
-    fi
-    if [[ $done_remotes == *$remote* && $remote != "_backup" ]]; then
+    fi # }}}
+    if [[ $done_remotes == *$remote* && $remote != "_backup" ]]; then # {{{
       $verbose && echo "[${CGold}Skipping ($remote)${COff}]"
       continue
-    fi
+    fi # }}}
     done_remotes+=" $remote"
     [[ $(git remote) != *$remote* ]] && continue
     ! $quiet && ! $dots && echo "[${CCyan}Syncing from $remote...${COff}]"
@@ -383,15 +378,35 @@ do_sync() { # {{{
       local stash=$(git status --short)
       [[ -z $stash ]] && stash=false || stash=true
       $stash && git stash -q
-      if git rebase -q $remote/$parBranch $parBranch; then
-        if ! $skipBackup; then
+      if git rebase -q $remote/$parBranch $parBranch; then # {{{
+        if ! $skipBackup; then # {{{
           $verbose && echo "Backing up..."
           git backup
-        fi
-      elif $resetH; then
+        fi # }}}
+        # }}}
+      elif $resetH; then # {{{
         git rebase --abort
+        git tag -d tmp/sync >/dev/null 2>&1
+        git tag tmp/sync >/dev/null 2>&1
         git reset --hard $remote/$parBranch
-      fi
+        if ! $skipBackup; then # {{{
+          $verbose && echo "Backing up..."
+          git backup
+        fi # }}}
+        # }}}
+      elif $interactive; then # {{{
+        ! $quiet && $dots && { $BASH_PATH/aliases progress --unmark; dots=false; }
+        echo "Resolve confilicts and exit shell..." >/dev/stderr
+        if $SHELL && ! $skipBackup; then # {{{
+          $verbose && echo "Backing up..."
+          git backup
+        fi # }}}
+        # }}}
+      else # {{{
+        ! $quiet && $dots && { $BASH_PATH/aliases progress --unmark;  dots=false; }
+        echo "Rebase was aborted due to conflicts..." >/dev/stderr
+        git rebase --abort
+      fi # }}}
       $stash && git stash pop -q
       break
     fi
@@ -404,8 +419,8 @@ sync() { # {{{
   local repos=$PWD
   local saveTime=false
   local params=
-  if [[ $1 == '@@' ]]; then
-    local ret="--all --all-all --env --remote -r --branch -b --skip-backup --reset --no-dots"
+  if [[ $1 == '@@' ]]; then # {{{
+    local ret="--all --all-all --env --remote -r --branch -b --skip-backup --do-backup --interactive --reset --no-dots"
     local args=("$@")
     case ${args[$((${#args[*]}-1))]} in
     -b|--branch) ret="$(git branch | sed 's/^..//')";;
@@ -413,28 +428,25 @@ sync() { # {{{
     esac
     echo $ret
     return 0
-  fi
-  while [[ ! -z $1 ]]; do
+  fi # }}}
+  while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --all-all) repos=$GIT_REPOS; saveTime=true;;
     --all | --env) repos="$BASH_UPDATE_REPOS"; saveTime=true;;
     -r|--remote) shift; remote+=" --remote $1";;
     -b|--branch) shift; branch="--branch $1";;
-    --skip-backup) params+=" --skip-backup";;
-    -v|--verbose) params+=" --verbose";;
-    --reset) params+=" --reset";;
-    --no-dots) params+=" --no-dots";;
+    *) params+=" $1";;
     esac
     shift
-  done
+  done # }}}
   source $BIN_PATH/bash/colors
-  for r in $repos; do
+  for r in $repos; do # {{{
     [[ $r == @* ]] && continue
     r=${r/:*}
     pushd $r >/dev/null
     do_sync $params $remote $branch
     popd >/dev/null
-  done
+  done # }}}
   $saveTime && [[ -e $BIN_PATH/setup_updater.sh ]] && $BIN_PATH/setup_updater.sh --saveTime
 } # }}}
 commit_fast() { # {{{
@@ -480,8 +492,7 @@ userset() { # {{{
     return 0
   fi
   local user= name= email= value=
-  local params=${@:-"-d default"}
-  set -- $params
+  [[ -z $@ ]] && set -- -d default
   while [[ ! -z $1 ]]; do
     case $1 in
       -d|--default)

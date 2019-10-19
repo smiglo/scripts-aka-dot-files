@@ -25,8 +25,8 @@ done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#'
 unset l TMUX_STATUS_RIGHT_EXTRA
 # }}}
 # Source profiles' runtimes {{{
-for i in $BASH_PROFILES; do
-  [[ -e $BASH_PATH/profiles/$i/runtime-post ]] && source $BASH_PATH/profiles/$i/runtime-post
+for i in $BASH_PROFILES_FULL; do
+  [[ -e $i/runtime-post ]] && source $i/runtime-post
 done # }}}
 if ${CHANGE_UTILS_PATHS:-false}; then # {{{
   [[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
@@ -71,7 +71,7 @@ if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]
         if [[ ! -z $REMOTE_CHANGES_KEY ]]; then
           p="--key '$REMOTE_CHANGES_KEY'"
         else
-          p="--pass '$($BASH_PATH/profiles/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")'"
+          p="--pass '$($PROFILES_PATH/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")'"
         fi
         if ! eval $BASH_PATH/aliases encryptor $p "$i" "$j"; then
           echo "Cannot decrypt [$file]"

@@ -29,6 +29,10 @@ export CD_INTERACTIVE_PREDEFINED_LIST=
 export CD_INTERACTIVE_USER_LIST=
 export CD_LAST_DIRS_INTERACTIVE_IGNORE=
 export CD_LAST_DIRS_STORED=
+export CLANG_PARAMS_COMMON=
+export CLANG_PARAMS_W="-Wall -Wno-disabled-macro-expansion"
+export CLANG_PARAMS="-std=c99"
+export CLANGPP_PARAMS="-std=c++11"
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
@@ -53,6 +57,7 @@ export PHISTORY_IGNORED_COMMANDS+="exec"
 export PHISTORY_IGNORED_COMMANDS+=":ls:ll:cd"
 export PHISTORY_IGNORED_COMMANDS+=":@vi@:@vim@:vim-session"
 export PHISTORY_IGNORED_COMMANDS+=":$BIN_PATH/*:$BASH_PATH/*:./bash/aliases\ *:\$BIN_PATH/*:\$BASH_PATH/*"
+export PHISTORY_IGNORED_COMMANDS+=":sendMsg"
 export PS1_ENV_PWD=
 export SCRIPT_PATH=
 export SET_TITLE_GETTER_MAP=
@@ -82,22 +87,18 @@ export RUNTIME_PATH=$HOME/.runtime
 [[ ! -e $RUNTIME_PATH ]] && command mkdir $RUNTIME_PATH
 [[ ! -e $RUNTIME_PATH/tmux-buffers ]] && command mkdir $RUNTIME_PATH/tmux-buffers
 export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
+export APPS_CFG_PATH=$RUNTIME_PATH/apps
+[[ ! -e $APPS_CFG_PATH ]] && command mkdir $APPS_CFG_PATH
 # }}}
 # Personalities # {{{
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
 [[ -e $RUNTIME_PATH/personalities ]] && source $RUNTIME_PATH/personalities
 # }}}
 # Profiles # {{{
-export BASH_PROFILES="$(cd $BASH_PATH/profiles; echo *)"
+export PROFILES_PATH="$BASH_PATH/profiles"
+export BASH_PROFILES="$(command cd $PROFILES_PATH; echo *)"
 [[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
-# }}}
-# Runtime file # {{{
-export RUNTIME_FILE=$RUNTIME_PATH/runtime.bash
-[[ ! -e $RUNTIME_FILE ]] && touch $RUNTIME_FILE
-source $RUNTIME_FILE
-for i in $BASH_PROFILES; do
-  [[ -e $RUNTIME_FILE.$i ]] && source $RUNTIME_FILE.$i
-done
+export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
 # }}}
 # Path # {{{
 export PATH=@END@:$PATH
@@ -162,15 +163,16 @@ export DROPBOX_PATH=$HOME/Documents/Dropbox
 [[ ! -e $DROPBOX_PATH ]] && export DROPBOX_PATH=
 if [[ ! -z $DROPBOX_PATH ]]; then
   export CD_LAST_DIRS_STORED+=":Dr@$DROPBOX_PATH"
-  export SHARED_BASH_PATH=$DROPBOX_PATH/rozne/bash-utils
+  export SHARED_BASH_PATH=$DROPBOX_PATH/sharable/bash-utils
   [[ -e $SHARED_BASH_PATH/runtime.bash ]] && source $SHARED_BASH_PATH/runtime.bash
 fi
 # }}}
 # TMP setup {{{
 export TMP_PATH=$HOME/.tmp
 export TMP_MEM_PATH=$TMP_PATH/.mem
-export TMPDIR=$TMP_PATH/tmp-dir
+export TMPDIR=$TMP_PATH/.tmp-dir
 [[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
+chmod 700 $TMPDIR
 [[ ! -d $TMP_MEM_PATH ]] && echo "Memory fs does not exist [$TMP_MEM_PATH]. It will be created" && command mkdir -p $TMP_MEM_PATH && chmod 700 $TMP_MEM_PATH
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
 export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
@@ -179,40 +181,39 @@ export TMUX_TMPDIR=$TMP_MEM_PATH/.tmux
 [[ ! -d $TMUX_TMPDIR ]] && command mkdir -p $TMUX_TMPDIR && chmod 700 $TMUX_TMPDIR
 export GREP_LAST_PATH=$TMP_PATH/.grep-last
 export VIM_UTILS_PATH="$TMP_PATH/.vim"
-export VIM_SESSIONS_PATH=$VIM_UTILS_PATH/sessions
 if [[ -n $TMUX ]]; then
   export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
-  export TMUX_SESSION_PATH="$TMP_PATH/.tmux-sessions/$TMUX_SESSION"
+  export TMUX_SESSION_PATH="$TMP_PATH/.tmux/sessions/$TMUX_SESSION"
   [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
   export GREP_LAST_PATH="$TMUX_SESSION_PATH/grep-last"
   export VIM_UTILS_PATH="$TMUX_SESSION_PATH/vim"
-  export VIM_SESSIONS_PATH="$TMUX_SESSION_PATH/vim/sessions"
   export TMUX_RUNTIME="$TMUX_SESSION_PATH/runtime"
-fi
-export VIM_UNDOES_PATH="$VIM_UTILS_PATH/undoes"
-[[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
-[[ ! -e $VIM_UTILS_PATH ]] && command mkdir -p $VIM_UTILS_PATH
-[[ ! -e $VIM_UNDOES_PATH ]] && command mkdir -p $VIM_UNDOES_PATH
-[[ ! -e $VIM_SESSIONS_PATH ]] && command mkdir -p $VIM_SESSIONS_PATH
-if [[ ! -z $TMUX_RUNTIME ]]; then # {{{
   [[ ! -e $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION ]] && command mkdir -p $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION
   [[ ! -e $TMUX_RUNTIME ]] && ln -sf $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION $TMUX_RUNTIME
 else
   export TMUX_RUNTIME="$TMP_MEM_PATH/runtime"
   [[ ! -e $TMUX_RUNTIME ]] && command mkdir -p $TMUX_RUNTIME
-fi # }}}
+fi
+export VIM_SESSIONS_PATH=$VIM_UTILS_PATH/sessions
+export VIM_UNDOES_PATH="$VIM_UTILS_PATH/undoes"
+[[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
+[[ ! -e $VIM_UTILS_PATH ]] && command mkdir -p $VIM_UTILS_PATH
+[[ ! -e $VIM_UNDOES_PATH ]] && command mkdir -p $VIM_UNDOES_PATH
+[[ ! -e $VIM_SESSIONS_PATH ]] && command mkdir -p $VIM_SESSIONS_PATH
 # }}}
 # Clean TMP # {{{
 if [[ $(id -u) != 0 ]]; then # {{{
   now=$(command date +"%s")
   check_file=$TMP_MEM_PATH/.tmp-last-check
   do_clean=false
+  [[ "$1" == '--clean-tmp' ]] && do_clean=true && shift
+  [[ "$1" == '--clean-tmp-silent' ]] && do_clean='silent' && shift
   if [[ -z $TMP_PATH_LAST_CHECK && ! -e $check_file ]]; then # {{{
     sleep .$((1+($RANDOM%5)))
     [[ ! -e $check_file ]] && echo "$now" >$check_file && do_clean=true
   fi # }}}
   [[ ${TMP_PATH_LAST_CHECK:-0} -lt $(($now - 1 * 18 * 60 * 60)) ]] && export TMP_PATH_LAST_CHECK=$(cat $check_file)
-  if [[ $TMP_PATH_LAST_CHECK -lt $(($now - 1 * 18 * 60 * 60)) ]] || $do_clean; then # {{{
+  if [[ $TMP_PATH_LAST_CHECK -lt $(($now - 1 * 18 * 60 * 60)) || $do_clean != 'false' ]]; then # {{{
     export TMP_PATH_LAST_CHECK=$now
     echo $TMP_PATH_LAST_CHECK >$check_file
     (
@@ -220,13 +221,15 @@ if [[ $(id -u) != 0 ]]; then # {{{
       [[ -z $COff ]] && source $BASH_PATH/colors
       paths=""
       paths+=" p=\"$TMP_MEM_PATH\";threshold=7;size=50"
-      paths+=" p=\"$TMPDIR\";threshold=1;silent=true;size=250"
+      paths+=" p=\"$TMPDIR\";threshold=21;silent=true;size=250"
       paths+=" p=\"${RMF_TRASH_PATH:-$TMP_PATH/.trash}\";threshold=7;silent=true;size=200"
       paths+=" p=\"$TMP_PATH\";size=150"
+      paths+=" p=\"$TMP_PATH/.tmux/buffers\";silent=true"
+      paths+=" p=\"$TMP_PATH/.tmux/layouts\";silent=true;keep=\"^\\(.*/\\)\\?l\\(\\..*\\)\?\\.layout\""
       paths+=" p=\"$TMP_PATH/.grep-last\";silent=true;size=15"
       paths+=" p=\"$TMP_PATH/.vim/undoes\";silent=true;size=20"
       paths+=" p=\"$TMP_PATH/.vim/sessions\";silent=true;threshold=42"
-      for p in $TMP_PATH/.tmux-sessions/*; do # {{{
+      for p in $TMP_PATH/.tmux/sessions/*; do # {{{
         [[ $p == */ROOT ]] && continue
         paths+=" p=\"$p/grep-last\";size=15"
         paths+=" p=\"$p/vim/undoes\";size=20"
@@ -235,8 +238,10 @@ if [[ $(id -u) != 0 ]]; then # {{{
       marker="$TMP_MEM_PATH/.marker.$$"
       # }}}
       for p in $paths; do # {{{
-        threshold=21 size= silent=false
+        threshold=21 size= silent=false keep='-----'
+        [[ $do_clean == 'silent' ]] && silent=true
         eval "$p"
+        export keep
         touch -t "$(command date +"%Y%m%d%H%M.%S" -d "$threshold days ago")" $marker
         msg="${CBlue}Cleaning tmp"
         [[ $p == $TMP_MEM_PATH ]] && msg+="-mem"
@@ -246,7 +251,7 @@ if [[ $(id -u) != 0 ]]; then # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
           -exec \
-            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
+            /bin/bash -c 'f() { [[ ! -z "'$keep'" ]] && echo "${1/$2\/}" | command grep -qe "'$keep'" && return 0; ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         # Dead links # {{{
         find $p \
@@ -258,13 +263,24 @@ if [[ $(id -u) != 0 ]]; then # {{{
         find $p \
           -mindepth 1 -not -path $p/'.*' -a -type d -a -not -newer $marker -a -empty \
           -exec \
-            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']"; }; f "{}" '\"$p\"';' \; \
-          -delete \
+            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']"; rm -rf "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         rm -f $marker
         [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && echo -en "\nSize greater than [${CCyan}${size}${COff}]"
         $BASH_PATH/aliases progress --unmark
       done # }}}
+      if which tac >/dev/null 2>&1 && [[ ! -n $TMUX || $do_clean != 'false' ]]; then
+        $BASH_PATH/aliases progress --mark --dots --msg "${CBlue}Cleaning bash histories" --color ${CCyan} --delay 0.1
+        find -L $TMP_PATH/.tmux -maxdepth 3 -name bash_history \
+          -exec \
+            /bin/bash -c 'f() { \
+              sed -i -e "/^#/d" -e "s/\s\+$//" "$1" \
+              && tac "$1" | awk '"'"'!seen[$0] {print} {++seen[$0]}'"'"' | tac >"$1.bck" \
+              && mv "$1.bck" "$1"; \
+            }; f "{}"' \; \
+          2>/dev/null
+        $BASH_PATH/aliases progress --unmark
+      fi
     )
   fi # }}}
   unset check_file now do_clean
@@ -279,9 +295,18 @@ GIT_PATH="/usr/local/git/current"
 # PATH {{{
 [[ -e $HOME/.cargo/bin ]] && export PATH="$HOME/.cargo/bin:$PATH"
 # }}}
-# Source profiles' runtimes {{{
+# Runtime file # {{{
+export RUNTIME_FILE=$RUNTIME_PATH/runtime.bash
+[[ ! -e $RUNTIME_FILE ]] && touch $RUNTIME_FILE
+source $RUNTIME_FILE
 for i in $BASH_PROFILES; do
-  [[ -e $BASH_PATH/profiles/$i/runtime ]] && source $BASH_PATH/profiles/$i/runtime
+  [[ -e $RUNTIME_FILE.$i ]] && source $RUNTIME_FILE.$i
 done
+# }}}
+# Source profiles' runtimes {{{
+for i in $BASH_PROFILES_FULL; do
+  [[ -e $i/runtime ]] && source $i/runtime
+done
+true
 # }}}
 

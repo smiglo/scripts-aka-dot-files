@@ -45,7 +45,7 @@ getIssue() { # {{{
     return 0
   fi
   for ii in $list; do # {{{
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       p="$($ext --ticket-path $ii)"
       [[ ! -z $p && ( -e "$p/${ii}-data.txt" || -e "$p/.${ii}-data.txt" ) ]] && putOnList "$ii" && return 0
     done # }}}
@@ -146,7 +146,8 @@ saveConfiguration() { # {{{
   ) >> $confFile
 } # }}}
 verbose=${TICKET_J_VERBOSE:-0} issue= wNr= i= do_grep=false reset_only=false
-TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false
+TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false subcmd=
+# subcmd="$TICKET_J_DEFAULT_SUBCMD"
 if [[ $1 == --test ]]; then # {{{
   shift && ( set -xv; "$@"; )
   exit $?
@@ -241,8 +242,9 @@ while [[ ! -z $1 ]]; do # {{{
       [[ -z $list ]] && exit 0
       issue="${list%% *}"
     else
-      issue="${1%/}"
+      issue="$1"
       [[ $# -gt 1 ]] && issue="${@: -1}"
+      issue="${issue%/}"
     fi
     $TICKET_TOOL_PATH/ticket-setup.sh --open ${list//\/}
     [[ ! -z $issue ]] && ISSUE_FALLBACK="$issue" && saveConfiguration
@@ -269,6 +271,7 @@ while [[ ! -z $1 ]]; do # {{{
       $0 $body "$@"
     fi
     exit 0;; # }}}
+  -) subcmd='';;
   *) break;;
   esac
   shift
@@ -290,12 +293,12 @@ if $do_grep; then # {{{
   fi
   [[ -z $files ]] && echo "No files were found" >/dev/stderr && exit 0
   [[ -t 1 ]] && tmux delete-buffer -b 'ticket-data' 2>/dev/null
-  kb_file="$TMP_PATH/kb-data--${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
+  kb_file="$APPS_CFG_PATH/kb-data--${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
   [[ ! -e "$kb_file" ]] && touch -d '2000-01-01' "$kb_file"
   kb_mod="$(stat -c %Y "$kb_file")"
   $BASH_PATH/aliases progress --mark --dots --out /dev/stderr --msg "Updating DB"
   for file in $files; do # {{{
-    issue="$(echo "$file"| sed -e 's|.*/||' -e 's|-data\.txt||' -e 's|^\.||')"
+    issue="$(echo "$file"| sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
     list+="$issue\|"
     [[ $(stat -c %Y "$file") -le $kb_mod ]] && continue
     sed -i "/^$issue:/ d" "$kb_file"
@@ -306,7 +309,6 @@ if $do_grep; then # {{{
   done # }}}
   $updated && sort -t':' -k1,1 -s "$kb_file" >"${kb_file}.tmp" && mv "${kb_file}.tmp" "$kb_file"
   $BASH_PATH/aliases progress --unmark
-  sleep 0.3
   if [[ -t 1 ]]; then # {{{
     command grep "^\(${list:0:-2}\):" "$kb_file" | \
       fzf -i --exit-0 --no-sort --multi --height 100% --prompt='Tickets> ' \
@@ -416,7 +418,7 @@ if [[ $1 == '@@' ]]; then # {{{
     touch -t $(command date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
     files="$(getIssues -newer $marker)"
     rm $marker
-    files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/||' -e 's|-data\.txt||')"
+    files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
     ret+=" $files" ;; # }}}
   -jj | -JJ | -Jj | --setup | --init | \?\?) # {{{
     files="$(getIssues)"
@@ -439,7 +441,14 @@ if [[ $1 == '@@' ]]; then # {{{
     [[ $1 == '@@' ]] && shift
     [[ $verbose -ge 1 ]] && echo -e "\nargs-j-out=[$@]" >/dev/stderr
     [[ $verbose -ge 2 ]] && set -xv
-    [[ ! -z $issue ]] && ret+=" $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $@)"
+    if [[ ! -z $issue ]]; then
+      ret1=" $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $subcmd $@)"
+      if [[ ! -z "$ret1" ]]; then
+        ret+=" $ret1"
+      elif [[ ! -z "$subcmd" ]]; then
+        ret+=" $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $@)"
+      fi
+    fi
     [[ $verbose -ge 2 ]] && set +xv
     ;; # }}}
   esac
@@ -450,8 +459,12 @@ fi # }}}
 saveConfiguration
 [[ $verbose -ge 1 ]] && echo "i=[$issue] params=[$@]" >/dev/stderr
 [[ $verbose -ge 2 ]] && set -xv
-$TICKET_TOOL_PATH/ticket-tool.sh --issue $issue "$@"
+$TICKET_TOOL_PATH/ticket-tool.sh --issue $issue $subcmd "$@"
 err=$?
+if [[ $err != 0 && ! -z $subcmd ]] && $BASH_PATH/aliases progress --msg "Fallback command ($fallback) did not success, trying without it" --wait 2s --key; then
+  $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue "$@"
+  err=$?
+fi
 [[ $verbose -ge 2 ]] && set +xv
 exit $err
 

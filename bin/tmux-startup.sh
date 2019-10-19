@@ -231,7 +231,7 @@ initFromEnv() { # {{{
     w=$(($w+1))
   done # }}}
   $BASH_PATH/aliases progress --unmark
-  ! $silent && sleep 0.1 && echo -e "$msgs" | sed 's/^/  /'
+  ! $silent && echo -e "$msgs" | sed 's/^/  /'
   $change_window && tmux select-window -t $sessionName:1
 } # }}}
 setBuffer() { # {{{
@@ -343,7 +343,6 @@ makePreconfiguredSplits() { # {{{
 } # }}}
 initTmux_MAIN() { # {{{
   eval $(init "MAIN" "$HOME")
-  [[ ! -z $SSH_KEYS ]] && $BASH_PATH/aliases sshh-add ${SSH_KEYS/STOP}
   tmux \
     split-window  -t $sessionName:1 -v -d -c "$sessionPath" \; \
     new-window    -t $sessionName:1 -a -d -c "$sessionPath" \; \
@@ -386,8 +385,8 @@ initTmux_ROOT() { # {{{
 # }}}
 # MAIN {{{
 # Source extensions #{{{
-for i in $BASH_PROFILES; do
-  [[ -e $BASH_PATH/profiles/$i/tmux-startup.sh ]] && source $BASH_PATH/profiles/$i/tmux-startup.sh
+for i in $BASH_PROFILES_FULL; do
+  [[ -e $i/tmux-startup.sh ]] && source $i/tmux-startup.sh
 done #}}}
 # Create sessions {{{
 sessions=

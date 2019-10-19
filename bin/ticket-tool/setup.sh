@@ -6,10 +6,11 @@ if [[ -z $TICKET_PATH ]]; then # {{{
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit || return
 fi # }}}
 [[ -z $TICKET_LIST ]] && export TICKET_LIST="$TICKET_TOOL_PATH/list-basic.sh" && ${dbg:-false} && echo "TICKET_LIST set to default setter" >/dev/stderr
-open=false
+open=false layout=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
-  --open) open=true;;
+  --open)   open=true;;
+  --layout) layout=true;;
   *)      break;
   esac
   shift
@@ -36,14 +37,14 @@ elif [[ $ISSUES == '-' ]]; then # {{{
   wnd_name="${wnd_name,,}"
   ISSUES=
   if [[ $wnd_name == *-* ]]; then # {{{
-    for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       path_issue=$($ext --ticket-path "$wnd_name")
       [[ ! -z $path_issue ]] && break
     done # }}}
     if [[ ! -e $path_issue ]]; then
       wnd_name="$(echo $wnd_name | cut -d'-' -f1,2)"
       if [[ $wnd_name == *-* ]]; then
-        for ext in $(command find -L $BASH_PATH/profiles/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+        for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
           path_issue=$($ext --ticket-path "$wnd_name")
           [[ ! -z $path_issue ]] && break
         done # }}}
@@ -66,13 +67,13 @@ for i in $ISSUES; do # {{{
   i="${i,,}"
   i="${i%%:*}"
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && ${dbg:-false} && echo "Shall be sourced to source env for [$i]" >/dev/stderr
-  source $TICKET_TOOL_PATH/ticket-setup.sh $($open && echo '--open') "$i"
+  source $TICKET_TOOL_PATH/ticket-setup.sh $($open && echo '--open') $($layout && echo '--layout') "$i"
   if [[ -n $TICKET_CURRENT_TICKETS && ! -e "$TICKET_CURRENT_TICKETS/$i" && ( ! -n $TMUX || $(tmux display-message -p -t $TMUX_PANE -F '#P') == '1' ) ]]; then
     t="$(command find $TICKET_PATH -maxdepth 4 -name "$i" | head -n1)"
     [[ ! -z $t ]] && ln -sf "$t" "$TICKET_CURRENT_TICKETS/$i"
   fi
 done # }}}
-unset i s open
+unset i s open layout
 
 # ----------------------------
 # Aditional, could be implemented:
