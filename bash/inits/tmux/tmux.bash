@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 defaults() { # {{{
@@ -23,7 +23,7 @@ defaults() { # {{{
   ${IS_MAC:-false} && tmux set -qg default-command "reattach-to-user-namespace -l bash"
   # }}}
   # Lock & CMatrix # {{{
-  [[ $(id -u) != 0 ]] && type cmatrix >/dev/null 2>&1 && tmux set -qg lock-command "$BASH_PATH/aliases sshh-add --lock --tmux ${TMUX_LOCK_PRE_TIMEOUT:-60}"
+  [[ $(id -u) != 0 ]] && type cmatrix >/dev/null 2>&1 && tmux set -qg lock-command "$ALIASES sshh-add --lock --tmux ${TMUX_LOCK_PRE_TIMEOUT:-60}"
   tmux set -g lock-after-time ${TMUX_LOCK_TIMEOUT:-0} 
   # }}}
   if [[ $TMUX_VERSION -lt 24 ]]; then
@@ -65,6 +65,177 @@ defaults() { # {{{
     tmux set-environment  -g ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
   done
 } # }}}
+progress_drawer() { # {{{
+  [[ -z $1 ]] && return
+  local env="TMUX_SB_PROGRESS_INFO_${1^^}"
+  local v="|/-\\" idx=0 stopped=false do_stop= useDots=true
+  shift
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    start) tmux set-environment -g -u "$env" 2>/dev/null; return;;
+    end)   tmux set-environment -g -u "$env" 2>/dev/null; return;;
+    stop)  do_stop=true;;
+    cont)  do_stop=false;;
+    --dots)    useDots=true;;
+    --no-dots) useDots=false;;
+    esac
+    shift
+  done # }}}
+  if ${TMUX_PROGRESS_USE_EXTRA_CHARS:-true}; then
+    if $useDots; then
+      v="${UNICODE_EXTRA_CHARS[progress_dots]}"
+    else
+      v="${UNICODE_EXTRA_CHARS[progress_bar]}"
+    fi
+  fi
+  local sb_info="$(tmux show-environment -g "$env" 2>/dev/null)"
+  sb_info="${sb_info#*=}"
+  [[ ! -z $sb_info ]] && eval "$sb_info"
+  [[ ! -z "$do_stop" ]] && stopped="$do_stop"
+  if $stopped; then
+    $useDots && idx="$((${#v}-1))" || idx="7"
+  elif [[ ! -z $sb_info ]]; then
+    $useDots && idx=$(((idx+1+$RANDOM%(${#v}-2))%(${#v}-1))) || idx="$(((idx+1)%${#v}))"
+  fi
+  tmux set-environment -g "$env" "idx=\"$idx\";stopped=\"$stopped\""
+  printf "%b" "${v:$idx:1}"
+  $testing && echo
+} # }}}
+progress_bar_worker() { # {{{
+  local dir="$TMP_MEM_PATH" f_prefix="tmux_sb_progress_" f= ret=
+  for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do # {{{
+    local entry="${f##$TMP_MEM_PATH/$f_prefix}" && entry="${entry%.sh}" && entry="${entry^^}"
+    local interval= params= now="$(command date +'%s')" lastChange= delta=30 mod_delta=$((15*60)) progress=
+    local state='cont' color= text= doNext= useProgress=true extraParams= expire=
+    [[ ! -e "$f" ]] && continue
+    source "$f"
+    [[ "$state" != *'end'* && ! -z $expire && $expire != 0 && "$expire" -lt "$now" ]] && state="err-end" && sed -i 's/^state="\(.*\)\"$/state="'$state'"/' "$f"
+    [[ "$state" != *'end'* && $expire != 0 && "$(stat -c "%Y" "$f")" -lt "$(($now - $mod_delta))" ]] && state="err-end" && sed -i 's/^state="\(.*\)\"$/state="'$state'"/' "$f"
+    case $doNext in
+    remove) rm -f "$f";;
+    esac
+    [[ ! -e "$f" ]] && continue
+    if [[ -z $color ]]; then # {{{
+      case $state in
+      err*) color="124";;
+      *end) color="4";;
+      *)    color="11";;
+      esac
+    fi # }}}
+    case $state in
+    cont) # {{{
+      params="cont"
+      if [[ ! -z $lastChange && "$lastChange" != "0" ]]; then
+        echo "lastChange=\"0\"" >>"$f"
+      fi ;; # }}}
+    *end-now) # {{{
+        params="stop"
+        progress_drawer "$entry" $extraParams end
+        tmux set -qg status-interval "${interval:-30}"
+        [[ -z $doNext ]] && echo "doNext=\"remove\"" >>"$f"
+        exit 0
+      ;; # }}}
+    *end) # {{{
+      params="stop"
+      if [[ -z $lastChange || "$lastChange" == "0" ]]; then
+        lastChange="$now"
+        echo "lastChange=\"$lastChange\"" >>"$f"
+      elif [[ "$now" -gt "$((lastChange + delta))" ]]; then
+        progress_drawer "$entry" $extraParams end
+        tmux set -qg status-interval "${interval:-30}"
+        [[ -z $doNext ]] && echo "doNext=\"remove\"" >>"$f"
+        exit 0
+      fi;; # }}}
+    err*) # {{{
+      params="stop" ;; # }}}
+    esac
+    $useProgress && [[ "$text" != *"%s"* ]] && text+="%s"
+    progress="$(progress_drawer "$entry" $extraParams $params)"
+    out="$(printf "#[fg=colour%s]%s" "$color" "$text")"
+    $useProgress && out="$(printf "$out" "$progress")"
+    if [[ -z $interval ]]; then # {{{
+      interval="$(tmux show-options -vg status-interval)"
+      [[ $interval == "1" ]] && interval="30"
+      echo "interval=\"$interval\"" >>"$f"
+    fi # }}}
+    [[ "$(tmux show-options -vg status-interval)" != "1" ]] && tmux set -qg status-interval 1
+    ret+=" ${out}#[fg=default,none]"
+  done # }}}
+  echo "${ret:1}"
+} # }}}
+progress_bar() { # @@ # {{{
+  local dir="$TMP_MEM_PATH" f_prefix="tmux_sb_progress_" f=
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == 1 ]] && echo "--help"
+    case $3 in
+    purge) echo 'all all-all';;
+    *)     echo --{text,color,delta,dir,expire,no-draw} {start,end{,-now},err,cont} purge;;
+    esac
+    return 0
+    # }}}
+  elif [[ $1 == '--help' || $1 == '-h' ]]; then # {{{
+    echo
+    echo "./$(basename $0) progress_bar ENTRY [--text T] [--color C] [--delta D] [--dir D [--no-link]] [--expire E] [--no-draw] [--params P] [state]"
+    echo "./$(basename $0) progress_bar purge [all|all-all]"
+    echo
+    echo "  State: start, end|end-now [ERR], err, cont"
+    echo
+    return 0
+    # }}}
+  elif [[ $1 == 'purge' ]]; then # {{{
+    local cur_time=$(command date +%s) delta=$((15*60))
+    for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do
+      command grep -q '^state=".*end"$' "$f" && sed -i 's/^state="\(.*end\)\"$/state="\1-now"/' "$f" && continue
+      if [[ ( $2 == 'all-all' ) || ( $2 == 'all' && "$(stat -c "%Y" "$f")" -lt "$(($cur_time - $delta))" ) ]]; then
+        sed -i 's/^state="\(.*\)\"$/state="end-now"/' "$f" && continue
+      fi
+    done
+    return 0
+  fi # }}}
+  local entry="${1,,}"
+  [[ -z $entry ]] && return 1
+  shift
+  local dir="$TMP_MEM_PATH" f_prefix="tmux_sb_progress_" makeLink=false c=
+  local state= color= delta= text= expire= useProgress= extraParams=
+  source "$UNICODE_EXTRA_CHARS_FILE"
+  [[ -z $1 ]] && set -- 'start'
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    start) ;;
+    end | end-now) c=$1; [[ ! -z $2 && $2 =~ ^[0-9]+$ && $2 != "0" ]] && { shift; state="err-$c"; } || state="$c";;
+    err | cont) state="$1";;
+    --text)     text="$2"; text="${text#\"}"; text="${text%\"}"; shift;;
+    --color)    color="$2"; shift;;
+    --delta)    delta="$2"; shift;;
+    --dir)      dir="$2"; shift; makeLink=true;;
+    --no-link)  makeLink=false;;
+    --no-draw)  useProgress=false;;
+    --expire) # {{{
+      expire=$($ALIASES time2s "$2" -o abs-s)
+      shift
+      ;; # }}}
+    --params)   extraParams="$2"; shift;;
+    esac
+    shift
+  done # }}}
+  f="$dir/${f_prefix}${entry}.sh"
+  $makeLink && touch "$f" && ln -sf "$f" "$TMP_MEM_PATH/"
+  if [[ -z $state || $state == 'start' ]]; then # {{{
+    rm -f "$f"
+    progress_drawer $entry 'start'
+    state="cont"
+    [[ "$(tmux show-options -vg status-interval)" != "1" ]] && tmux set -qg status-interval 1
+  fi # }}}
+  (
+    echo "state=\"$state\""
+    [[ ! -z $color ]]       && echo "color=\"$color\""
+    [[ ! -z $text ]]        && echo "text=\"$text\""
+    [[ ! -z $delta ]]       && echo "delta=\"$delta\""
+    [[ ! -z $expire ]]      && echo "expire=\"$expire\""
+    [[ ! -z $useProgress ]] && echo "useProgress=\"$useProgress\""
+    [[ ! -z $extraParams ]] && echo "extraParams=\"$extraParams\""
+  ) >>"$f"
+} # }}}
 battery() { # @@ {{{
   is_ac() { # {{{
     if $IS_MAC; then
@@ -98,8 +269,7 @@ battery() { # @@ {{{
   fi # }}}
   local ac_on="$(is_ac)" perc="$(get_percentage)" max=${thresholds##* }
   if ! $ac_on || [[ $perc -lt ${max%%:*} ]]; then
-    local BAT="B" PWR="P" delta=30 c= i= showPerc=
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && BAT='🔋 ' && PWR='🔌 '
+    local delta=30 c= i= showPerc=
     # Colors  # {{{
     for i in $thresholds; do
       showPerc=${TMUX_SB_BATTERY_SHOW_PERC:=false}
@@ -110,19 +280,19 @@ battery() { # @@ {{{
       [[ $perc -lt $i ]] && c="${colors%% *}" && break
       colors="${colors#* }"
     done # }}}
-    value="#[fg=colour$c]$BAT"
+    value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[battery]}"
     if ! $ac_on; then
-      $IS_MAC && value+="◼ "
+      $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
     fi
-    $showPerc && { value+="${perc}%"; $ac_on && value+=" "; }
-    $ac_on && value+="#[fg=colour2]$PWR"
+    $showPerc && { value+="#[fg=colour$c]${perc}%"; $ac_on && value+=" "; }
+    $ac_on && value+="#[fg=colour2]${UNICODE_EXTRA_CHARS[power]}"
   else # {{{
     value=
     delta="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}"
   fi # }}}
   tmux set-environment -g "TMUX_SB_BATTERY_INFO" "update_time=$cur_time;value=\"$value\";delta=\"$delta\""
   unset is_ac get_percentage
-  printf "%s" "$value"
+  printf "%b" "$value"
 } # }}}
 cpu() { # @@ {{{
   local delta="${TMUX_SB_CPU_DELTA:-$((1*60))}" # 1 minute
@@ -139,7 +309,7 @@ cpu() { # @@ {{{
   if ! $IS_MAC; then # {{{
     read cpu_1m cpu_5m <<<$(cat /proc/loadavg | awk '{print int($1), int($2)}')
   else
-    read cpu_1m cpu_5m <<<$(sudo loads.d  | awk '{print $7, $8}' | sed 's/\.[0-9]*,//g')
+    read cpu_1m cpu_5m <<<$(uptime | awk '{print int($11), int($12)}')
   fi # }}}
   if [[ $cpu_1m -ge ${thresholds##* } ]]; then # {{{
     local first=true showPerc="${TMUX_SB_CPU_SHOW_PERC:-false}"
@@ -155,18 +325,18 @@ cpu() { # @@ {{{
       colors="${colors#* }"
     done # }}}
     value="#[fg=colour$c,bold]"
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && value+="⚛ "
-    if ! ${TERMINAL_HAS_EXTRA_CHARS:-true} || $showPerc; then
+    value+="${UNICODE_EXTRA_CHARS[high_cpu]}"
+    if $showPerc; then
       value+="${cpu_1m}/${cpu_5m}%"
     elif $IS_MAC; then
-      value+="◼"
+      value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
     fi
     value+="#[fg=default,none]"
   else
     delta="${TMUX_SB_CPU_DELTA:-$((1*60))}" value=
   fi # }}}
   tmux set-environment -g "TMUX_SB_CPU_INFO" "update_time=$cur_time;value=\"$value\";delta=\"$delta\""
-  printf "%s" "$value"
+  printf "%b" "$value"
 } # }}}
 weather_tmux() { # @@ {{{
   local delta="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}" # One hour
@@ -175,7 +345,7 @@ weather_tmux() { # @@ {{{
   if ! $testing && [[ ! -z $weather_info ]]; then # {{{
     eval "$weather_info"
     if [[ $cur_time -lt $(( $update_time + $delta )) ]]; then
-      printf "%s" "$value"
+      printf "%b" "$value"
       return 0
     fi
   fi # }}}
@@ -184,7 +354,7 @@ weather_tmux() { # @@ {{{
     local icon=
     [[ -z $TMUX_DEFAULT_WEATHER_ICONS ]] &&
       local TMUX_DEFAULT_WEATHER_ICONS=" \
-        800::🌣  \
+        800::🌞 \
         801:802::🌤 \
         803::🌥 \
         804::☁️  \
@@ -213,7 +383,7 @@ weather_tmux() { # @@ {{{
     "
     local c=
     [[ " $colors " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] && c="${BASH_REMATCH[2]}"
-    echo "$c$icon"
+    printf "%b%b" "$c" "$icon"
   } # }}}
   weather_wind_arrow() { # {{{
     local out=()
@@ -224,7 +394,7 @@ weather_tmux() { # @@ {{{
     fi
     local len="${#out[*]}"
     local radius="$(echo "$len" | awk '{print 360/$1}')"
-    printf "%s %skm/h" "${out[$(echo "$1" | awk "{print int(\$1/$radius+0.5)%$len}")]}" "$2"
+    printf "%b %skm/h" "${out[$(echo "$1" | awk "{print int(\$1/$radius+0.5)%$len}")]}" "$2"
   } # }}}
   weather_temp_color() { # {{{
     if   [[ $1 -lt -5 ]]; then printf "#[fg=colour33]%d°C"  "$1"
@@ -245,15 +415,22 @@ weather_tmux() { # @@ {{{
     [[ -z ${WEATHER_INFO[7]} ]] && WEATHER_INFO[7]="$cur_time"
   fi # }}}
   local err=false
+  if [[ -z $WEATHER_API_KEY ]]; then
+    $testing && echo "Error: No API key" >/dev/stderr || tmux display-message "Weather: No API key"
+  fi
   while [[ -z ${WEATHER_INFO[0]} || -z ${WEATHER_INFO[3]} || $cur_time -ge $(( ${WEATHER_INFO[0]} + $delta )) ]] || $testing; do # {{{
     if [[ -z ${WEATHER_INFO[1]} ]]; then
-      local loc=$(curl --silent http://ip-api.com/csv)
-      [[ -z $loc || $? != 0 ]] && echo "Error when acquiring location" >/dev/stderr && err=true && break
+      local loc=$(curl --silent --connect-timeout 2 http://ip-api.com/csv)
+      if [[ -z $loc || $? != 0 ]]; then # {{{
+        $testing && echo "Error when acquiring location" >/dev/stderr || tmux display-message "Weather: Error when acquiring location"
+        err=true
+        break
+      fi # }}}
       WEATHER_INFO[1]=$(echo "$loc" | cut -d , -f 8)
       WEATHER_INFO[2]=$(echo "$loc" | cut -d , -f 9)
       [[ ${WEATHER_INFO[1]} == 51.* && ${WEATHER_INFO[2]} == 16.* ]] && WEATHER_INFO[1]=51.099 && WEATHER_INFO[2]=17.039
     fi
-    local weather="$(curl --silent "http://api.openweathermap.org/data/2.5/weather?lat=${WEATHER_INFO[1]}&lon=${WEATHER_INFO[2]}&APPID=$WEATHER_API_KEY&units=metric")"
+    local weather="$(curl --silent --connect-timeout 2 "http://api.openweathermap.org/data/2.5/weather?lat=${WEATHER_INFO[1]}&lon=${WEATHER_INFO[2]}&APPID=$WEATHER_API_KEY&units=metric")"
     if [[ ! -z $weather && $? == 0 && $(echo $weather | jq .cod) == 200 ]]; then
       WEATHER_INFO[0]="$cur_time"
       WEATHER_INFO[3]="$(echo "$weather" | jq .main.temp  | cut -d . -f 1)"
@@ -261,8 +438,9 @@ weather_tmux() { # @@ {{{
       WEATHER_INFO[5]="$(echo "$weather" | jq .wind.deg   | cut -d . -f 1)"
       WEATHER_INFO[6]="$(echo "$weather" | jq .weather[0].id)"
     else
-      echo "Error when acquiring forecast" >/dev/stderr
+      $testing && echo "Error when acquiring forecast" >/dev/stderr || tmux display-message "Weather: Error when acquiring forecas"
       err=true
+      break
     fi
     if $testing; then # {{{
       while [[ ! -z $1 ]]; do
@@ -289,26 +467,31 @@ weather_tmux() { # @@ {{{
     break
   done # }}}
   export WEATHER_INFO
-  local ret="$(printf "%s %s #[fg=colour72]%s" "$(weather_icon "${WEATHER_INFO[6]}")" "$(weather_temp_color "${WEATHER_INFO[3]}")" "$(weather_wind_arrow ${WEATHER_INFO[5]} ${WEATHER_INFO[4]})")"
-  tmux set-environment -g "TMUX_SB_WEATHER_INFO" "update_time=$cur_time;value=\"$ret\""
-  printf "%s" "$ret"
+  local ret=
+  if ! $err; then
+    ret="$(printf "%s %s #[fg=colour72]%s" "$(weather_icon "${WEATHER_INFO[6]}")" "$(weather_temp_color "${WEATHER_INFO[3]}")" "$(weather_wind_arrow ${WEATHER_INFO[5]} ${WEATHER_INFO[4]})")"
+  else
+    ret="#[fg=colour124]✗☁️ #[fg=default,none]"
+  fi
+  tmux set-environment -g "TMUX_SB_WEATHER_INFO" "update_time=$cur_time;value=\"$ret\"$($err && echo ";delta=60")"
+  printf "%b" "$ret"
   $testing && echo
   unset weather_icon weather_wind_arrow weather_temp_color
   $err && return 1
   return 0
 } # }}}
 system_notifications() { # @@ {{{
-  local ntf_file="${NOTIFICATION_FILE:-$TMP_MEM_PATH/notifications.txt}" c_time="$(command date +"%s")" icon= delta=$((5*60))
+  local ntf_file="${NOTIFICATION_FILE_TMUX:-$TMP_MEM_PATH/notifications-tmux.txt}" icon= delta=$((5*60))
   if [[ ! -e "$ntf_file" ]]; then
     icon='#'
-  elif [[ "$(stat -c "%Y" "$ntf_file")" -ge "$(($c_time - $delta))" ]]; then
-    icon="N"
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && icon="🖂 "
+  elif [[ "$(stat -c "%Y" "$ntf_file")" -ge "$(($cur_time - $delta))" ]]; then
+    icon="${UNICODE_EXTRA_CHARS[envelope]}"
   fi
-  printf "%s" "$icon"
+  printf "%b" "$icon"
 } # }}}
 status_right_extra() { # @@ {{{
   [[ -z "$TMUX_STATUS_RIGHT_EXTRA_SORTED" ]] && printf " " && return 0
+  source "$UNICODE_EXTRA_CHARS_FILE"
   local tm_info="$1" tm_time="$2"
   [[ -z $tm_info ]] && tm_info="$(tmux display-message -pF '#S:#I.#P')"
   [[ -z $tm_time ]] && tm_time="$(command date +'%H:%M')"
@@ -356,11 +539,15 @@ status_right_extra() { # @@ {{{
       local prefix="/media/$USER"
       $IS_MAC && prefix="/Volumes"
       if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
-        ret+=" #[fg=colour148]$(${TERMINAL_HAS_EXTRA_CHARS:-true} && echo "🖫 " || echo "U")"
+        ret+=" #[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
       fi
       ;; # }}}
     cpu) # {{{
       local out="$(cpu)"
+      [[ ! -z "$out" ]] && ret+=" $out"
+      ;; # }}}
+    progress_bar) # {{{
+      local out="$(progress_bar_worker)"
       [[ ! -z "$out" ]] && ret+=" $out"
       ;; # }}}
     notifs) # {{{
@@ -385,7 +572,7 @@ status_right_extra() { # @@ {{{
       ;; # }}}
     esac
   done
-  printf "%s" "$ret "
+  printf "%b" "$ret "
 } # }}}
 status_right_refresh() { # @@ {{{
   tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
@@ -398,21 +585,69 @@ status_right_refresh() { # @@ {{{
 status_right() { # {{{
   tmux set -qg status-right "#[fg=colour10,bold] | #[fg=colour12,none]#S:#I.#P#($HOME/.tmux.bash status_right_extra '#S:#I.#P' '%H:%M')"
 } # }}}
+status_left_extra() { # {{{
+  local format='#[fg=colour12]' end='#[fg=colour10,bold]|' overSSH=false icon= default=false info= sName=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --format)    printf "%s" "$format"; return 0;;
+    --end)       printf "%s" "$end"; return 0;;
+    --default)   default=true;;
+    --icon)      icon="$2"; shift;;
+    -s)          sName="$2"; shift;;
+    *)           break;;
+    esac
+    shift
+  done # }}}
+  if [[ -n $SSH_CLIENT ]] || ( which pstree >/dev/null 2>&1 && [[ -n $TMUX ]] ); then # {{{
+    if $IS_MAC; then
+      pstree -p $(tmux display-message -pF '#{client_pid}') | command grep -q ' sshd\($\| \)' && overSSH=true
+    else
+      pstree -A -s $(tmux display-message -pF '#{client_pid}') | command grep -q -e '---sshd---' && overSSH=true
+    fi
+  fi # }}}
+  TMUX_STATUS_LEFT_EXTRA_MAP= # Temporarily disabled
+  [[ ! -z $TMUX_STATUS_LEFT_EXTRA_MAP ]] && info="$(echo -e "$TMUX_STATUS_LEFT_EXTRA_MAP" | sed -n '/^'$sName':/s/^'$sName'://p')"
+  if [[ -z $info ]] || $default; then
+    info="$($ALIASES getUnicodeChar "${icon:-localhost}")"
+    if ${TMUX_SB_SHOW_HOSTNAME:-false}; then
+      [[ -z $icon ]] && info="$(hostname | tr '[a-z]' '[A-Z]' | sed 's/\..*//')"
+    else
+      [[ -e $TMP_MEM_PATH/tmux.cfg ]] && source $TMP_MEM_PATH/tmux.cfg
+      [[ ! -z $TMUX_SB_LEFT ]] && info="$TMUX_SB_LEFT"
+    fi
+    [[ -z "$info" ]] && info="$(hostname | tr '[a-z]' '[A-Z]' | sed 's/\..*//')"
+  fi
+  [[ $info != '#'* ]] && info="$format$info"
+  $overSSH && info+="$($ALIASES getUnicodeChar "ssh")"
+  printf " %b %s " "$info" "$end"
+} # }}}
+status_left() { # {{{
+  if [[ $1 == --extra ]]; then
+    tmux set -qg status-left "#($HOME/.tmux.bash status_left_extra -s '#S')"
+    return 0
+  fi
+  local info="$1"
+  local format="${2:-$(status_left_extra --format)}"
+  if [[ -z "$info" ]]; then
+    info="$(status_left_extra --default)"
+  else
+    info=" $format$info$(status_left_extra --end) "
+  fi
+  tmux set -qg status-left "$(printf "%b" "$info")"
+} # }}}
 window_status_flags() { # {{{
   local flags="$1"
   flags="${flags/\*}"
   flags="${flags/-}"
   if [[ $flags == *Z* ]]; then
-    local repl="/Z"
     flags="${flags/Z}"
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && repl=" 🔍 "
-    flags="$repl$flags"
+    flags="$($ALIASES getUnicodeChar 'zoom')$flags"
   fi
-  echo "$flags"
+  printf "%b" "$flags"
 } # }}}
 plugins() { # {{{
   [[ $TMUX_VERSION -le 16 ]] && return 0
-  tmux set -qg @tpm_plugins 'tmux-plugins/tpm tmux-plugins/tmux-yank smiglo/tmux-fingers.git'
+  tmux set -qg @tpm_plugins 'tmux-plugins/tpm tmUx-plugins/tmux-yank morantron/tmux-fingers'
   tmux set -qg @copy_mode_yank_wo_newline '!'
   tmux set -qg @copy_mode_yank 'Enter'
   tmux set -qg @copy_mode_put 'C-y'
@@ -471,10 +706,9 @@ get_marked_pane() { # {{{
   local auto_check_nest=$(tmux show-options -wqv @mark_auto)
   [[ -z $auto_check_nest ]] && auto_check_nest=$(tmux show-options -gqv @mark_auto)
   if [[ $auto_check_nest == 'true' ]]; then
-    pane='S'
-    ${TERMINAL_HAS_EXTRA_CHARS:-true} && pane='ⓢ '
+    pane="$($ALIASES getUnicodeChar 'smart')"
   fi
-  echo "$pane"
+  printf "%b" "$pane"
 } # }}}
 mark_toggle() { # {{{
   local delay= delayed=false local_set=false zoom=0
@@ -513,6 +747,15 @@ mark_toggle() { # {{{
   tmux set -qg status-interval 1
   tmux run-shell -b "sleep 1; tmux set -qg status-interval $interval"
 } # }}}
+smarter_nest_allowed() { # {{{
+  [[ "$(tmux display-message -pF '#{window_panes}')" == 1 ]] || return 1
+  case "$1" in
+  *split-window*)    return 1;;
+  *next-window*)     return 1;;
+  *previous-window*) return 1;;
+  esac
+  return 0;
+} # }}}
 smarter_nest() { # @@ {{{
   local send_prefix= key= version= do_eval=true dbg=false log_f= err= zoom= keep_zoom=false
   [[ $1 == --dbg ]] && dbg=true && shift
@@ -533,18 +776,18 @@ smarter_nest() { # @@ {{{
   [[ ! -z $version && $TMUX_VERSION -le $version ]] && return 0
   [[ -z $send_prefix ]] && send_prefix=${TMUX_PREFIX_2:-$(tmux show-options -gv prefix2)} || send_prefix=
   local pane_info= auto_check_nest=$(tmux show-options -wqv @mark_auto) auto_check_nest_g=$(tmux show-options -gqv @mark_auto)
-  if [[ $zoom == 1 && $auto_check_nest == 'false' ]]; then
+  if ! $auto_check_nest && ( [[ $zoom == 1 ]] || smarter_nest_allowed "$@" ); then
     [[ $auto_check_nest_g == 'false' || $auto_check_nest_g == 'toggling' ]] && auto_check_nest=false || auto_check_nest=true
   fi
   [[ -z $auto_check_nest ]] && auto_check_nest=$auto_check_nest_g
-  if [[ $auto_check_nest == 'true' ]]; then # {{{
+  if [[ $auto_check_nest == 'true' ]] && ! ${TMUX_SMART_IGNORE:-false}; then # {{{
     pane_info=$(tmux display-message -p -t $TMUX_PANE -F '#P:#{pane_pid}')
     if ! $IS_MAC; then
       local ps_out="$(command ps -o args -g ${pane_info/*:})"
     else
       local ps_out="$(command pstree ${pane_info/*:} | sed "s/.*= [0-9]\+ $USER //")"
     fi
-    if echo "$ps_out" | command grep -q "^tmux\|^ssh\|^docker-compose\|^docker attach"; then
+    if echo "$ps_out" | command grep -q -P "^tmux|^docker-compose|^docker attach|^ssh( .+)? (\S+@)?(\w{3,}|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$"; then
       if echo "$ps_out" | command grep -q "^\(sh -c \)\{0,1\}vlock\|^git\|^scp\|^rsync"; then
         pane_info=
       else
@@ -661,15 +904,15 @@ scratch_pane() { # {{{
   tmux send-keys -t $pane_id "pt hn; clear"
 } # }}}
 pasteKey_worker() { # @@ {{{
-  source $HOME/.bashrc --do-basic
-  local auto=$1 buff="$2" v="$( \
+  local auto=$1 buff="$2" query="$3"
+  local v="$( \
     keep-pass.sh --list-all-keys \
-    | fzf \
-      --preview="keep-pass.sh --key '{1}' --no-intr" \
-      +m --prompt='Key> ' -0 \
+    | eval fzf \
+      --preview="\"keep-pass.sh --key '{1}' --no-intr\"" \
+      +m --prompt="\"Key> \"" $([[ ! -z $query ]] && echo "--query=\"$query\"") -0 \
   )"
   [[ $? == 0 && ! -z "$v" ]] || return 1
-  v="$(source $HOME/.bashrc --do-basic; keep-pass.sh --key "$v")"
+  v="$(keep-pass.sh --key "$v")"
   [[ ! -z $v ]] || return 1
   if $auto; then
     [[ $v == *'..' ]] && v="${v%..}" || v+=""
@@ -677,10 +920,13 @@ pasteKey_worker() { # @@ {{{
   tmux set-buffer -b $buff "$v"
 } # }}}
 pasteKey() { # @@ {{{
-  local buff="key.$$" pane_id= auto=true
+  local buff="key.$$" pane_id= auto=true f="$TMP_MEM_PATH/keep-pass-key" delta=30 key=
+  [[ $1 == '--set-key' ]] && echo "$2" >"$f" && return 0
   [[ $1 == '-m' ]] && auto=false && shift
+  [[ -e "$f" && $(stat -c "%Y" "$f") -gt $(($(command date +%s)-$delta)) ]] && key="$(cat "$f")"
+  rm -f "$f"
   tmux delete-buffer -b "$buff" >/dev/null 2>&1
-  pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker $auto '$buff'")"
+  pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker $auto '$buff' '$key'")"
   while tmux display-message -p -t "$pane_id" -F '#{pane_id}' >/dev/null 2>&1; do
     sleep 0.5
   done
@@ -721,6 +967,7 @@ case $1 in
 --dbg  |  --dbg2 | --test | --time) # {{{
   export dbg=true
   dbgFull=false sTime=false testing=false
+  source "$UNICODE_EXTRA_CHARS_FILE"
   while true; do
     case $1 in
     --test) testing=true;;

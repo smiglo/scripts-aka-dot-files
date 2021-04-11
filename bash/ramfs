@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ramfs_size_mb=100
 mount_point=${TMP_MEM_PATH:-$HOME/.tmp/.mem}

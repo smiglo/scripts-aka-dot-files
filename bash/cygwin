@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Is installed # {{{
 ${RCSTUFF_CYGWIN_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0

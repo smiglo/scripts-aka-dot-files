@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if ! ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
+  [[ -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] && DEFINE_TICKET_TOOL_HELPER=true
+fi # }}}
+if ! ${DEFINE_TICKET_TOOL_HELPER:-false} && [[ $PWD == $HOME* ]]; then # {{{
+  p="$PWD" ticket_data=".ticket-data.sh"
+  while true; do # {{{
+    if [[ -e "$p/$ticket_data" ]]; then # {{{
+      unset $(echo ${!TICKET_*} | sed 's/TICKET_\(TOOL_PATH\|J_PREDEFINED\)//g')
+      export TICKET_PATH="$p"
+      source "$p/$ticket_data" ''
+      DEFINE_TICKET_TOOL_HELPER=true
+      break
+    fi # }}}
+    [[ $p == $HOME || $p == "/" ]] && break
+    p="$(command cd "$p/.."; pwd)"
+  done # }}}
+  unset p ticket_data
+fi # }}}
+if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
+  function j() {
+    case $1 in
+    --env)  shift && eval "$($TICKET_TOOL_PATH/j-cmd.sh "${@:-env --silent}")"
+            export jjp="$($TICKET_TOOL_PATH/j-cmd.sh cd -v 2>/dev/null)";;
+    @@)     [[ $2 == 1 ]] &&  echo '--env'
+            [[ $3 == '--env' && $4 == '--env' ]] && set -- '@@' 1
+            ;;&
+    *)      $TICKET_TOOL_PATH/j-cmd.sh "$@" ;;
+    esac
+  }
+  complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic j
+  export PHISTORY_IGNORED_COMMANDS+=":j"
+  export jj=$TICKET_TOOL_PATH/j-cmd.sh
+fi # }}}
+

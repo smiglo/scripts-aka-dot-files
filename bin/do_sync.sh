@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 params="$RSYNC_DEFAULT_PARAMS"
 params+=" --del"

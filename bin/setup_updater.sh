@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # INIT {{{
@@ -57,7 +57,7 @@ check() { # {{{
 } # }}}
 start() { # {{{
   check || return 1
-  source $BASH_PATH/aliases
+  source $SCRIPT_PATH/bash/aliases.d/mutex-locking
   mutex_init "setup-update" --auto-clean-after $((10*60))
   mutex_lock || return 1
   local key=
@@ -69,8 +69,8 @@ start() { # {{{
       ssh-add $key >/dev/null 2>&1
     fi
   fi
-  do_update
   saveTime
+  do_update
   [[ ! -z $key ]] && ssh-add -d $key >/dev/null 2>&1 || true
   $do_install && $MY_PROJ_PATH/scripts/bin/mk_install_scripts.sh --all-no --silent --no-exec
 } # }}}

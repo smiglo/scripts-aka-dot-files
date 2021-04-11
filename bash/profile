@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [ -f "$HOME/.bashrc" ]; then
+  source $HOME/.bashrc --do-min
+fi
+
+export PATH="$HOME/.cargo/bin:$PATH"
+export QT_QPA_PLATFORMTHEME="qt5ct"
+

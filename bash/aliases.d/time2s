@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+time2s() { # @@ # {{{
+  case $1 in
+  @@) # {{{
+    local t="now 0:00 15:00 @$(command date +%s) 5m2s"
+    case $3 in
+    --out | -o) echo "s abs abs-s delta";;
+    --now)      echo "- 15:00 15h";;
+    -s)         echo "$t";;
+    --to-hms)   echo "$t";;
+    *) # {{{
+      case ${4:-$3} in
+      --diff) echo "$t";;
+      *)      echo "-s --diff --is-hms --to-hms --now -o --out --hms-only $t 5m 1h2m3s";;
+      esac;; # }}}
+    esac
+    return 0;; # }}}
+  -s) # {{{
+    if time2s --is-hms $2; then
+      time2s $2 -o s
+    else
+      command date '+%s' -d "${2:-now}"
+    fi
+    return 0;; # }}}
+  --diff) # {{{
+    local d1=$2
+    local d2=$3
+    [[ -z $d2 && ! -z $d1 ]] && d2="now"
+    if [[ -z $d1 ]]; then
+      d1="$(time2s -s now)"
+    elif [[ $d1 == @* ]]; then
+      d1="${d1#@}"
+    else
+      d1="$(time2s -s "$d1")"
+    fi
+    if [[ -z $d2 ]]; then
+      d2="$(time2s -s "today 0:00")"
+    elif [[ $d2 == @* ]]; then
+      d2="${d2#@}"
+    else
+      d2="$(time2s -s "$d2")"
+    fi
+    echo "$((d1-d2))"
+    return 0;; # }}}
+  --is-hms) # {{{
+    [[ $2 =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]
+    return $?;; # }}}
+  --to-hms) # {{{
+    local s=$2 h= m= dir=
+    [[ $s == *:* || $s == @* ]] && s=$(time2s --diff "$s")
+    [[ $s == -* ]] && dir='-' && s=${s#-}
+    h=$((s/3600)) && s=$((s-h*3600))
+    m=$((s/60))   && s=$((s-m*60))
+    [[ $h != 0 ]] && h="${h}h" || h=
+    [[ $m != 0 ]] && m="${m}m" || m=
+    [[ $s != 0 ]] && s="${s}s" || s=
+    echo "$dir$h$m$s"
+    return 0;; # }}}
+  esac
+  local ts= outForm='abs' h= m= s= out= now=$(time2s -s 'now') dir=1 hms_is=false hms_only=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --out | -o) outForm=$2; shift;;
+    --now)      [[ $2 != - ]] && now=$(time2s -s "$2"); shift;;
+    --hms-only) hms_only=true;;
+    *)          ts=$1; [[ $ts == -* ]] && dir=-1 && ts=${ts#-};;
+    esac
+    shift
+  done # }}}
+  [[ -z $ts ]] && echo "Time not specified" >/dev/stderr && return 1
+  if [[ $ts =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then # {{{
+    h="${BASH_REMATCH[1]%h}" m="${BASH_REMATCH[2]%m}" s="${BASH_REMATCH[3]%s}"
+    out="$((${h:-0}*60*60 + ${m:-0}*60 + ${s:-0}))"
+    hms_is=true
+    # }}}
+  elif [[ $ts =~ ^([0-9]+)$ ]]; then # {{{
+    out="$ts"
+    # }}}
+  else # {{{
+    now=$(time2s -s '0:00')
+    out=$(time2s --diff "$ts" "@$now")
+  fi # }}}
+  $hms_only && ! $hms_is && return 0
+  case $outForm in # {{{
+  s)      echo "$out";;
+  abs)    echo "$(command date +$TIME_FMT -d "@$((now+dir*out))")";;
+  abs-s)  echo "$(command date +%s        -d "@$((now+dir*out))")";;
+  delta)  echo "$(time2s --diff "@$((now+dir*out))" "now")";;
+  *)      echo "Unknown output form [$outForm]" >/dev/stderr && return 1;;
+  esac # }}}
+} # }}}
+alias t2s='time2s' # @@
+export PHISTORY_IGNORED_COMMANDS+=":time2s:t2s"
+

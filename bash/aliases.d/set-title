@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+set_title() { # @@ # {{{
+  set_title_getter_check_map() { # {{{
+    local ret= i=
+    for i in $SET_TITLE_GETTER_MAP; do
+      [[ $PWD == ${i/:*}* ]] && ret=${i/*:} && break
+    done
+    echo "$ret"
+    return 0
+  } # }}}
+  set_title_getter_default() { # {{{
+    local ret=
+    case $PWD in # {{{
+    $HOME/*/Dropbox*) ret='dropbox';;
+    $HOME/Desktop*)   ret='desktop';;
+    $HOME/Documents*) ret='docs';;
+    $HOME/Downloads*) ret='downloads';;
+    $HOME/.tmp*)      ret='tmp';;
+    /etc*)            ret='/etc';;
+    esac # }}}
+    if [[ -z $ret ]]; then # {{{
+      local i=
+      for i in $SET_TITLE_GETTER_MAP_POST; do
+        [[ $PWD == ${i/:*}* ]] && ret=${i/*:} && break
+      done
+    fi # }}}
+    echo "$ret"
+    return 0
+  } # }}}
+  convertPwd() { # {{{
+    local pwdGetters="$1"
+    local pwdGetter=
+    local lengthOfLast=${SET_TITLE_LENGTH_OF_LAST:-15}
+    local ret=$PWD
+    if $isTMUX; then # {{{
+      local prefix="$(tmux show-options -v @tmux_path 2>/dev/null)"
+      [[ ! -z $prefix && $prefix != $HOME ]] && ret="${ret/#$prefix/./${prefix/*\/}}"
+    fi # }}}
+    ret=${ret/#$HOME/'~'}
+    for pwdGetter in $pwdGetters; do # {{{
+      case $pwdGetter in # {{{
+      full) # {{{
+        ;; # }}}
+      last|last2) # {{{
+        ret="${ret/*\/}";;& # }}}
+      shorten|shorten2) # {{{
+        local beginning="${ret%\/*}"
+        local last="${ret/*\/}"
+        [[ $beginning == $last ]] && last=
+        ret="$(echo $beginning | sed -e "s;\(/.\)[^/]*;\1;g")"
+        [[ ! -z $last ]] && ret="$ret/$last"
+        [[ $ret = ./* ]] && ret=${ret:2}
+        if echo $ret | command grep -q ".*/./././.*"; then
+          ret="$(echo "$ret" | sed -e 's|\([^/]*\)/.*/\([^/]*\)|\1/.../\2|')"
+        fi
+        ;;& # }}}
+      last2|shorten2) # {{{
+        local last="${ret/*\/}"
+        ret="${ret/$last}"
+        if [[ ${#last} -ge $(($lengthOfLast + 3)) ]]; then
+          last="${last:0:$lengthOfLast}..."
+        fi
+        ret+="$last"
+        ;; # }}}
+      set_title_getter_*) # {{{
+        local retInternal=
+        declare -F $pwdGetter >/dev/null 2>&1 && retInternal="$($pwdGetter)"
+        [[ -z $retInternal ]] && continue
+        ret="$retInternal"
+        ;; # }}}
+      esac # }}}
+      break
+    done # }}}
+    echo "$ret"
+  } # }}}
+  if [[ $1 == @@ ]]; then # {{{
+    local ret="--set-all --set-none --set-terminal --set-pane --set-window --lock --lock-force --unlock --unlock-force --tmux-session -wl -wlf -l -lf --from-tmux --batch --pwd= --pwd-pane="
+    [[ $2 == 1 ]] && ret+=" --dbg"
+    unset convertPwd set_title_getter_check_map set_title_getter_default
+    echo $ret
+    return 0
+  fi # }}}
+  local title=
+  local pwdGetter=${SET_TITLE_PWD_GETTER:-"shorten2"}
+  local pwdPaneGetter="set_title_getter_check_map" i=
+  for i in $BASH_PROFILES; do
+    pwdPaneGetter+=" set_title_getter_${i}"
+  done
+  pwdPaneGetter+=" set_title_getter_default last"
+  local setTerminalTitle= setPaneTitle= setWindowTitle=
+  local isTMUX=false
+  local title_pane= lock_title=
+  local batch=false from_tmux=
+  local dbg=false
+  [[ $1 == '--dbg' ]] && shift && dbg=true && set -xv
+  [[ -n $TMUX ]] && type tmux >/dev/null 2>&1 && isTMUX=true
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --pwd=*)           pwdGetter=${1/--pwd=};;
+    --pwd-pane=*)      pwdPaneGetter=${1/--pwd-pane=};;
+    --set-all)         setTerminalTitle=true;  setWindowTitle=true; setPaneTitle=true;;
+    --set-none)        setTerminalTitle=false; setWindowTitle=false; setPaneTitle=false;;
+    --set-terminal)    setTerminalTitle=true; [[ -z $setWindowTitle ]] && setWindowTitle=false; [[ -z $setPaneTitle ]]     && setPaneTitle=false;;
+    --set-pane)        setPaneTitle=true;     [[ -z $setWindowTitle ]] && setWindowTitle=false; [[ -z $setTerminalTitle ]] && setTerminalTitle=false;;
+    --set-window)      setWindowTitle=true;   [[ -z $setPaneTitle ]]   && setPaneTitle=false;   [[ -z $setTerminalTitle ]] && setTerminalTitle=false;;
+    -wl|-wlf| \
+      --batch| \
+      --from-tmux)     setTerminalTitle=false; setWindowTitle=true; setPaneTitle=false;;&
+    --lock| \
+      -l|-wl)          lock_title=true;;
+    --lock-force| \
+      -lf|-wlf)        lock_title='true-force';;
+    --unlock)          lock_title=false;;
+    --unlock-force)    lock_title='false-force';;
+    --tmux-session)    $isTMUX && title="$TMUX_SESSION";;
+    --from-tmux)       shift; from_tmux="-t ${1/.*}"; lock_title='true-force'; isTMUX=true;;&
+    --batch| \
+      --from-tmux)     setWindowTitle=false; batch=true; [[ -z $lock_title ]] && lock_title='true-force'; sleep 0.1;;
+    *)                 title="$1"; title_pane="$1"; break;;
+    esac
+    shift
+  done # }}}
+  local current_pane= current_pane_title=
+  if $isTMUX; then
+    [[ -z $setTerminalTitle ]] && setTerminalTitle=false
+    [[ -z $setWindowTitle ]] && setWindowTitle=false
+    [[ -z $setPaneTitle ]] && setPaneTitle=true
+  else
+    [[ -z $setTerminalTitle ]] && setTerminalTitle=true
+    [[ -z $setWindowTitle ]] && setWindowTitle=false
+    [[ -z $setPaneTitle ]] && setPaneTitle=false
+  fi
+  if $isTMUX; then # {{{
+    [[ -z $title ]] && title="$(tmux show-environment "SET_TITLE_NEW_WINDOW_TITLE" 2>/dev/null | cut -d'=' -f2)"
+    read current_pane current_pane_title < <(tmux display-message -p -t $TMUX_PANE -F '#P #T')
+  fi # }}}
+  if $setPaneTitle; then # {{{
+    if [[ -z $lock_title && $current_pane_title == @* ]]; then
+      setPaneTitle=false
+    else
+      if [[ ! -z $title_pane ]]; then
+        [[ $lock_title == true* && $title_pane != @* ]] && title_pane="@$title_pane"
+      else
+        title_pane=$(convertPwd "$pwdPaneGetter")
+      fi
+    fi
+  fi # }}}
+  [[ -z $title ]] && title="$SET_TITLE_FORCED_TITLE"
+  [[ -z $title ]] && title="$(convertPwd "$pwdGetter")"
+  title="$(echo "$title" | sed -e 's/  \+/ /g' -e 's/\(\w\) \(\w\)/\1-\2/g' -e 's/ //g')"
+  $setTerminalTitle && printf ']1;%s'   "$title" >/dev/stderr
+  $setPaneTitle && printf ']2;%s\\' "${title_pane//\\/}" >/dev/stderr
+  if $isTMUX || $batch; then # {{{
+    local TMUX_LOCKED_TITLE='@locked_title' locked_pane=
+    if $isTMUX; then # {{{
+      $dbg && echo "current pane=($(tmux display-message -p -t $TMUX_PANE -F "#S:#I.#P")) ft=($from_tmux)"
+      locked_pane=$(tmux show-option $from_tmux -qvw $TMUX_LOCKED_TITLE)
+    fi # }}}
+    if [[ -z $locked_pane || $lock_title == 'true-force' ]]; then # {{{
+      if $setWindowTitle; then
+        printf 'k%s\\'   "$title" >/dev/stderr
+      elif $batch; then
+        $isTMUX && tmux rename-window $from_tmux "$title"
+      fi
+    fi # }}}
+    if $isTMUX && [[ ! -z $lock_title ]]; then # {{{
+      case $lock_title in
+        true  | true-force ) [[ -z $locked_pane               || $lock_title == 'true-force'  ]] && tmux set-option $from_tmux -w   $TMUX_LOCKED_TITLE $current_pane;;
+        false | false-force) [[ $current_pane == $locked_pane || $lock_title == 'false-force' ]] && tmux set-option $from_tmux -qwu $TMUX_LOCKED_TITLE;;
+      esac
+    fi # }}}
+  fi # }}}
+  $dbg && set +xv
+  unset convertPwd set_title_getter_check_map set_title_getter_default
+  return 0
+} # }}}
+

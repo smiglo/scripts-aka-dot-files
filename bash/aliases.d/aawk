@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+aawk() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -F) echo "\'[=\\ ]\'";;
+    *)  echo "1 2 3 -F";;
+    esac
+    return 0
+  fi # }}}
+  local params= print= pre=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    /*)      pre="$1";;
+    [0-9]*)  print+=",\$$1";;
+    *) params+="$1 ";;
+    esac
+    shift
+  done # }}}
+  eval awk $params "'$pre{print "${print#,}"}'"
+} # }}}
+
+export PHISTORY_IGNORED_COMMANDS+=":aawk"
+

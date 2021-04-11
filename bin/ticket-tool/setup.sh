@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 if [[ -z $TICKET_PATH ]]; then # {{{
@@ -26,7 +26,8 @@ if [[ -z $ISSUES ]]; then # {{{
     [[ ! -e $TICKET_CURRENT_TICKETS ]] && command mkdir -p $TICKET_CURRENT_TICKETS
     list="@$(echo ${ISSUES,,} | sed -e 's/:[^ ]*//g' -e 's/ /@\\|@/')@"
     for i in $(cd $TICKET_CURRENT_TICKETS; ls); do
-      ! echo "@$i@" | command grep -q "$list" && rm -rf $TICKET_CURRENT_TICKETS/$i
+      [[ $i == "0.all" ]] && continue
+      ! echo "@$i@" | command grep -q "${list}" && rm -rf $TICKET_CURRENT_TICKETS/$i
     done
     unset list
   fi # }}}
@@ -73,7 +74,7 @@ for i in $ISSUES; do # {{{
     [[ ! -z $t ]] && ln -sf "$t" "$TICKET_CURRENT_TICKETS/$i"
   fi
 done # }}}
-unset i s open layout
+unset i s open layout ISSUES
 
 # ----------------------------
 # Aditional, could be implemented:

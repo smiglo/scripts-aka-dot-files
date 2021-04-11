@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+fzf_exe() { # @@ # {{{
+  if [[ "$1" == '@@' ]]; then # {{{
+    case $3 in
+    -c) echo "prev pane";;
+    -f) echo "@@-f";;
+    --pane) # {{{
+      local idd=$(tmux display-message -p '#S:#I.#P') id= p=
+      while read id p; do
+        [[ $id == $idd ]] && continue
+        if $IS_MAC; then
+          pstree $p | command grep -q '[M]acOS/Vim'
+        else
+          pstree -Ac $p | command grep -q -e '---vim'
+        fi && echo $id
+      done < <(tmux list-panes -a -F '#S:#I.#P #{pane_pid}')
+      ;; # }}}
+    *) # {{{
+      echo "-c -f -l"
+      if false; then :;
+      elif [[ "$@" == *'-c pane'* ]]; then echo "--pane";
+      elif [[ "$@" == *'-c prev'* ]]; then echo "--cnt --prev";
+      fi;; # }}}
+    esac
+    return 0
+  fi # }}}
+  local cmd= file= line= params= pane='.1' prev_lines_before=10 max_prev_lines=999
+  local prev_lines_cnt=$max_prev_lines
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -c) shift; cmd=$1;;
+    -f) shift; file=$1; [[ ! -e $file ]] && file=${file/ *};;
+    -l) shift; line=$1; [[ $line =~ ^[0-9]+$ ]] || line=;;
+    *)  case $cmd in
+        prev) case $1 in
+              --cnt)  shift; local prev_lines_cnt=$1;;
+              --prev) shift; local prev_lines_before=$1;
+              esac;;
+        pane) case $1 in
+              --pane) shift; pane=$1;;
+              esac;;
+        esac;;
+    esac
+    shift
+  done # }}}
+  [[ ! -z $cmd ]]  || { echo "Command not specified" >/dev/stderr; sleep 1; return 0; }
+  [[ ! -z $file ]] || { echo "File not specified"; >/dev/stderr sleep 1; return 0; }
+  file="$(echo "$file" | sed "s/\x1B\[[0-9;]*[mGK]//g")"
+  [[ $file == \~* ]] && file=${file/\~/$HOME}
+  [[ ! -z $line ]] && line="$(echo "$line" | sed "s/\x1B\[[0-9;]*[mGK]//g")"
+  if [[ $file =~ ^([^:]+):([0-9]+)[:-].*$ ]]; then # {{{
+    file=${BASH_REMATCH[1]}
+    line=${BASH_REMATCH[2]}
+  fi # }}}
+  file="${file%%:*}"
+  [[ ! -e $file ]] && file="${file%-*}"
+  [[ -f $file || $cmd == 'prev' ]] || { echo "Canot open [$file]" >/dev/stderr; sleep 1; return 0; }
+  case $cmd in # {{{
+  less)       params="-N";;&
+  vim)        params="-c FastBuffer";;&
+  less | vim)
+              [[ ! -z $line ]] && params+=" +$line"
+              params+=" $file"
+              ;;&
+  vim)        params+=" -c 'normal! zv' ";;
+  less)       ;;
+  prev)       [[ -z $line ]] && line='1'
+              local first_line=$(($line-$prev_lines_before))
+              [[ $first_line -lt 1 ]] && first_line='1'
+              ;;
+  pane)       local ppid=$(tmux display-message -t $pane -p -F '#{pane_pid}')
+              if ! $IS_MAC; then
+                command pstree -Ac $ppid | command grep -q -e '---vim'
+              else
+                command pstree $ppid | command grep -q -i -e 'vim'
+              fi || { echo "Vim not found in pane '$pane'" >/dev/stderr; sleep 1; return 0; }
+              ;;
+  *)          { echo "Unknown command [$cmd]" >/dev/stderr; sleep 1; return 0; };;
+  esac # }}}
+  case $cmd in # {{{
+  prev) [[ -h $file ]] && echo -e "File ${file##*/} links to $(readlink $file)\n" && file="$(readlink -f $file)"
+        if [[ -f $file ]]; then
+          local t="$(file --mime $file)"
+          [[ "$t" =~ binary ]] && echo "$file is a binary" && return 0
+          if which highlight >/dev/null 2>&1; then
+            [[ ${file##*/} != *.* && ( "$t" =~ shellscript || "$t" =~ text/plain ) ]] && t="-S bash" || t=""
+            highlight -O ansi $t $file 2>/dev/null || cat $file
+          else
+            cat $file
+          fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | $ALIASES hl +cY "^\s*$line\s"
+        elif [[ -d $file ]]; then
+          ! which tree >/dev/null 2>&1 && echo "$file is a directory" && return 0
+          tree -C $file 2>/dev/null | head -200
+        else
+          echo "Not supported entity [$file]"
+        fi;;
+  pane) [[ $file != /* ]] && file="$PWD/$file"
+        tmux send-keys -t $pane ":call RelTabEdit(\"$file\")"
+        if [[ ! -z $line ]]; then
+          tmux send-keys -t $pane "zR${line}gg"
+        fi;;
+  *)    $cmd $params </dev/tty >/dev/tty;;
+  esac # }}}
+} # }}}
+fzfwr() { # {{{
+  local isInputRc=false
+  [[ $1 == 'iRC' ]] && isInputRc=true && shift
+  local FZF_DEFAULT_COMMAND="fd -I"
+  if ! which fd >/dev/null 2>&1; then
+    FZF_DEFAULT_COMMAND="command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
+  fi
+  FZF_DEFAULT_COMMAND+=" | sort"
+  local selected="$(fzf --height 80% "$@")"
+  if $isInputRc; then
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
+  else
+    echo "$selected"
+  fi
+  return 0
+} # }}}
+vimf() { # {{{
+  local pattern="${1:-.*}" files=() vim_p=
+  set +f
+  [[ $pattern == '*'.* ]] && pattern=".${pattern//./\\.}$"
+  [[ $pattern == '*'* ]] && pattern=".$pattern"
+  if [[ -t 0 ]]; then # {{{
+    files="$(
+      { eval $FZF_DEFAULT_COMMAND; } \
+      | command grep "$pattern" | fzf --prompt="Files> " --multi --select-1 --exit-0
+    )" # }}}
+  else # {{{
+    local out= i=
+    while read i; do
+      [[ -f "${i%%:*}" ]] && out+="$i\n"
+    done <<<"$(cat - | tr '\0' '\n' | sort)"
+    [[ -z $out ]] && return 0
+    files="$(
+      { echo -en "$out"; } \
+      | command grep "$pattern" | fzf --prompt="Files> " --multi --select-1 --exit-0
+    )"
+    [[ -z $files ]] && return 0
+    out=
+    rm -f $TMP_MEM_PATH/vimf-$$.txt
+    while read i; do
+      echo "$i" >>$TMP_MEM_PATH/vimf-$$.txt
+      out+="${i%%:*}\n"
+    done <<<"$(echo -e "$files")"
+    files="$(echo -e "$out" | awk '!seen[$0] {print} {++seen[$0]}')"
+    files="$TMP_MEM_PATH/vimf-$$.txt\n$files"
+    vim_p="-c 'tabnext 2'"
+  fi # }}}
+  if [[ -n "$files" ]]; then # {{{
+    eval vim $vim_p $(echo -e "$files") </dev/tty
+    rm -f $TMP_MEM_PATH/vimf-$$.txt
+  fi # }}}
+} # }}}
+vimg() { # {{{
+  local search= ret= max="${VIMG_MAX:-250000}"
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -n) shift; max="$1";;
+    *)  break;
+    esac
+    shift
+  done
+  search="${@:-$VIMG_SEARCH}"
+  [[ -z $search ]] && search="^"
+  ret=($(ag --nobreak --noheading $search \
+    | sort -t ':' -k1,1 -k2,2n \
+    | head -n $max \
+    | fzf --query="$VIMG_QUERY" --no-sort --multi --select-1 --exit-0 \
+    | awk -F: '{print $1, $2}'))
+  if [[ -n $ret ]]; then
+    local i=0 file= line= params= v=
+    if [[ $BASH_VERSINFO -ge 4 ]]; then
+      declare -A retMap
+      while [[ $i -lt ${#ret[*]} ]]; do
+        file="${ret[$i]}" line="${ret[$(($i+1))]}" v="${retMap[$file]}"
+        [[ -z $v || $line -lt $v ]] && retMap[$file]="$line" # Can "or" condition even happen?
+        i="$(($i+2))"
+      done
+      for i in ${!retMap[*]}; do
+        file="$i" line="${retMap[$file]}"
+        [[ -z $params ]] && params+=" $file +$line" || params+=" +\"tabnew +$line $file\""
+        params+=" -c 'normal! zv'"
+      done
+      unset retMap
+    else
+      while [[ $i -lt ${#ret[*]} ]]; do
+        file="${ret[$i]}" line="${ret[$(($i+1))]}"
+        [[ -z $params ]] && params+=" $file +$line" || params+=" +\"tabnew +$line $file\""
+        params+=" -c 'normal! zv'"
+        i="$(($i+2))"
+      done
+    fi
+    params+=" +tabfirst"
+    [[ ! -z $params ]] && _vim $params
+  fi
+} # }}}
+vims() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $2 in
+    1) $ALIASES fzf_exe @@ - --pane;;
+    *) echo "@@-f";;
+    esac
+    return 0
+  fi # }}}
+  local dst='.1' f= verb=false
+  [[ $1 == '-v' ]] && verb=true && shift
+  [[ $# -ge 2 ]] && dst="$1" && shift
+  f="$@"
+  [[ $dst =~ .*\..* ]] || dst+=".1"
+  if [[ ! -t 0 ]]; then
+    f="$(cat - | fzf)"
+  elif [[ -z $f ]]; then
+    f="$(fzf -m -1 -0 --prompt='vim> ')"
+  fi
+  [[ $? != 0 || -z $f ]] && return 0
+  for i in $f; do
+    if [[ -e "$i" ]]; then
+      $ALIASES fzf_exe -c pane --pane $dst -f "$i"
+    elif $verb; then
+      echo "File [$f] does not exist" >/dev/stderr
+    fi
+  done
+  true
+} # }}}
+
+alias ffwr='fzfwr'
+export PHISTORY_IGNORED_COMMANDS+=":ff:fzfwr"
+alias vimf='set -f && vimf'
+export PHISTORY_IGNORED_COMMANDS+=":vimf"
+export PHISTORY_IGNORED_COMMANDS+=":vimg"
+export PHISTORY_IGNORED_COMMANDS+=":vims"

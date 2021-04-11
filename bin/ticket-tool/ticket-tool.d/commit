@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+! git -C $TICKET_PATH rev-parse 2>/dev/null && exit 1
+do_push=false do_push_all=false
+while [[ ! -z $1 ]]; do
+  case $1 in
+  -p) do_push=true;;
+  -b) do_push_all=true;;
+  esac
+  shift
+done
+cd "$path_issue"
+[[ -z $(git status --short .) ]] && exit 0
+if git diff --cached --quiet; then
+  git diff --quiet && git ls-files -o --directory --exclude-standard | sed q1 >/dev/null 2>&1 && exit 0
+  git add .
+fi
+if [[ $(git log -1 --format="%s") == *\[i\]\ $issue* ]]; then
+  git commit --amend --no-verify --reuse-message=HEAD
+else
+  git commit -m"[i] $issue: Update" --no-verify
+fi
+if $do_push_all; then
+  git backup
+elif $do_push; then
+  git push
+fi
+exit 0
+

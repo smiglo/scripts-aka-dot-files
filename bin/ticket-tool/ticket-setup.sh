@@ -57,11 +57,13 @@ export issue="$1"
 $title && title="$issue" || title=
 issue="${issue,,}"
 shift
-if [[ -z $issue ]] && $do_open; then # {{{
-  [[ ! -z $TICKET_TMUX_SESSION ]] && tmux-startup.sh --do-env -- "$TICKET_TMUX_SESSION"
-  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
-    $ext --open
-  done # }}}
+if [[ -z $issue ]]; then # {{{
+  if $do_open; then # {{{
+    [[ ! -z $TICKET_TMUX_SESSION ]] && tmux-startup.sh --do-env -- "$TICKET_TMUX_SESSION"
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+      $ext --open
+    done # }}}
+  fi # }}}
   exit 0
 fi # }}}
 # }}}
@@ -112,12 +114,6 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			# echo "export var=val"
 			@@ ENV @@
 			# }}}
-			# -info # {{{
-			# For separators use: ---, ===; for sections: ## @, or [## @ ... # {{{] + [## @ }}}]
-			@@ ## @ Description @@
-			@@ DESCRIPTION @@
-			@@ INFO @@
-			# }}}
 			# -setup -# {{{ @@
 			case $1 in
 			# alias)   commands;;
@@ -136,6 +132,12 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			  # alias) echo "Description";;
 			  esac;; # }}}
 			esac
+			# }}}
+			# -info # {{{
+			# For separators use: ---, ===; for sections: ## @, or [## @ ... # {{{] + [## @ }}}]
+			@@ ## @ Description @@
+			@@ DESCRIPTION @@
+			@@ INFO @@
 			# }}}
 		EOF
     for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
@@ -214,6 +216,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     git add -f "${fname#${path_issue}/}"
     git add .
     git commit -m"[i] $issue" --no-verify
+    echo
     command cd - >/dev/null 2>&1
   fi # }}}
 fi # }}}

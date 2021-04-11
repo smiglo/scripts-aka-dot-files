@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Completion {{{
@@ -167,7 +167,7 @@ initFromEnv() { # {{{
   *) setup="$@";;
   esac
   [[ ! -z $setup ]] || return 0
-  $BASH_PATH/aliases progress --mark --dots --msg "Setting up windows in [$sessionName]..."
+  $ALIASES progress --mark --dots --msg "Setting up windows in [$sessionName]..."
   [[ ! $(declare -p setup) =~ "declare -a" ]] && setup=($setup)
   local i= p= t= c= w=$(($(tmux display -t "$sessionName" -p -F '#{session_windows}') + 1)) msgs=
   for i in ${!setup[*]}; do # {{{
@@ -192,7 +192,7 @@ initFromEnv() { # {{{
     fi
     # Title {{{
     if [[ ! -z $t ]]; then
-      $BASH_PATH/aliases set_title --from-tmux $sessionName:$w --lock "$t"
+      $ALIASES set_title --from-tmux $sessionName:$w --lock "$t"
       sleep 0.1
     fi # }}}
     # Preconfigured Splits # {{{
@@ -230,7 +230,7 @@ initFromEnv() { # {{{
     msgs+="Window [$t]: Created (${p/$HOME/~})\n"
     w=$(($w+1))
   done # }}}
-  $BASH_PATH/aliases progress --unmark
+  $ALIASES progress --unmark
   ! $silent && echo -e "$msgs" | sed 's/^/  /'
   $change_window && tmux select-window -t $sessionName:1
 } # }}}
@@ -258,8 +258,9 @@ else
     local s=$1
     local p=$2
     isSession "$s" && return 1
-    tmux new-session -d -s "$s" -c "$p" $tmux_size_params || return 1
+    tmux -u new-session -d -s "$s" -c "$p" $tmux_size_params || return 1
     tmux set -q -t $s @tmux_path "$p"   || return 1
+    tmux set-environment -gur RCSTUFF_FUNCTION_EXPORTED
   } # }}}
 fi
 # }}}
@@ -269,6 +270,7 @@ init() { # {{{
   [[ -z $sessionName || -z $sessionPath || ! -e $sessionPath ]] && echo "return 1;" && return 1
   echo "export sessionName=\"$sessionName\";"
   echo "export sessionPath=\"$sessionPath\";"
+  unset RCSTUFF_FUNCTION_EXPORTED
   initSession $sessionName $sessionPath || echo "return 0;"
   return 0
 } # }}}
@@ -350,13 +352,13 @@ initTmux_MAIN() { # {{{
     set-option    -t $sessionName:3 -w "@mark_auto" 'false' \; \
     select-window -t $sessionName:2 \; \
     select-pane   -t $sessionName:2.1
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:1 'Utils'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:2 'Widgets'
-  $BASH_PATH/aliases set_title --from-tmux $sessionName:3 'Root'
+  $ALIASES set_title --from-tmux $sessionName:1 'Utils'
+  $ALIASES set_title --from-tmux $sessionName:2 'Widgets'
+  $ALIASES set_title --from-tmux $sessionName:3 'Root'
   local isNet=false
-  $BASH_PATH/aliases progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
+  $ALIASES progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
   run_mc $sessionName:1.1
-  run $sessionName:3.1 --hide --clear "sudo -s"
+  run $sessionName:3.1 --hide --clear "$ALIASES sudo"
   makePreconfiguredSplits --wnd 2
 } # }}}
 initTmux_REMOTE() { # {{{
@@ -381,6 +383,7 @@ initTmux_ROOT() { # {{{
   fi
   tmux set -qg lock-server on
   tmux set -qg lock-after-time ${TMUX_LOCK_TIMEOUT_ROOT:-300}
+  $HOME/.tmux.bash status_left "$($ALIASES getUnicodeChar 'root')" '#[fg=colour226]'
 } # }}}
 # }}}
 # MAIN {{{

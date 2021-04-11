@@ -1,0 +1,97 @@
+set bell-style none
+set colored-stats on
+set completion-ignore-case on
+set completion-map-case on
+set completion-prefix-display-length 10
+set expand-tilde off
+set mark-directories on
+set mark-symlinked-directories on
+set menu-complete-display-prefix on
+
+set show-all-if-ambiguous on
+set show-all-if-unmodified on
+set skip-completed-text on
+
+set show-mode-in-prompt on
+# In Bash >= 4.4
+set vi-ins-mode-string "+"
+set vi-cmd-mode-string ":"
+set emacs-mode-string "@"
+set colored-completion-prefix on
+# ---
+
+set keyseq-timeout 200
+
+set keymap vi-command
+"\e[5~":    history-search-backward
+"\M-k":     history-search-backward
+"\e[6~":    history-search-forward
+"\M-j":     history-search-forward
+"\e[Z":     complete
+"\C-k":     complete
+"	":        menu-complete
+"\C-b":     menu-complete-backward
+"\C-h":     dynamic-complete-history
+"\M-.":     yank-last-arg
+"\C-s":     forward-search-history
+"\C-r":     reverse-search-history
+"\M-#":     insert-comment
+"\C-g":     kill-whole-line
+"\M-\M-":   kill-whole-line
+"\C-kk":    kill-whole-line
+"\C-ks":    clear-screen
+"\C-a":     beginning-of-line
+"\C-e":     end-of-line
+"\C-w":     backward-kill-word
+"\C-T":     transpose-chars
+"\C-t":     transpose-words
+"\C-km(":   start-kbd-macro
+"\C-km)":   end-kbd-macro
+"\C-km-":   print-last-kbd-macro
+"\C-kme":   call-last-kbd-macro
+"\C-k/":    edit-and-execute-command
+"\C-kE":    emacs-editing-mode
+"/":        reverse-search-history
+"K":        history-search-backward
+"J":        history-search-forward
+".":        yank-last-arg
+"yl":       yank-last-arg
+"yn":       yank-nth-arg
+"\e-":      yank-nth-arg
+
+set keymap vi-insert
+"\e[5~":    history-search-backward
+"\M-k":     history-search-backward
+"\e[6~":    history-search-forward
+"\M-j":     history-search-forward
+"\e[Z":     complete
+"\C-k":     complete
+"	":        menu-complete
+"\C-b":     menu-complete-backward
+"\C-h":     dynamic-complete-history
+"\M-.":     yank-last-arg
+"\C-s":     forward-search-history
+"\C-r":     reverse-search-history
+"\M-#":     insert-comment
+"\C-g":     kill-whole-line
+"\M-\M-":   kill-whole-line
+"\C-kk":    kill-whole-line
+"\C-ks":    clear-screen
+"\C-a":     beginning-of-line
+"\C-e":     end-of-line
+"\C-w":     backward-kill-word
+"\C-T":     transpose-chars
+"\C-t":     transpose-words
+"\C-km(":   start-kbd-macro
+"\C-km)":   end-kbd-macro
+"\C-km-":   print-last-kbd-macro
+"\C-kme":   call-last-kbd-macro
+"\C-k/":    edit-and-execute-command
+"\C-kE":    emacs-editing-mode
+"JJ":       vi-movement-mode
+"\e[1;5C":  vi-next-word
+"\e[1;5D":  vi-prev-word
+
+set editing-mode vi
+set keymap vi-insert
+

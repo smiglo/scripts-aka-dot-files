@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Check for OS/X # {{{
@@ -73,6 +73,7 @@ export TMUX_FINGERS_PREDEFINED+=" ((https?://|git@|git://|ssh://|ftp://|file:///
 export TMUX_FINGERS_REGEX=
 export TMUX_INIT_SESSIONS=
 export TMUX_REMOTE_PREFIXES=
+export TMUX_STATUS_LEFT_EXTRA_MAP=
 export TMUX_STATUS_RIGHT_EXTRA=
 export TMUX_SWITCH_CLIENT_MAP=
 export TO_INSTALL_BIN_MISC='BASIC'
@@ -82,9 +83,68 @@ export VIM_CTRLP_IGNORE_DIRS="NOT_EXISTING_DIR_PATTERN_TO_IGNORE"
 export VIM_PRJ_EXCLUDE=
 export VIM_PRJ_PARAMS=
 # }}}
+# Profiles # {{{
+export PROFILES_PATH="$BASH_PATH/profiles"
+export BASH_PROFILES="$(command cd $PROFILES_PATH; echo *)"
+[[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
+export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
+# }}}
+# TMP Paths # {{{
+export TMP_PATH=$HOME/.tmp
+export TMP_MEM_PATH=$TMP_PATH/.mem
+export TMPDIR=$TMP_PATH/.tmp-dir
+[[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
+chmod 700 $TMPDIR
+[[ ! -d $TMP_MEM_PATH ]] && echo "Memory fs does not exist [$TMP_MEM_PATH]. It will be created" && command mkdir -p $TMP_MEM_PATH && chmod 700 $TMP_MEM_PATH
+[[ ! -e $TMP_MEM_PATH/.bashrc ]] && command mkdir $TMP_MEM_PATH/.bashrc
+# }}}
+# Unicode extra chars # {{{
+declare -A UNICODE_EXTRA_CHARS
+UNICODE_EXTRA_CHARS[battery]="🔋"
+UNICODE_EXTRA_CHARS[disk]="💾"
+UNICODE_EXTRA_CHARS[envelope]="✉ "
+UNICODE_EXTRA_CHARS[exclamation]="❢"
+UNICODE_EXTRA_CHARS[extra_bar]="◼ "
+UNICODE_EXTRA_CHARS[high_cpu]="⚛ "
+UNICODE_EXTRA_CHARS[localhost]="🤠"
+UNICODE_EXTRA_CHARS[log_last_pause]="⏸ "
+UNICODE_EXTRA_CHARS[log_last_play]="⏺ "
+UNICODE_EXTRA_CHARS[mic]="🎤"
+UNICODE_EXTRA_CHARS[mute]="🔇"
+UNICODE_EXTRA_CHARS[power]="🔌"
+UNICODE_EXTRA_CHARS[progress_bar]="▁▃▄▅▆▇█▇▆▅▄▃"
+UNICODE_EXTRA_CHARS[progress_dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
+UNICODE_EXTRA_CHARS[root]="☢ "
+UNICODE_EXTRA_CHARS[smart]="ⓢ "
+UNICODE_EXTRA_CHARS[ssh]="🚀"
+UNICODE_EXTRA_CHARS[zoom_left]="🔍"
+UNICODE_EXTRA_CHARS[zoom_right]="🔎"
+UNICODE_EXTRA_CHARS[zoom]="${UNICODE_EXTRA_CHARS[zoom_right]}"
+TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
+if $IS_MAC; then
+  :
+else
+  [[ "$(echo -en "🔍" | { $IS_MAC && gwc -L || wc -L; })" != "2" ]] && TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=false
+fi
+if ! $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS; then
+  UNICODE_EXTRA_CHARS[battery]="B"
+  UNICODE_EXTRA_CHARS[disk]="U"
+  UNICODE_EXTRA_CHARS[localhost]=":)"
+  UNICODE_EXTRA_CHARS[mic]="Mic"
+  UNICODE_EXTRA_CHARS[mute]="Mute"
+  UNICODE_EXTRA_CHARS[power]="P"
+  UNICODE_EXTRA_CHARS[zoom]="/Z"
+fi
+export UNICODE_EXTRA_CHARS
+export UNICODE_EXTRA_CHARS_FILE="$TMP_MEM_PATH/.unicode-extra.conf"
+# }}}
 # Runtime Path - Setup # {{{
 export RUNTIME_PATH=$HOME/.runtime
 [[ ! -e $RUNTIME_PATH ]] && command mkdir $RUNTIME_PATH
+for i in $BASH_PROFILES; do
+  [[ -e $RUNTIME_PATH/runtime-pre.bash.$i ]] && source $RUNTIME_PATH/runtime-pre.bash.$i
+done
+[[ -e $RUNTIME_PATH/runtime-pre.bash ]] && source $RUNTIME_PATH/runtime-pre.bash
 [[ ! -e $RUNTIME_PATH/tmux-buffers ]] && command mkdir $RUNTIME_PATH/tmux-buffers
 export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
 export APPS_CFG_PATH=$RUNTIME_PATH/apps
@@ -93,12 +153,6 @@ export APPS_CFG_PATH=$RUNTIME_PATH/apps
 # Personalities # {{{
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
 [[ -e $RUNTIME_PATH/personalities ]] && source $RUNTIME_PATH/personalities
-# }}}
-# Profiles # {{{
-export PROFILES_PATH="$BASH_PATH/profiles"
-export BASH_PROFILES="$(command cd $PROFILES_PATH; echo *)"
-[[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
-export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
 # }}}
 # Path # {{{
 export PATH=@END@:$PATH
@@ -154,28 +208,31 @@ fi
 export PS1_SSH_CHANGE=true
 export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
 [[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
-export REMINDER_DIR="$RUNTIME_PATH/reminders"
+export REMINDER_DIR="$APPS_CFG_PATH/reminders"
+export ALIASES="$BASH_PATH/aliases"
 # }}}
-# Dropbox setup {{{
-export SHARED_BASH_PATH=
-export DROPBOX_PATH=$HOME/Documents/Dropbox
-[[ ! -e $DROPBOX_PATH ]] && export DROPBOX_PATH=$HOME/Documents/priv/Dropbox
-[[ ! -e $DROPBOX_PATH ]] && export DROPBOX_PATH=
-if [[ ! -z $DROPBOX_PATH ]]; then
-  export CD_LAST_DIRS_STORED+=":Dr@$DROPBOX_PATH"
-  export SHARED_BASH_PATH=$DROPBOX_PATH/sharable/bash-utils
+# Sharable setup {{{
+if [[ -z $SHARABLE_PATH ]]; then
+  sPaths="$HOME/Documents/Dropbox $HOME/Documents/priv/Dropbox $HOME/Documents/GDrive $TMP_MEM_PATH/share"
+  while [[ ! -z sPaths && ! -e $SHARABLE_PATH && $SHARABLE_PATH != $sPaths ]]; do
+    SHARABLE_PATH="${sPaths%% *}"
+    sPaths="${sPaths#* }"
+  done
+  unset sPaths p
+  [[ ! -e $SHARABLE_PATH ]] && command mkdir -p $SHARABLE_PATH
+  export CD_LAST_DIRS_STORED+=":shr@$SHARABLE_PATH"
+fi
+if [[ ! -z $SHARABLE_PATH && -e $SHARABLE_PATH ]]; then
+  export CD_LAST_DIRS_STORED+=":Dr@$SHARABLE_PATH"
+  [[ -z $SHARED_BASH_PATH && -e $SHARABLE_PATH/sharable/bash-utils ]] && export SHARED_BASH_PATH="$SHARABLE_PATH/sharable/bash-utils"
   [[ -e $SHARED_BASH_PATH/runtime.bash ]] && source $SHARED_BASH_PATH/runtime.bash
 fi
+export SHARABLE_PATH
 # }}}
 # TMP setup {{{
-export TMP_PATH=$HOME/.tmp
-export TMP_MEM_PATH=$TMP_PATH/.mem
-export TMPDIR=$TMP_PATH/.tmp-dir
-[[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
-chmod 700 $TMPDIR
-[[ ! -d $TMP_MEM_PATH ]] && echo "Memory fs does not exist [$TMP_MEM_PATH]. It will be created" && command mkdir -p $TMP_MEM_PATH && chmod 700 $TMP_MEM_PATH
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
 export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
+[[ -e $HOME/Desktop/mem ]] && export CD_LAST_DIRS_STORED+=":m@$HOME/Desktop/mem"
 # TMP Subentries {{{
 export TMUX_TMPDIR=$TMP_MEM_PATH/.tmux
 [[ ! -d $TMUX_TMPDIR ]] && command mkdir -p $TMUX_TMPDIR && chmod 700 $TMUX_TMPDIR
@@ -183,7 +240,7 @@ export GREP_LAST_PATH=$TMP_PATH/.grep-last
 export VIM_UTILS_PATH="$TMP_PATH/.vim"
 if [[ -n $TMUX ]]; then
   export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
-  export TMUX_SESSION_PATH="$TMP_PATH/.tmux/sessions/$TMUX_SESSION"
+  export TMUX_SESSION_PATH="$APPS_CFG_PATH/tmux/sessions/$TMUX_SESSION"
   [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
   export GREP_LAST_PATH="$TMUX_SESSION_PATH/grep-last"
   export VIM_UTILS_PATH="$TMUX_SESSION_PATH/vim"
@@ -224,8 +281,8 @@ if [[ $(id -u) != 0 ]]; then # {{{
       paths+=" p=\"$TMPDIR\";threshold=21;silent=true;size=250"
       paths+=" p=\"${RMF_TRASH_PATH:-$TMP_PATH/.trash}\";threshold=7;silent=true;size=200"
       paths+=" p=\"$TMP_PATH\";size=150"
-      paths+=" p=\"$TMP_PATH/.tmux/buffers\";silent=true"
-      paths+=" p=\"$TMP_PATH/.tmux/layouts\";silent=true;keep=\"^\\(.*/\\)\\?l\\(\\..*\\)\?\\.layout\""
+      paths+=" p=\"$APPS_CFG_PATH/tmux/buffers\";silent=true"
+      paths+=" p=\"$APPS_CFG_PATH/tmux/layouts\";silent=true;keep=\"^\\(.*/\\)\\?l\\(\\..*\\)\?\\.layout\""
       paths+=" p=\"$TMP_PATH/.grep-last\";silent=true;size=15"
       paths+=" p=\"$TMP_PATH/.vim/undoes\";silent=true;size=20"
       paths+=" p=\"$TMP_PATH/.vim/sessions\";silent=true;threshold=42"
@@ -246,7 +303,7 @@ if [[ $(id -u) != 0 ]]; then # {{{
         msg="${CBlue}Cleaning tmp"
         [[ $p == $TMP_MEM_PATH ]] && msg+="-mem"
         msg+=" [${p/$TMP_PATH\/}]"
-        $BASH_PATH/aliases progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1
+        $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1
         # Old files # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
@@ -267,10 +324,10 @@ if [[ $(id -u) != 0 ]]; then # {{{
           2>/dev/null # }}}
         rm -f $marker
         [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && echo -en "\nSize greater than [${CCyan}${size}${COff}]"
-        $BASH_PATH/aliases progress --unmark
+        $ALIASES progress --unmark
       done # }}}
       if which tac >/dev/null 2>&1 && [[ ! -n $TMUX || $do_clean != 'false' ]]; then
-        $BASH_PATH/aliases progress --mark --dots --msg "${CBlue}Cleaning bash histories" --color ${CCyan} --delay 0.1
+        $ALIASES progress --mark --dots --msg "${CBlue}Cleaning bash histories" --color ${CCyan} --delay 0.1
         find -L $TMP_PATH/.tmux -maxdepth 3 -name bash_history \
           -exec \
             /bin/bash -c 'f() { \
@@ -279,7 +336,7 @@ if [[ $(id -u) != 0 ]]; then # {{{
               && mv "$1.bck" "$1"; \
             }; f "{}"' \; \
           2>/dev/null
-        $BASH_PATH/aliases progress --unmark
+        $ALIASES progress --unmark
       fi
     )
   fi # }}}
@@ -294,6 +351,7 @@ GIT_PATH="/usr/local/git/current"
 # }}}
 # PATH {{{
 [[ -e $HOME/.cargo/bin ]] && export PATH="$HOME/.cargo/bin:$PATH"
+[[ -e $HOME/.local/bin ]] && export PATH="$HOME/.local/bin:$PATH"
 # }}}
 # Runtime file # {{{
 export RUNTIME_FILE=$RUNTIME_PATH/runtime.bash

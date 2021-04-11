@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Is installed # {{{
@@ -8,11 +8,12 @@ export RCSTUFF_CFG_INSTALLED=true
 # }}}
 # Exports {{{
 # Term {{{
-if [[ ! -n $TMUX ]]; then
-  export TERM="xterm-256color"
-else
-  export TERM="screen-256color"
-fi
+[[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
+case $TERM_ORIG in
+*) [[ ! -n $TMUX ]] && export TERM="xterm" || export TERM="screen" ;;&
+linux) export TERM+="-16color";;
+*)     export TERM+="-256color";;
+esac
 # }}}
 # Git {{{
 export GIT_PS1_SHOWDIRTYSTATE=true
@@ -59,7 +60,7 @@ if [[ -f ~/.fzf.bash ]]; then
       echo "$FZF_ALT_C_COMMAND" >$TMP_MEM_PATH/.fzf.alt-c-cmd.env
     fi # }}}
   fi # }}}
-  fzf_exe="$BASH_PATH/aliases fzf_exe"
+  fzf_exe="$ALIASES fzf_exe"
   if [[ -e $TMP_MEM_PATH/.fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $TMP_MEM_PATH/.fzf.def-opts.env)"
   else
@@ -92,13 +93,16 @@ if [[ -f ~/.fzf.bash ]]; then
 fi
 # }}}
 # Default values for functions and scripts {{{
+UNICODE_EXTRA_CHARS[tmux_main]="🌅"
 export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
 export GREP_DEFAULT_PARAMS="--color --binary-files=binary"
 export GREP_COLORS='mt=38;5;214:ne:fn=36'
 export KEEP_PASS_JOURNAL="$RUNTIME_PATH/keep-pass.journal"
 export KEEP_PASS_KEYS="$RUNTIME_PATH/keep-pass.keys"
 [[ -e $SHARED_BASH_PATH ]] && export KEEP_PASS_JOURNAL="$SHARED_BASH_PATH/keep-pass.journal"
-export HL_DEFAULTS="+cC \\<TB]"
+export HL_DEFAULTS="+cB '\\<TB\]'"
+export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
+export RLWRAP_OPTS="-A -b '' -e '' -D 2"
 export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
 export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
 export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
@@ -107,7 +111,8 @@ export TMUX_INIT_SESSIONS="MAIN"
 export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
 export TMUX_PREFIX_2='C-q'
 export TMUX_SMART_BLACKLIST="EMPTY_VALUE\\|gitlab\\.com\\|github\\.com"
-export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 025:time"
+export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux_main]}\n"
+export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 025:time 030:progress_bar"
 export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
 export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
@@ -138,114 +143,60 @@ shopt -s histappend
 shopt -s checkwinsize
 shopt -s extglob
 shopt -s cdspell
+shopt -s direxpand
 # }}}
 # InputRC: Bash shortcuts {{{
-if [[ "$what_to_do" == 'full' ]]; then
-  goto_vi_command() { # {{{
-    [[ $READLINE_POINT == ${#READLINE_LINE} && $READLINE_POINT -gt 0 && ${READLINE_LINE:$((READLINE_POINT-1)):1} != ' ' ]] && READLINE_LINE="$READLINE_LINE " && READLINE_POINT=$((READLINE_POINT+1))
-    bind 'set keymap vi-command'
-    return 0
-  }
-  bind 'set bell-style none'
-  bind 'set colored-stats on'
-  bind 'set completion-ignore-case on'
-  bind 'set completion-map-case on'
-  bind 'set completion-prefix-display-length 10'
-  bind 'set expand-tilde off'
-  bind 'set mark-directories on'
-  bind 'set mark-symlinked-directories on'
-  bind 'set menu-complete-display-prefix on'
-
-  bind 'set show-all-if-ambiguous on'
-  bind 'set show-all-if-unmodified on'
-  bind 'set skip-completed-text on'
-
-  bind 'set show-mode-in-prompt on'
-  if [[ $BASH_VERSION == '4.4'* ]]; then
-    bind 'set vi-ins-mode-string "+"'
-    bind 'set vi-cmd-mode-string ":"'
-    bind 'set emacs-mode-string "@"'
-    bind 'set colored-completion-prefix on'
-  fi
-
-  for i in {emacs,vi-command,vi-insert}; do
-    bind "set keymap $i"
-    bind -r '\C-k'    # u for utils
-    bind '"\e[5~":    history-search-backward' # S-PgUp
-    bind '"\M-k":     history-search-backward'
-    bind '"\e[6~":    history-search-forward'  # S-PgDn
-    bind '"\M-j":     history-search-forward'
-    bind '"\e[Z":     complete'                # S-TAB
-    bind '"\C-k":     complete'                # C-k
-    bind '"	":        menu-complete'           # TAB
-    bind '"\C-b":     menu-complete-backward'  # C-B
-    bind '"\C-h":     dynamic-complete-history' # C-h
-    bind '"\M-.":     yank-last-arg'
-    bind '"\C-s":     forward-search-history'
-    bind '"\C-r":     reverse-search-history'
-    bind '"\M-#":     insert-comment'
-    bind '"\C-g":     kill-whole-line'
-    bind '"\M-\M-":   kill-whole-line'
-    bind '"\C-kk":    kill-whole-line'
-    bind '"\C-ks":    clear-screen'
-    bind '"\C-a":     beginning-of-line'
-    bind '"\C-e":     end-of-line'
-    bind '"\C-w":     backward-kill-word'
-    bind '"\C-T":     transpose-chars'
-    bind '"\C-t":     transpose-words'
-    bind '"\C-km(":   start-kbd-macro'
-    bind '"\C-km)":   end-kbd-macro'
-    bind '"\C-km-":   print-last-kbd-macro'
-    bind '"\C-kme":   call-last-kbd-macro'
-    bind '"\C-k/":    edit-and-execute-command'
-    bind -x \
-         '"\C-kj":    READLINE_LINE="#$(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
-    pre=
-    case $i in
-    emacs)
-      bind '"JJ":      vi-editing-mode'
-      bind '"\C-kV":   "JJJJ"' # workaround for vi-movement-mode
-      bind '"\e[1;5C": forward-word'
-      bind '"\e[1;5D": backward-word'
-      ;;
-    vi-command) # vi-movement-mode
-      bind '"\C-kE":  emacs-editing-mode'
-      bind '"/":      reverse-search-history'
-      bind '"K":      history-search-backward'
-      bind '"J":      history-search-forward'
-      bind '".":      yank-last-arg'
-      bind '"yl":     yank-last-arg'
-      bind '"yn":     yank-nth-arg'
-      bind '"\e-":    yank-nth-arg'
-      pre='i'
-      ;;
-    vi-insert) # vi-editing-mode
-      bind '"\C-kE":   emacs-editing-mode'
-      bind '"JJ":      vi-movement-mode'
-      bind -x '"KK":   goto_vi_command'
-      bind '"\e[1;5C": vi-next-word'
-      bind '"\e[1;5D": vi-prev-word'
-      if $FZF_INSTALLED; then
-        bind '"\el":"$(!!|fzf)\C-a \C-m"'
-      fi
-      bind -x '"\C-kk":"history -r"'
-      bind '"\C-ke":"\C-gexec bash\C-m"'
-      ;;
-    esac
-    bind '"\C-kl":  "'${pre}' \C-g logout\C-m'
-    bind '"\C-kr":  "'${pre}' \C-g reset\C-m'
-    bind '"\C-kh":  "'${pre}' \C-g pt ht; clear\C-m'
-    bind '"\C-l":   "'${pre}' \C-g clr\C-m'
-    if $FZF_INSTALLED; then
-      bind -x '"\C-f": "'${pre}'fzfwr iRC"'
-      bind -x '"\C-p": "'${pre}'fzf-file-widget"'
-    fi
-  done
-  unset i pre
-  bind 'set editing-mode vi'
-  bind 'set keymap vi-insert'
-  bind "set keyseq-timeout 200"
+goto_vi_command() { # {{{
+  [[ $READLINE_POINT == ${#READLINE_LINE} && $READLINE_POINT -gt 0 && ${READLINE_LINE:$((READLINE_POINT-1)):1} != ' ' ]] && READLINE_LINE="$READLINE_LINE " && READLINE_POINT=$((READLINE_POINT+1))
+  bind 'set keymap vi-command'
+  return 0
+} # }}}
+if [[ $BASH_VERSION == '4.4'* ]]; then
+  bind 'set vi-ins-mode-string "+"'
+  bind 'set vi-cmd-mode-string ":"'
+  bind 'set emacs-mode-string "@"'
+  bind 'set colored-completion-prefix on'
 fi
+
+for i in {emacs,vi-command,vi-insert}; do
+  bind "set keymap $i"
+  bind -r '\C-k'    # u for utils
+  bind -x '"\C-kj":    READLINE_LINE="#$(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
+  pre=
+  case $i in
+  emacs)
+    bind '"JJ":      vi-editing-mode'
+    bind '"\C-kV":   "JJJJ"' # workaround for vi-movement-mode
+    bind '"\e[1;5C": forward-word'
+    bind '"\e[1;5D": backward-word'
+    ;;
+  vi-command) # vi-movement-mode
+    bind '"\C-kE":  emacs-editing-mode'
+    pre='i'
+    ;;
+  vi-insert) # vi-editing-mode
+    bind '"\C-kE":   emacs-editing-mode'
+    bind -x '"KK":   goto_vi_command'
+    if $FZF_INSTALLED; then
+      bind '"\el":"$(!!|fzf)\C-a \C-m"'
+    fi
+    bind -x '"\C-kk":"history -r"'
+    bind '"\C-ke":"\C-gexec bash\C-m"'
+    bind '"\C-kf":"\C-gsource ~/.bashrc --force\C-m"'
+    ;;
+  esac
+  bind '"\C-kl":  "'${pre}' \C-g logout\C-m"'
+  bind '"\C-kr":  "'${pre}' \C-g reset\C-m"'
+  bind '"\C-kh":  "'${pre}' \C-g pt ht; clear\C-m"'
+  bind '"\C-l":   "'${pre}' \C-g clr\C-m"'
+  if $FZF_INSTALLED; then
+    bind -x '"\C-f": "'${pre}'fzfwr iRC"'
+    bind -x '"\C-p": "'${pre}'fzf-file-widget"'
+  fi
+done
+unset i pre
+bind 'set editing-mode vi'
+bind 'set keymap vi-insert'
 # }}}
 # Completion {{{
 if [[ -f /etc/bash_completion ]] && ! shopt -oq posix; then

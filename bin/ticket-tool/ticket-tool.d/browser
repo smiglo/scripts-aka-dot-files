@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+browser="${TICKET_CONF_BROWSER#@}" params=
+if [[ -z $browser ]]; then
+  $IS_MAC && browser="open" || browser="chromium"
+fi
+all=true
+while [[ ! -z $1 ]]; do
+  case $1 in
+  @ff | @chrome | @chromium | @brave) browser="${1#@}";;
+  @*) cmd="${1#@}"; shift; params="$@"; shift $#; break;;
+  -1) all=false;;
+  *)  break;;
+  esac
+  shift
+done
+urls="$@"
+if [[ -z $urls ]]; then
+  func="$(getFunctionBodyRaw "$cmd")"
+  [[ -z $func ]] && echo "Cannot get any URLs from [$cmd]" >/dev/stderr && exit 1
+  if [[ $cmd == 'browser' ]]; then
+    urls="$(echo "$func")"
+  else
+    urls="$($cmd_tt $cmd $params)"
+  fi
+  urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\1/p')"
+  [[ -z $urls ]] && echo -e "No ULRs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
+  ! $all && urls="$(echo "$urls" | head -n1)"
+fi
+for i in $urls; do
+  case $browser in
+  ff)       firefox -new-tab -url $i;;
+  chrome)   /opt/google/chrome $i;;
+  chromium)
+    browser='chromium'
+    ! which $broswer >/dev/null 2>&1 && browse="chromium-browser"
+    $browser $i;;
+  brave)    browser="${TICKET_CONF_BROWSER_BRAVE_PATH:-/opt/brave.com/brave/brave}"
+            [[ ! -f $browser ]] && echo "Brave not found at [$browser]" >/dev/stderr && exit 1
+            $browser $i;;
+  open)     open $i;;
+  esac
+done
+

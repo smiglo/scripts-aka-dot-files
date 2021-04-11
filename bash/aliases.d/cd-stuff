@@ -1,0 +1,618 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+__util_cd_param() { # {{{
+  local dst=
+  [[ $2 != '--cd-spec' ]] && echo $2 && return 0
+  case $1 in
+  tmux)
+      [[ ! -n $TMUX ]] && return 0
+      dst="$(tmux show-options -qv @tmux_path)"
+      [[ -z $dst ]] && return 0;;
+  *) for i in $BASH_PROFILES_FULL; do
+        [[ -e $i/aliases ]] && dst="$($i/aliases __util_cd_param $1)"
+        [[ ! -z $dst ]] && break
+      done;;
+  esac
+  echo $dst
+} # }}}
+__util_cd_tilde_conv() { # {{{
+  local d="$1"
+  [[ $d == '~'* ]] && d="${d/\~/$HOME}"
+  echo "$d"
+} # }}}
+function cd_wrapper { # @@ # {{{
+  if [[ $1 != '--' ]]; then # {{{
+    set +f
+    if [[ ${#BASH_SOURCE[*]} -gt 1 ]]; then
+      command cd "$@"
+      return $?
+    fi
+  else
+    shift
+    if [[ $1 != '@@' && "${#BASH_SOURCE[*]}" != 2 ]]; then
+      false && echo "Fall-back [${#BASH_SOURCE[*]}], [$@]" >/dev/stderr
+      set +f; command cd "$@"; return $?;
+    fi
+  fi # }}}
+  set +f
+  local dst="$1" i= cmd="cd" p= verbose=false oldIFS=$IFS cd_list= len= out= stdout= create_dir=false param= in_pipe=false fzf_key_split_v='' fzf_key_split_h=''
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+    cd_list=$CD_LAST_DIRS_STORED
+    [[ ! -z $cd_list ]] && IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+    # echo -e "\na=[$@]\n" >/dev/stderr
+    if [[ $3 == '-i' || $4 == '-i' ]]; then # {{{
+      echo "2 3 4 5 10 --fzf-params"
+      ${CD_INTERACTIVE_LOOP:-true}         && echo "--no-loop"       || echo "--loop"
+      ${CD_INTERACTIVE_PROMPT_EXTRA:-true} && echo "--no-prompt"     || echo "--prompt"
+      ${CD_INTERACTIVE_USER:-true}         && echo "--no-user"       || echo "--user"
+      ${CD_INTERACTIVE_PARENT:-true}       && echo "--no-parent"     || echo "--parent"
+      case ${CD_INTERACTIVE_PREDEFINED:-all} in
+      all)   echo "--predefined-smart --predefined-none";;
+      smart) echo "--predefined-all   --predefined-none";;
+      none)  echo "--predefined-all   --predefined-smart";;
+      esac
+      case ${CD_INTERACTIVE_STORED:-all} in
+      all)   echo "--stored-smart --stored-none";;
+      smart) echo "--stored-all   --stored-none";;
+      none)  echo "--stored-all   --stored-smart";;
+      esac
+      return 0 # }}}
+    elif [[ $4 == ':' && $2 -ge 3 ]]; then # {{{
+      for i in ${!cd_list[*]}; do
+        [[ "${cd_list[$i]/@*}" == $5 ]] && echo "$(command cd "${cd_list[$i]#*@}/$6" && command find . -maxdepth 2 -type d | sed -e 's|^\./||' -e '/^\.$/d')" && return 0
+      done
+      return 0
+      # }}}
+    elif [[ $4 == ','* && $2 -ge 2 ]]; then # {{{
+      i="${4:1}"
+      [[ -z $i ]] && i="1"
+      len=${#CD_LAST_DIRS[*]}
+      [[ -z $CD_LAST_DIRS || $len == 1 || $i -ge $len ]] && return
+      dst="${CD_LAST_DIRS[$((len-i-1))]}"
+      echo "$(command cd "$dst" && command find . -maxdepth 2 -type d | sed -e 's|^\./||' -e '/^\.$/d')"
+      return 0
+      # }}}
+    elif [[ $4 == '.'* && $2 -ge 2 ]]; then # {{{
+      i="${4:1}"
+      [[ -z $i ]] && i="1"
+      dst="$(eval printf "../%.0s" {1..$i})"
+      echo "$(command cd "$dst" && command find . -maxdepth 2 -type d | sed -e 's|^\./||' -e '/^\.$/d')"
+      return 0
+    fi # }}}
+    local ret=''
+    for i in ${!cd_list[*]}; do
+      ret+=" :${cd_list[$i]/@*}"
+    done
+    ret+=" @@-d -mk -P -pu -po -i"
+    echo "$ret"
+    return 0
+  fi # }}}
+  [[ ! -t 1 ]] && in_pipe=true
+  local colors= COff=
+  if ! $in_pipe; then # {{{
+    colors=("[48;5;12m" "${COnBlack}")
+    COff='[0m'
+  fi # }}}
+  if [[ ! -e "$dst" || $1 == '.' || $1 == '--' ]]; then
+    dst=
+    [[ $1 == '--' ]] && shift
+    local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*CD-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
+    [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    [[ -z $1 ]] && set -- -i ${CD_INTERACTIVE_CONF:-${CD_INTERACTIVE_DEPTH2:-2} --loop --parent --user --predefined-smart --stored-smart}
+    while [[ ! -z $1 ]]; do # {{{
+      param=$1
+      case $param in
+      # . - Parents # {{{
+      .[0-9]*)
+          dst="$(eval printf "../%.0s" {1..${1:1}})"
+          [[ ! -z $2 ]] && dst+="/$2" && shift;;
+      .)  if [[ -z $2 ]]; then
+            stdout=$(i=1; while true; do
+              p="$(command cd "$PWD/$(eval printf "../%.0s" {1..$i})"; pwd | sed -e "s|^$HOME|~|")"
+              if [[ ${#p} -ge 120 ]]; then
+                while [[ ${#p} -ge 120 ]]; do
+                  p="${p#*/}"
+                done
+                p=".../$p"
+              fi
+              printf "%d. %s\n" "$i" "$p"
+              i=$(($i+1))
+              [[ $p == '/' ]] && break
+            done)
+            if $use_fzf; then
+              dst="$(echo "$stdout" | fzf --exit-0 --select-1 --sort --prompt='Parent> ')"
+              [[ $? != 0 ]] && return 0
+              dst="$(eval printf "../%.0s" {1..${dst%%. *}})"
+            else
+              echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
+              $in_pipe && return 0
+              read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+              case ${i^^} in
+              Q|N|'') return 0;;
+              esac
+              dst="$(eval printf "../%.0s" {1..$i})"
+            fi
+          else
+            dst="../$2" && shift
+          fi;;
+      # }}}
+      # , - Previous # {{{
+      ,[1-9])
+          len=${#CD_LAST_DIRS[*]}
+          [[ -z $CD_LAST_DIRS || ${1:1} -ge $len ]] && return 1
+          dst="${CD_LAST_DIRS[$(($len-${1:1}-1))]}"
+          [[ ! -z $2 ]] && dst+="/$2" && shift;;
+      ,)  [[ -z $CD_LAST_DIRS ]] && return 0
+          len=${#CD_LAST_DIRS[*]}
+          [[ $len == 1 ]] && return 0
+          if [[ -z $2 ]]; then
+            stdout=$(for i in $(seq $(($len-2)) -1 0); do
+              printf "%d. %s\n" $(($len-2-$i+1)) "$(echo ${CD_LAST_DIRS[$i]} | sed "s|^$HOME|~|")"
+            done)
+            if $use_fzf; then
+              dst="$(echo "$stdout" | fzf --exit-0 --select-1 --sort --no-multi --prompt='Last> ')"
+              [[ $? != 0 ]] && return 0
+              dst="${dst#* }"
+            else
+              echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
+              $in_pipe && return 0
+              read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+              case ${i^^} in
+              Q|N|'') return 0;;
+              esac
+              dst="${CD_LAST_DIRS[$(($len-$i-1))]}"
+            fi
+            [[ -z $dst ]] && return 1
+          else
+            dst="${CD_LAST_DIRS[0]}/$2" && shift
+          fi;;
+      # }}}
+      # : - Stored # {{{
+      :)   [[ $2 == :* ]] && shift && continue # {{{
+            [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+            cd_list=$CD_LAST_DIRS_STORED
+            [[ ! -z $cd_list ]] && IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+            [[ -z $cd_list ]] && return 1
+            stdout=$(for i in ${!cd_list[*]}; do
+              printf "%2d. %5s: %s\n" "$(($i+1))" "${cd_list[$i]/@*}" "$(echo $(__util_cd_param "${cd_list[$i]/@*}" "${cd_list[$i]/*@}") | sed "s|^$HOME|~|")"
+            done)
+            if $use_fzf; then
+              dst="$(echo "$stdout" | fzf --exit-0 --sort --no-multi --prompt='Stored> ')"
+              [[ $? != 0 ]] && return 0
+              dst="${dst#*: }"
+            else
+              echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
+              $in_pipe && return 0
+              read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+              case ${i^^} in
+              Q|N|'') return 0;;
+              esac
+              dst="$(__util_cd_param "${cd_list[$(($i-1))]/@*}" "${cd_list[$(($i-1))]/*@}")"
+            fi
+            [[ -z $dst ]] && return 1;; # }}}
+      :+|:++)  # {{{
+            p=$2; shift
+            [[ -z $p ]] && return 1
+            local path=$PWD
+            [[ ! -z $2 ]] && path=$2 && shift
+            [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+            cd_list=$CD_LAST_DIRS_STORED
+            if [[ ! -z $cd_list ]]; then
+              IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+              for i in ${!cd_list[*]}; do
+                [[ $p    == ${cd_list[$i]/@*} ]] && return 1
+                [[ $path == ${cd_list[$i]/*@} ]] && return 1
+                out+=":${cd_list[$i]}"
+              done
+            fi
+            out+=":$p@$path"
+            export CD_LAST_DIRS_STORED="${out:1}"
+            [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
+            if [[ $param == ':++' ]]; then
+              sed -i "/export CD_LAST_DIRS_STORED+=:$p/ d" $RUNTIME_FILE
+              echo "export CD_LAST_DIRS_STORED+=:$p@$path" >> $RUNTIME_FILE
+            fi
+            return 0;; # }}}
+      :-)  p=$2; shift # {{{
+            [[ -z $p ]] && return 1
+            [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+            cd_list=$CD_LAST_DIRS_STORED
+            [[ -z $cd_list ]] && return 0
+            IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+            for i in ${!cd_list[*]}; do
+              [[ $p == ${cd_list[$i]/@*} ]] && continue
+              out+=":${cd_list[$i]}"
+            done
+            export CD_LAST_DIRS_STORED="${out:1}"
+            [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
+            return 0;; # }}}
+      :\?* ) # Search {{{
+            p=${1:2}
+            [[ -z $p ]] && return 1;;&
+      :\?\?*)
+            p="${1:3}"
+            [[ -z $p ]] && return 1
+            p=$(echo "$p" | sed -e "s/\(.\)/\1\.\*/g" -e "s/^/\.\*/")
+            [[ $p == *.\*$.\* ]] && p=${p/.\*$.\*/$};;&
+      :\?\?* | :\?* )
+            [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+            cd_list=$CD_LAST_DIRS_STORED
+            [[ -z $cd_list ]] && return 1
+            IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+            out=()
+            for i in ${!cd_list[*]}; do
+              [[ ${cd_list[$i]/*@} == '--cd-spec' ]] && continue
+              echo ${cd_list[$i]/*@} | command grep -q "$p" && out[${#out[*]}]=${cd_list[$i]/*@}
+            done
+            [[ -z $out ]] && return 1
+            if [[ ${#out[*]} == 1 ]]; then
+              dst=${out[0]}
+            else
+              stdout=$(for i in ${!out[*]}; do
+                printf "%2d. %s\n" "$(($i+1))" "$(echo "${out[$i]}" | sed "s|^$HOME|~|")"
+              done)
+              if $use_fzf; then
+                dst="$(echo "$stdout" | fzf --exit-0 --sort --no-multi --prompt='Search> ')"
+                [[ $? != 0 ]] && return 0
+                dst="${dst#* }"
+              else
+                echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
+                $in_pipe && return 0
+                read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+                case ${i^^} in
+                Q|N|'') return 0;;
+                esac
+                dst="${out[$(($i-1))]}"
+              fi
+              [[ -z $dst ]] && return 1
+            fi;;
+            # }}}
+      :*)  p=${1:1} # {{{
+            [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+            cd_list=$CD_LAST_DIRS_STORED
+            [[ -z $cd_list ]] && return 1
+            IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
+            for i in ${!cd_list[*]}; do
+              [[ $p == ${cd_list[$i]/@*} ]] && dst=$(__util_cd_param "$p" "${cd_list[$i]/*@}") && break
+            done
+            [[ -z $dst ]] && return 1
+            [[ ! -z $2 ]] && dst+="/$2" && shift
+            ;;
+            # }}}
+      # }}}
+      # ? - Children (search) # {{{
+      \? | \?* )
+          [[ $1 == '?' ]] && { p=$2; shift; } || p=${1:1}
+          [[ -z $p ]] && return 1;;&
+      \?\? | \?\?* )
+          [[ $1 == '??' ]] && { p=$2; shift; } || p=${1:2}
+          [[ -z $p ]] && return 1
+          p=$(echo "$p" | sed -e "s/\(.\)/\1\.\*/g" -e "s/^/\.\*/")
+          [[ $p == *.\*$.\* ]] && p=${p/.\*$.\*/$};;&
+      \?\? | \?\?* | \
+      \?   | \?* )
+          out=()
+          while read i; do
+            out[${#out[*]}]="$i"
+          done < <(find . -maxdepth 10 $(! $IS_MAC && echo '-readable') -not -path '*/\.*' -type d -print 2>/dev/null | command grep $p)
+          [[ ${#out[*]} == 0 ]] && return 1
+          if [[ ${#out[*]} == 1 ]]; then
+            dst="${out[0]}"
+          else
+            stdout=$(for i in ${!out[*]}; do
+              printf "%2d. %s\n" "$(($i+1))" "${out[$i]}"
+            done)
+            if $use_fzf; then
+              dst="$(echo "$stdout" | fzf --exit-0 --select-1 --sort --no-multi --prompt='Search> ')"
+              [[ $? != 0 ]] && return 0
+              dst="${dst##*. }"
+            else
+              echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
+              $in_pipe && return 0
+              read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+              case ${i^^} in
+              Q|N|'') return 0;;
+              esac
+              dst="${out[$(($i-1))]}"
+            fi
+            [[ -z $dst ]] && return 1
+          fi;;
+      # }}}
+      -i) # {{{
+        dst="." && shift
+        # Env configutation # {{{
+        local \
+          fzf_params="${CD_INTERACTIVE_FZF_PARAMS:--e -x}"    \
+          md="${CD_INTERACTIVE_DEPTH:-1}"                     \
+          loop="${CD_INTERACTIVE_LOOP:-true}"                 \
+          add_parent_dirs="${CD_INTERACTIVE_PARENT:-true}"    \
+          add_predefined="${CD_INTERACTIVE_PREDEFINED:-all}"  \
+          add_stored="${CD_INTERACTIVE_STORED:-all}"          \
+          add_user_list="${CD_INTERACTIVE_USER:-true}"        \
+          prompt_extra="${CD_INTERACTIVE_PROMPT_EXTRA:-true}" \
+          root="${CD_INTERACTIVE_ROOT}"
+        # }}}
+        local res= tmux_p= list= prompt= cd_list= tmp= k= v= paths= predefined_list= user_list= fixed_list= query=
+        while [[ ! -z $1 ]]; do # {{{
+          case $1 in
+          [0-9]*)             md="$1";;
+          --fzf-params)       fzf_params="$2"; shift;;
+          -l   | --loop)      loop=true;;
+          --parent)           add_parent_dirs=true;;
+          --prompt)           prompt_extra=true;;
+          --user)             add_user_list=true;;
+          --no-loop)          loop=false;;
+          --no-parent)        add_parent_dirs=false;;
+          --no-prompt)        prompt_extra=false;;
+          --no-user)          add_user_list=false;;
+          --predefined-all)   add_predefined='all';;
+          --predefined-smart) add_predefined='smart';;
+          --predefined-none)  add_predefined='none';;
+          --stored-all)       add_stored='all';;
+          --stored-smart)     add_stored='smart';;
+          --stored-none)      add_stored='none';;
+          *)                  [[ $1 =~ ^[0-9]+$ ]] && md="$1" || query="$1";;
+          esac
+          shift
+        done # }}}
+        if [[ -n $TMUX ]]; then # {{{
+          tmux_p="$(tmux show  -vq @tmux_path)"
+          eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null)
+        fi # }}}
+        # Filter stored dirs # {{{
+        for i in $(IFS=':'; echo $CD_LAST_DIRS_STORED); do
+          k="${i%%@*}" v="${i#*@}"
+          [[ -z $k || -z $v ]] && continue
+          echo " $CD_LAST_DIRS_INTERACTIVE_IGNORE " | command grep -q " $k " && continue
+          v="$(__util_cd_param "$k" "$v")"
+          [[ ! -d "$(__util_cd_tilde_conv "$v")" ]] && continue
+          cd_list+="$(printf ":%-6s --> %s" "$k" "${v/$HOME/~}")\n"
+          paths+=":$k@$v"
+        done
+        cd_list="$(echo -e "$cd_list" | sort -f -k3,3 | sed -e '/^$/d')"
+        paths="${paths:1}"
+        if [[ "$add_stored" == "smart" ]]; then # {{{
+          [[ -z $root ]] && root="$tmux_p"
+          [[ -z $root ]] && root="$PWD"
+          root="$(__util_cd_tilde_conv "$root")"
+          tmp=
+          if [[ ! -z $root ]]; then
+            while read k i v; do
+              [[ "$(__util_cd_tilde_conv "$v")" == ${root}* ]] && tmp+="$(printf ":%-6s --> %s" "${k:1}" "${v/$HOME/~}")\n"
+            done < <(echo -e "$cd_list")
+          fi
+          cd_list="$tmp"
+        fi # }}}
+        # }}}
+        # Fixed list # {{{
+        fixed_list="HOME@$HOME"
+        tmp=
+        for i in $(IFS=':'; echo $fixed_list); do
+          k="${i%%@*}" v="${i#*@}"
+          [[ -z $k || -z $v ]] && continue
+          [[ ! -d "$(__util_cd_tilde_conv "$v")" ]] && continue
+          tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/~}")\n"
+        done
+        fixed_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
+        # }}}
+        if [[ $add_predefined != 'none' ]]; then # {{{
+          predefined_list="ROOT@/"
+          [[ ! -z $tmux_p ]] && predefined_list+=":TMUX@$tmux_p"
+          [[ ! -z $CD_INTERACTIVE_PREDEFINED_LIST ]] && predefined_list+=":$CD_INTERACTIVE_PREDEFINED_LIST"
+          tmp=
+          for i in $(IFS=':'; echo $predefined_list); do
+            k="${i%%@*}" v="${i#*@}"
+            [[ -z $k || -z $v ]] && continue
+            [[ ! -d "$(__util_cd_tilde_conv "$v")" ]] && continue
+            [[ $add_predefined != 'smart' || "$(__util_cd_tilde_conv "$v")" == ${root}* ]] || continue
+            tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/~}")\n"
+          done
+          predefined_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
+        fi # }}}
+        if $add_user_list; then # {{{
+          user_list=
+          for i in $(IFS=':'; echo $CD_INTERACTIVE_USER_LIST); do
+            k="${i%%@*}" v="${i#*@}"
+            [[ -z $v ]] && continue
+            [[ ! -d "$(__util_cd_tilde_conv "$v")" ]] && continue
+            [[ -z $k || $k == $v ]] && k="${v##*/}" && k="${k:0:6}"
+            user_list+="$(printf "+%-6s --> %s" "$k" "${v/$HOME/~}")\n"
+          done
+          user_list="$(echo -e "$user_list" | sort -f -k3,3 | sed -e '/^$/d')"
+        fi # }}}
+        # fzf-wrapper # {{{
+        if $use_fzf; then
+          fzf_wrapper() {
+            local mode="$1" wd="$3" dir=
+            [[ $2 == '---' || -z $2 ]] && dir="$wd"
+            [[ -z $dir ]] && dir="$(echo "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
+            dir="$(echo $(__util_cd_tilde_conv "$dir"))"
+            [[ $dir != /* ]] && dir="$wd/$dir" && dir="$(command cd "$dir"; pwd)"
+            case $mode in
+            prev)    $ALIASES fzf_exe -c prev --prev 10 -f "$dir" ;;
+            split-v) tmux split-window -v -p 30 -d -c "$dir";;
+            split-h) tmux split-window -h -p 50 -d -c "$dir";;
+            new-wnd) tmux new-window   -a       -d -c "$dir";;
+            esac
+          }
+          export -f fzf_wrapper
+        fi # }}}
+        local first=true
+        while true; do # {{{
+          dst="$(command cd "$(__util_cd_tilde_conv "$dst")"; pwd)"
+          # List # {{{
+          list=
+          $loop && ! $first && list="---\n"
+          if [[ $md -gt 0 ]]; then # {{{
+            for i in $(seq 1 $md); do
+              res="$( \
+                command cd $dst; \
+                find . -mindepth $i -maxdepth $i \
+                        -type d -a -not \( -name .git -o -path \*/.git/\* \) -print \
+                        -o -prune 2>/dev/null \
+                  | sed 's|^\./||' | sort -f)"
+              [[ ! -z $res ]] && list+="$res\n"
+            done
+          fi # }}}
+          if $add_parent_dirs && [[ "$dst" != '/' ]]; then # {{{
+            list+="../\n"
+            list+="$( \
+              command cd $dst; \
+              find .. -maxdepth 1 \
+                      -type d -a -not \( -path "../$(basename $PWD)" -o -path ../.git \) -print \
+                      -o -prune 2>/dev/null \
+                | sort -f)\n"
+          fi # }}}
+          list+='\n'
+          if [[ -z $query ]]; then # {{{
+            if $add_user_list && [[ ! -z "$user_list" ]]; then # {{{
+              list+="$user_list\n"
+            fi # }}}
+            list+="$fixed_list\n"
+            if [[ ! -z "$predefined_list" ]]; then # {{{
+              case $add_predefined in
+              all | smart) list+="$predefined_list\n"
+              esac
+            fi # }}}
+            if [[ ! -z "$cd_list" ]]; then # {{{
+              case $add_stored in
+              all | smart) list+="$cd_list\n" ;;
+              esac
+            fi # }}}
+          fi # }}}
+          # }}}
+          # Prompt # {{{
+          prompt="$dst"
+          if $prompt_extra; then # {{{
+            for i in $(IFS=':'; echo $paths); do
+              k="${i%%@*}" v="${i#*@}"
+              [[ $dst == ${v}* ]] || continue
+              tmp="${dst/$v/$k}"
+              [[ ${#tmp} -lt ${#prompt} ]] && prompt=":$tmp"
+            done
+            prompt="${prompt/$tmux_p/TMUX}"
+          fi # }}}
+          prompt="${prompt/$HOME/~}"
+          [[ ${#prompt} -gt 70 ]] && prompt="$(echo "$prompt" | sed -e 's|\([^/]*\)/.*/\(.*/.*\)|\1/.../\2|')"
+          [[ ${#prompt} -gt 70 ]] && prompt="$(echo "$prompt" | sed -e 's|\([^/]*\)/.*/\(.*\)|\1/.../\2|')"
+          # }}}
+          stdout="$(echo -e "$list" | sed -e '/^\.\{1,2\}$/d')"
+          if $use_fzf; then # {{{
+            res="$(\
+              echo -e "$stdout" \
+              | fzf \
+                  --exit-0 --no-sort --no-multi --layout=reverse \
+                  --preview "fzf_wrapper prev {} \"$dst\"" \
+                  --bind "$fzf_key_split_v:execute(fzf_wrapper split-v {} \"$dst\")" \
+                  --bind "$fzf_key_split_h:execute(fzf_wrapper split-h {} \"$dst\")" \
+                  --bind "ctrl-o:execute(fzf_wrapper new-wnd {} \"$dst\")" \
+                  --prompt="${prompt}> " \
+                  $fzf_params \
+                  --query="$([[ ! -z "$query" && $query != "-" ]] && echo "$query")" \
+            )"
+            [[ $? != 0 || -z $res ]] && { unset fzf_wrapper; return 0; }
+            [[ !  -z "$query" ]] && query="-"
+            # }}}
+          else # {{{
+            echo "$stdout" | cat -n | cut -c4- | { ! $in_pipe && hl --lines || cat -; }
+            $in_pipe && return 0
+            read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
+            case ${i^^} in
+            Q|N|'') return 0;;
+            esac
+            res="$(echo -e "$stdout" | sed "${i}q;d")"
+          fi # }}}
+          case $res in # {{{
+          ---)  break;;
+          @* | +* | :*) dst="$(echo "$res" | sed -e 's/.*-->\s*\(.*\)/\1/')";;
+          *) # {{{
+            dst+="/$res"
+            [[ $dst == //* ]] && dst="${dst:1}"
+            [[ ! -d "$dst" ]] && return 1
+            ;; # }}}
+          esac # }}}
+          ! $loop && break
+          first=false
+        done # }}}
+        unset fzf_wrapper
+        dst="$(__util_cd_tilde_conv "$dst")"
+        [[ -z $dst || ! -d $dst ]] && return 1
+      ;; # }}}
+      --)  shift; dst="$1"; break;;
+      -mk) create_dir=true;;
+      -pu) cmd="pushd";;
+      -po) cmd="popd";;
+      -v)  verbose=true; in_pipe=true; use_fzf=false;;
+      -P)  shift; dst="$(readlink -f "${1:-$PWD}")"; break;;
+      -*)  [[ ! -d "$1" ]] && cmd+=" $1" || { dst="$1"; break; };;
+      *)   dst="$1"; break;;
+      esac
+      shift
+    done # }}}
+  fi
+  dst="$(__util_cd_tilde_conv "$dst")"
+  cmd="$cmd ${dst// /\\ }"
+  [[ "$dst" == '-' && -z $OLDPWD ]] && echo "OLDPWD not set" >/dev/stderr && return 1
+  if $verbose && [[ $cmd == cd* ]]; then # {{{
+    if [[ ! -e "$dst" && "$dst" != '-' && ! -z "$dst" ]]; then
+      $create_dir && command mkdir -p $dst || return 1
+    fi
+    (eval command $cmd >/dev/null 2>&1; pwd)
+    return 0
+  fi # }}}
+  [[ "${dst%/}" == "$PWD" ]] && return 0
+  [[ $cmd == pushd* || $cmd == popd* ]] && cmd="$cmd >/dev/null"
+  # Update the list of last dirs # {{{
+  if [[ $cmd == cd* || $cmd == pusd* ]]; then
+    [[ ! -e "$dst" && "$dst" != '-' && ! -z "$dst" ]] && $create_dir && command mkdir -p "$dst"
+    if [[ -e "$dst" || "$dst" == '-' || -z "$dst" ]]; then # {{{
+      local dst_path="$([[ "$dst" == '-' ]] && dst=$OLDPWD; command cd "$dst" 2>/dev/null; pwd)"
+      local max_to_store=8
+      [[ -z $CD_LAST_DIRS ]] && CD_LAST_DIRS=()
+      len=${#CD_LAST_DIRS[*]}
+      if [[ $len -gt 0 ]]; then
+        for i in $(seq $(($len-1)) -1 0); do
+          if [[ ${CD_LAST_DIRS[$i]} == "$dst_path" ]]; then
+            for i in $(seq $(($i+1)) $(($len-1))); do
+              CD_LAST_DIRS[$(($i-1))]=${CD_LAST_DIRS[$i]}
+            done
+            unset CD_LAST_DIRS[$i]
+            break
+          fi
+        done
+      fi
+      i=${#CD_LAST_DIRS[*]}
+      if [[ $i == $max_to_store ]]; then
+        for i in $(seq 1 $(($max_to_store-1)) ); do
+          CD_LAST_DIRS[$(($i-1))]=${CD_LAST_DIRS[$i]}
+        done
+        i=$(($max_to_store-1))
+      fi
+      CD_LAST_DIRS[$i]="$dst_path"
+      export CD_LAST_DIRS
+    fi # }}}
+  fi # }}}
+  eval command $cmd
+} # }}}
+cd_no_expansion() { # @@ { # {{{
+  if [[ $1 == '@@' ]]; then
+    cd_wrapper -- "$@"
+    return 0
+  fi
+  cd_wrapper -- "$@"
+} # }}}
+
+alias cd='set -f;cd_no_expansion $@' # @@
+alias po='cd -- -po'
+alias pu='cd -- -pu'
+alias cdd='cd -- -i 3 --loop --prompt --stored-all --fzf-params "-e -x --query="'
+alias cdp='cd -- -P'
+alias .1='cd -- .1'
+alias .2='cd -- .2'
+alias .3='cd -- .3'
+alias .4='cd -- .4'
+alias .5='cd -- .5'
+alias  recd='command cd && command cd - >/dev/null 2>&1'
+export HISTIGNORE+=":recd"

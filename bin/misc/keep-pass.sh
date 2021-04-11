@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # ----------------------------
@@ -23,7 +23,7 @@ if [[ $1 == '--complete' ]]; then # {{{
       opts+=" $(echo {1..10})";; # }}}
     --journal) # {{{
       ;; # }}}
-    --key) # {{{
+    --key | --save) # {{{
       local journalFiles="$KEEP_PASS_JOURNALS" f=
       [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
       [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles+=" $PWD/keep-pass.journal"
@@ -35,8 +35,6 @@ if [[ $1 == '--complete' ]]; then # {{{
           opts+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f")"
         fi
       done;; # }}}
-    --save) # {{{
-      ;; # }}}
     -t) # {{{
       opts+="- 0 60 120";; # }}}
     *) # {{{
@@ -67,9 +65,10 @@ if [[ $1 == '--complete' ]]; then # {{{
 fi # }}}
 
 dbg() { # {{{
-  local l=$1; shift
+  local l=$1 p=; shift
   [[ $l -gt $verbose ]] && return 0
-  [[ -z $1 ]] && echo >/dev/stderr || echo "DBG#$(printf '%02d' $l): $@" >/dev/stderr
+  [[ $1 == '-e' || $1 == '-n' ]] && p=$1 && shift
+  [[ -z $1 ]] && echo >/dev/stderr || echo $p "DBG#$(printf '%02d' $l): $@" >/dev/stderr
   return 0
 } # }}}
 err() { # {{{
@@ -185,7 +184,7 @@ encode() { # {{{
   echo "$ret"
 } # }}}
 setMasterKey() { # {{{
-  local mkey= timeout=
+  local mkey= timeout= tries=3
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -t) timeout="$2"; [[ $timeout == '-' || $timeout == '0' ]] && timeout=''; shift;;
@@ -196,25 +195,40 @@ setMasterKey() { # {{{
   if [[ ! -z $KEEP_PASS_MASTER_KEY && $KEEP_PASS_MASTER_KEY != //*  ]]; then
     rm -f "$KEEP_PASS_MASTER_KEY"
   fi
-  [[ -z $mkey ]] && read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p 'Enter master key: ' mkey >/dev/stderr
-  [[ -z $mkey ]] && return 1
-  if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then
-    dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
-    local python= i=
-    for i in python{3,2,}; do which $i >/dev/null 2>&1 && python=$i && break; done
-    [[ -z $python ]] && err "Python not installed" && return 1
-    mkey="$(bash -c \
-      "f() { \
-        $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
-      }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
-      | cut -c32-62 \
-    )"
-  fi
-  if [[ -z $KEEP_PASS_MASTER_KEY || $KEEP_PASS_MASTER_KEY == //*  ]]; then
+  while [[ $tries -gt 0 ]]; do
+    if [[ -z $mkey ]]; then
+      if read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p 'Enter master key: ' mkey >/dev/stderr; then
+        [[ -z $mkey ]] && echo >/dev/stderr && return 1
+      fi
+      echo >/dev/stderr
+    fi
+    if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
+      dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
+      local python= i=
+      for i in python{3,2,}; do which $i >/dev/null 2>&1 && python=$i && break; done
+      [[ -z $python ]] && err "Python not installed" && return 1
+      mkey="$(bash -c \
+        "f() { \
+          $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
+        }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
+        | cut -c32-62 \
+      )"
+    else
+      mkey="$(echo "$mkey" | sha1sum | cut -d' ' -f1)"
+    fi # }}}
+    if [[ ! -z $KEEP_PASS_MASTER_KEY_VERIFY ]] && ! encrypt -d "$KEEP_PASS_MASTER_KEY_VERIFY" "$mkey" >/dev/null 2>&1; then
+      err "Key verification failed"
+      tries=$((tries-1))
+      [[ $tries == 0 ]] && return 1
+      mkey=
+      continue
+    fi
+    break
+  done
+  if [[ -z $KEEP_PASS_MASTER_KEY || $KEEP_PASS_MASTER_KEY == //*  ]]; then # {{{
     echo "export KEEP_PASS_MASTER_KEY=\"$mkey\""
-    mkey="$(echo "$mkey" | sha1sum)"
     return 0
-  fi
+  fi # }}}
   echo -n "$mkey" >"$KEEP_PASS_MASTER_KEY"
   chmod 400 $KEEP_PASS_MASTER_KEY
   mkey="$(echo "$mkey" | sha1sum)"
@@ -230,8 +244,9 @@ getMasterkey() { # {{{
   [[ ! -z $mkey ]] && echo "$mkey" && return 0
   $interactive || return 1
   read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echo >/dev/stderr
+  echo >/dev/stderr
   [[ -z $mkey ]] && return 1
-  if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then
+  if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
     dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
     local python= i=
     for i in python{3,2,}; do which $i >/dev/null 2>&1 && python=$i && break; done
@@ -241,14 +256,14 @@ getMasterkey() { # {{{
         $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
       }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
     )"
-  fi
+  fi # }}}
   echo "$mkey"
 } # }}}
 encrypt() { # {{{
   local src= ret= decrypt=false pass= params= interactive=
   [[ $1 == '-d' ]] && decrypt=true && shift
   src="$1" pass="$2" interactive="${3:-true}"
-  params="enc -aes-256-cbc -salt -a -A"
+  params="enc -aes-256-cbc -salt -a -A -md md5"
   if [[ ! -z $pass ]]; then
     if [[ $pass == @* ]]; then
       pass="${pass:1}"
@@ -352,7 +367,7 @@ getPass() { # {{{
 genPass() { # {{{
   local cnt=4 i= v= seq= words= pass= params= input= info= \
     upper=false special=false digit=false spaces=true upper_first=false use_pass=false read_input=false \
-    save=false add_padding=true do_encode=true update=false check= save_pass= passV=
+    save=false add_padding=true do_encode=true update=false check= save_pass= passV= key=
   set -- $KEEP_PASS_GEN_PARAMS "$@"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -376,7 +391,17 @@ genPass() { # {{{
     --pwd-save)        save_pass=true;;
     --no-pwd-save)     save_pass=false;;
     --plain)           do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
-    *)                 input="$1"; read_input=true; spaces=false;;
+    *) # {{{
+      if [[ $# == 2 ]]; then
+        save=true
+        use_pass=true
+        info="$1"
+        shift
+      fi
+      input="$1"
+      read_input=true
+      spaces=false
+      shift $#;; # }}}
     esac
     shift
   done # }}}
@@ -523,10 +548,12 @@ genPass() { # {{{
     while [[ ${#entry} -lt 18 ]]; do entry+=' '; done
     entry+="\t"
     entry+="$seq"
+    key="${entry%%:*}"
     if $update; then
       sed -i -e "/^${entry%%:*}\(:.*\)\{0,1\}:\s\+.*/ d" "$journalFile"
-    elif hasKey "${entry%%:*}"; then
-      dbg 0 "The key '${entry%%:*}' already exists"
+    elif hasKey "$key"; then
+      dbg 0 "The key '$key' already exists"
+      sed -i '/'"${key//\//\\\/}"'/s/^/# /' "$journalFile"
     fi
     echo -e "$entry" >> "$journalFile"
   fi # }}}
@@ -588,8 +615,8 @@ done # }}}
 case $1 in
 --help) # {{{
   echo "Usage:"
-  echo "  $(basename "$0") --gen --save name:env-pwd phrase"
-  echo "  $(basename "$0") --get --key name"
+  echo "  $(basename "$0") --gen [--save] name:env-pwd phrase"
+  echo "  $(basename "$0") [--get] [--key] name"
   # echo "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
   exit 0;; # }}}
 --get)             shift; getPass "$@";;

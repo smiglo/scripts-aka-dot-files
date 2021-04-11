@@ -33,7 +33,7 @@ dpi:
   y: 96.0
 
 # Display tabs using this many cells (changes require restart)
-tabspaces: 2
+# tabspaces: 2
 
 # When true, bold text is drawn using the bright variant of colors.
 draw_bold_text_with_bright_colors: true
@@ -42,37 +42,37 @@ draw_bold_text_with_bright_colors: true
 font:
   # The normal (roman) font face to use.
   normal:
-    family: Inconsolata for Powerline Mod
+    family: Fira Mono
     # Style can be specified to pick a specific face.
     # style: Regular
 
   # The bold font face
   bold:
-    family: Inconsolata for Powerline Mod
+    family: Fira Mono
     # Style can be specified to pick a specific face.
     # style: Bold
 
   # The italic font face
   italic:
-    family: Inconsolata for Powerline Mod
+    family: Fira Mono
     # Style can be specified to pick a specific face.
     # style: Italic
 
   # Point size of the font
-  size: 18.0
+  size: 15
 
   # Offset is the extra space around each character. offset.y can be thought of
   # as modifying the linespacing, and offset.x as modifying the letter spacing.
   offset:
-    x: 0.0
-    y: 0.0
+    x: 0
+    y: 0
 
   # Glyph offset determines the locations of the glyphs within their cells with
   # the default being at the bottom. Increase the x offset to move the glyph to
   # the right, increase the y offset to move the glyph upward.
   glyph_offset:
-    x: 0.0
-    y: 0.0
+    x: 0
+    y: 0
 
   # OS X only: use thin stroke font rendering. Thin strokes are suitable
   # for retina displays, but for non-retina you probably want this set to
@@ -84,42 +84,42 @@ render_timer: false
 
 # Use custom cursor colors. If true, display the cursor in the cursor.foreground
 # and cursor.background colors, otherwise invert the colors of the cursor.
-custom_cursor_colors: false
+custom_cursor_colors: true
 
 # Colors (Tomorrow Night Bright)
 colors:
   # Default colors
   primary:
-    background: '0x000000'
+    background: '0x121212'
     #foreground: '0xeaeaea'
-    foreground: '0xffffff'
+    foreground: '0xFBF1C7'
 
   # Colors the cursor will use if `custom_cursor_colors` is true
   cursor:
-    text: '0x000000'
-    cursor: '0xffffff'
+    text: '0xe0e0e0'
+    cursor: '0xe0e0e0'
 
   # Normal colors
   normal:
-    black:   '0x000000'
-    red:     '0xed655c'
-    green:   '0xa7f681'
-    yellow:  '0xcdcd00'
-    blue:    '0x649fb8'
-    magenta: '0xc76fc7'
-    cyan:    '0x00cdcd'
-    white:   '0xbabdb6'
+    black:   '0x121212'
+    red:     '0xED655C'
+    green:   '0x98971A'
+    yellow:  '0xD79921'
+    blue:    '0x458588'
+    magenta: '0xB16286'
+    cyan:    '0x689D6A'
+    white:   '0xFBF1C7'
 
   # Bright colors
   bright:
-    black:   '0x4c4c4c'
-    red:     '0xe15959'
-    green:   '0x4e9a06'
-    yellow:  '0xcfcf3b'
-    blue:    '0x5d7d98'
-    magenta: '0xa25ea2'
-    cyan:    '0x68dede'
-    white:   '0xe3e6df'
+    black:   '0x928374'
+    red:     '0xFB4934'
+    green:   '0xB8BB26'
+    yellow:  '0xFABD2F'
+    blue:    '0x83A598'
+    magenta: '0xD3869B'
+    cyan:    '0x8EC07C'
+    white:   '0xEBDBB2'
 
   # Dim colors (Optional)
   dim:
@@ -155,9 +155,9 @@ colors:
 #
 # To completely disable the visual bell, set its duration to 0.
 #
-visual_bell:
-  animation: EaseOutExpo
-  duration: 0
+# visual_bell:
+#   animation: EaseOutExpo
+#  duration: 0
 
 # Key bindings
 #

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+is_git=false
+git -C $TICKET_PATH rev-parse 2>/dev/null && is_git=true
+cd "$path_issue"
+dst_tar="$issue-archive.tar" dst_gz="$dst_tar.gz" list= params= do_clean=false do_test=false
+[[ -e $dst_tar ]] && echo "Intermediate file [$dst_tar] exists, remove them and proceed again" >/dev/stderr && exit 1
+[[ -e $dst_gz ]] && { gunzip "$dst_gz"; params+=" -r"; } || params+=" -c"
+[[ $1 == --pkg ]] && set -- --all-all --test
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --all) # {{{
+    if $is_git; then
+      list="$(git clean -dxfn . | cut -d' ' -f3)"
+    else
+      list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
+    fi
+    [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+    do_clean=true
+    ;; # }}}
+  --all-all) # {{{
+    list="$(command find . -print | sed '/^\.$/ d')"
+    list="$(echo "$list" | sort | fzf --height 100% --prompt "Choose files> ")"
+    [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+    ;; # }}}
+  --clean) do_clean=true;;
+  --test)  do_test=true;;
+  *)       list="$@"; shift $#; break;;
+  esac
+  shift
+done # }}}
+if [[ -z $list ]]; then # {{{
+  if $is_git; then
+    list="$(eval command find . \\\( $(git clean -n -dxf | cut -d\  -f3 | xargs -i echo "-path ./{} -o" | sed 's|/ -o|/\\* -o|') -path '../..' \\\) -print;)"
+  else
+    list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print)"
+  fi
+  list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --height 100% --prompt "Choose files> ")"
+fi # }}}
+[[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+list="$(echo "$list" | tr '\n' ' ')"
+tar $params -f "$dst_tar" $list
+$do_test && tar -tf "$dst_tar"
+gzip $dst_tar
+if $is_git; then # {{{
+  git add "$dst_gz"
+  $cmd_tt commit
+fi # }}}
+if $do_clean; then # {{{
+  command mkdir -p $TMP_MEM_PATH/issue/$issue
+  echo "$list" | tr ' ' '\n' | rsync -a --files-from=- . $TMP_MEM_PATH/issue/$issue/
+  rm -rf $list
+fi # }}}
+

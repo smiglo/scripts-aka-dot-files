@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 if [[ -z $TICKET_PATH || ! -e $TICKET_PATH ]]; then # {{{

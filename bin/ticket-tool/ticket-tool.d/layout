@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+f="$(getIssueFile)" quiet=false use_stdin=false use_stdout=false todo= entry="${TICKET_CONF_LAYOUT_ENTRY:-LAYOUT}"
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  save | restore) todo="$1";;
+  -q)             quiet=true;;
+  --stdin)        use_stdin=true;;
+  --stdout)       use_stdout=true;;
+  -e)             entry="$2"; shift;;
+  *)              break;;
+  esac
+  shift
+done # }}}
+layoutSaved="$(sed -n "s|^# j-info: $entry: \(.*\)$|\1|p" "$f")"
+layout="$(tmux display-message -t $TMUX_PANE -pF '#{window_layout}')"
+if [[ -z $todo ]]; then
+  todo='save'
+  [[ ! -z "$layoutSaved" ]] && todo='restore'
+fi
+[[ ! -t 1 ]] && use_stdout=true && todo='save'
+[[ ! -t 0 ]] && use_stdin=true && todo='restore'
+case $todo in
+save) # {{{
+  if ! $use_stdout; then
+    if ! command grep -q "^# j-info: -*$entry:" "$f"; then
+      $quiet || ( echo "No '$entry' section in the header"; echo "Add '# j-info: -$entry:' there first"; ) >/dev/stderr
+      exit 1
+    fi
+    sed -i "s|^# j-info: -*$entry:.*$|# j-info: $entry: |" "$f"
+    sed -i "s|^\(# j-info: $entry:\).*$|\1 $layout|" "$f"
+  else
+    echo "$layout"
+  fi
+  ;; # }}}
+restore) # {{{
+  tmux display-message -t $TMUX_PANE -pF '#{window_flags}' | command grep -q "Z" && exit 0
+  layout_old="$layout"
+  if ! $use_stdin; then
+    if [[ -z "$layoutSaved" ]]; then
+      $quiet || ( echo "Layout not defined"; ) >/dev/stderr
+      exit 1
+    fi
+    layout="$layoutSaved"
+  else
+    [[ ! -t 0 ]] && read layout || layout="$@"
+  fi
+  [[ -z "$layout" ]] && exit 1
+  if [[ "$layout" != "$layout_old" ]]; then
+    $quiet || echo "layout=\"$layout_old\""
+    tmux select-layout -t $TMUX_PANE "$layout" >/dev/null 2>&1
+    exit $?
+  fi
+  exit 0
+  ;; # }}}
+esac
+

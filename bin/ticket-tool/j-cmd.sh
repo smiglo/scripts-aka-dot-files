@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 putOnList() { # {{{
@@ -27,13 +27,13 @@ getIssue() { # {{{
   [[ $i == *\ * ]] && return 0
   [[ $i == *--* ]] && i="${i%%--*}"
   local list="$i"
-  if [[ $i == *-* ]]; then
+  if [[ $i == *-* || $i == 'tmp' ]]; then
     ii="$(echo "$i" | cut -d'-' -f1,2)"
     [[ $i != $ii ]] && list+=" $ii"
   fi
   for ii in $list; do # {{{
     command grep -q "^${ii}$" "$ticket_list" && echo "$ii" && return 0
-    command grep -q "^-${ii}$" "$ticket_list" && return 0
+    [[ $i != 'tmp' ]] && command grep -q "^-${ii}$" "$ticket_list" && return 0
   done # }}}
   for ii in $list; do # {{{
     [[ -e "$TICKET_PATH/$ii/${ii}-data.txt" || -e "$TICKET_PATH/$ii/.${ii}-data.txt" ]] && putOnList "$ii" && return 0
@@ -81,6 +81,50 @@ getIssuesRaw() { # {{{
 getIssues() { # {{{
   getIssuesRaw $@ | sed -e 's|.*/||' -e 's|-data\.txt||' -e 's|^\.||' | sort
 } # }}}
+getIssueID() { # {{{
+  local wNr="$1" wnd_name= p="$PWD" f=
+  if [[ ! -z $wNr ]]; then # {{{
+    issue="$(getIssue "$(tmux display-message -p -F '#W' -t :$wNr 2>/dev/null)" true)"
+    # }}}
+  else # {{{
+    # Get issue from current dir # {{{
+    if [[ -z $issue ]]; then
+      local p="$PWD" f=
+      while [[ $p == $TICKET_PATH* ]]; do
+        f="${p##*/}"
+        [[ -e "$p/${f}-data.txt" ]] && issue="$f" && break
+        p="$(command cd "$p/.."; pwd)"
+      done
+    fi # }}}
+    # Get issue from window name # {{{
+    if [[ -z $issue ]]; then
+      wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
+      if [[ $wnd_name == *-* || ${wnd_name,,} == 'tmp' ]]; then
+        issue="$(getIssue "$wnd_name")"
+      else
+        issue="$(getIssue "$wnd_name" true)"
+      fi
+    fi
+    # }}}
+    # Get issue from fallback issue # {{{
+    if [[ -z $issue ]]; then
+      [[ ! -z $ISSUE_FALLBACK ]] && issue="$(getIssue "$ISSUE_FALLBACK" true)"
+    fi
+    # }}}
+    # Get issue from first matching window name # {{{
+    if [[ -z $issue ]]; then
+      for wnd_name in $(tmux list-windows -F '#W'); do
+        if [[ $wnd_name == *-* ]]; then
+          issue="$(getIssue "$wnd_name")"
+        else
+          issue="$(getIssue "$wnd_name" true)"
+        fi
+        [[ ! -z $issue ]] && break
+      done
+    fi # }}}
+  fi # }}}
+  echo "$issue"
+} # }}}
 filterIssues() { # {{{
   ! $FZF_INSTALLED && echo "" && return 0
   findDataFiles \
@@ -115,13 +159,13 @@ fzf_wrapper() { # {{{
     [[ ! -z $i ]] && i+=".*"
     if [[ ! -z $qi && $qi != !* ]]; then
       echo -e "\t---  $t : ${i} $qi ---" && echo
-      $BASH_PATH/aliases fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
+      $ALIASES fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
     else
       echo -e "\t---  $t : ${i} ---" && echo
-      $BASH_PATH/aliases fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
+      $ALIASES fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
     fi
   else
-    $BASH_PATH/aliases fzf_exe -f "$f" "$@"
+    $ALIASES fzf_exe -f "$f" "$@"
   fi
 }
 export -f fzf_wrapper findDataFile findDataFiles
@@ -145,11 +189,27 @@ saveConfiguration() { # {{{
     echo "# $tp #"
   ) >> $confFile
 } # }}}
-verbose=${TICKET_J_VERBOSE:-0} issue= wNr= i= do_grep=false reset_only=false
-TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false subcmd=
+saveInHistory() { # {{{
+  [[ -z "$TICKET_CONF_HISTFILE" ]] && return 0
+  ! $addToHistory && return 0
+  local l="$1" err="${2:-0}"
+  [[ -z $l ]] && return 1
+  l="$(echo "$l" | sed -e 's/\s\s\+/ /g')"
+  if [[ -s "$TICKET_CONF_HISTFILE" ]]; then
+    tail -n30 "$TICKET_CONF_HISTFILE" | sed -e 's/\s\s\+/ /g' | command grep -qF "$l" && return 0
+  fi
+  [[ $err != 0 ]] && l+=" # $err"
+  echo "$l" >>"$TICKET_CONF_HISTFILE"
+} # }}}
+verbose=${TICKET_J_VERBOSE:-0} issue= wNr= i= do_grep=false do_history=false reset_only=false do_wait=
+TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false subcmd= addToHistory=true
 # subcmd="$TICKET_J_DEFAULT_SUBCMD"
 if [[ $1 == --test ]]; then # {{{
   shift && ( set -xv; "$@"; )
+  exit $?
+elif [[ $1 == --helper ]]; then
+  shift
+  "$@"
   exit $?
 fi # }}}
 readConfiguration
@@ -160,20 +220,25 @@ while [[ ! -z $1 ]]; do # {{{
     [[ -z ${params[$i]} ]] && i=$(($i-1))
     while [[ ! -z ${params[$i]} ]]; do
       [[ ${params[$i]} == [0-9]* && $first == 'true' ]] && wNr="${params[$i]}" && break
-      [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj' ]] && issue="${params[$(($i+1))]}" && break
+      [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj'  || ${params[$i],,} == '--issue' ]] && issue="${params[$(($i+1))]}" && break
       [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)" && break
       i=$(($i+1))
       first=false
     done
     break;; # }}}
-  -h) # {{{
+  @ | @*) # {{{
+    [[ $1 == @ ]] && do_wait="$1" || do_wait="${1#@}"
+    shift; break ;; # }}}
+  --help) # {{{
     echo "Extra switches:"
     echo "  -r         - reset configuration"
     echo "  [0-9]+     - get issue from window number"
     echo "  -l         - get issue from last selected window"
-    echo "  -j, -jj    - specify the issue"
+    echo "  -j, -jj    - specify the issue (--issue)"
     echo "  -J, -Jj    - specify the issue, set it as default for next calls"
     echo "  ??         - browse through all issues"
+    echo "  --hist     - browse history (one of: --hist | --hist-issue | --hist-full)"
+    echo "               and acronyms: -h | h | -hf | hf"
     echo "  --kb       - set knowledge base"
     echo "  --KB       - set knowledge base, set it as default for next calls"
     echo "  --setup    - setup an issue"
@@ -190,7 +255,7 @@ while [[ ! -z $1 ]]; do # {{{
   -v)       verbose=1;;
   -vv)      verbose=2;;
   -vvv)     verbose=3; set -xv;;
-  -j | -jj | -J | -JJ | -Jj)  # {{{
+  -j | -jj | -J | -JJ | -Jj | --issue)  # {{{
     cmd="$1"; shift; fallback=false
     [[ $cmd == -J* ]] && fallback=true
     if [[ ! -z $1 && $1 != '-' ]]; then # {{{
@@ -271,6 +336,11 @@ while [[ ! -z $1 ]]; do # {{{
       $0 $body "$@"
     fi
     exit 0;; # }}}
+  --hist | --hist-issue | --hist-full | -h | h | -hf | hf) # {{{
+    do_history=true
+    break ;; # }}}
+  --no-hist) # {{{
+    addToHistory=false;; # }}}
   -) subcmd='';;
   *) break;;
   esac
@@ -287,39 +357,47 @@ if $do_grep; then # {{{
   if [[ ! -z $issue ]]; then
     for i in $issue; do
       files+=" $($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$i" true)"
+      list="${issue// /\\|}"
     done
   else
     files="$(getIssuesRaw)"
+    files="$(ls -t $files)"
   fi
   [[ -z $files ]] && echo "No files were found" >/dev/stderr && exit 0
   [[ -t 1 ]] && tmux delete-buffer -b 'ticket-data' 2>/dev/null
   kb_file="$APPS_CFG_PATH/kb-data--${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
   [[ ! -e "$kb_file" ]] && touch -d '2000-01-01' "$kb_file"
   kb_mod="$(stat -c %Y "$kb_file")"
-  $BASH_PATH/aliases progress --mark --dots --out /dev/stderr --msg "Updating DB"
+  $ALIASES progress --mark --dots --out /dev/stderr --msg "Updating DB"
   for file in $files; do # {{{
     issue="$(echo "$file"| sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
-    list+="$issue\|"
-    [[ $(stat -c %Y "$file") -le $kb_mod ]] && continue
+    [[ $(stat -c %Y "$file") -le $kb_mod ]] && break
     sed -i "/^$issue:/ d" "$kb_file"
     $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue \
       ? $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue ? | tr ' ' '\n' | sort -u | tr '\n' ' ') \
       | sed -e "s/^/$issue:/" >>"$kb_file"
     updated=true
   done # }}}
-  $updated && sort -t':' -k1,1 -s "$kb_file" >"${kb_file}.tmp" && mv "${kb_file}.tmp" "$kb_file"
-  $BASH_PATH/aliases progress --unmark
+  $ALIASES progress --unmark
   if [[ -t 1 ]]; then # {{{
-    command grep "^\(${list:0:-2}\):" "$kb_file" | \
+    tmpFile="$TMP_MEM_PATH/kb-grep.txt"
+    { [[ -z "$list" ]] && cat "$kb_file" || command grep "^\($list\):" "$kb_file"; } | \
       fzf -i --exit-0 --no-sort --multi --height 100% --prompt='Tickets> ' \
         --preview "fzf_wrapper {} {q} -c prev --prev 20" \
         --preview-window 'hidden' \
         --bind "f1:execute(fzf_wrapper {1} -c less >/dev/tty)" \
         --bind "f2:execute(fzf_wrapper {1} -c vim </dev/tty >/dev/tty)" \
-        --bind "f3:execute(fzf_wrapper {1} -c pane >/dev/tty)" | \
-        ( while read res; do tmux set-buffer -ab 'ticket-data' "$(echo "$res" | sed -e 's/[^:]*:[^:]*:\(.*\)/\1/' -e 's/^-/\\-/' -e 's/$//')"; done )
+        --bind "f3:execute(fzf_wrapper {1} -c pane >/dev/tty)" \
+      | sed \
+          -e 's/[^:]*:[^:]*://' \
+          -e 's/^\([^()]*)\)\?\s*\$/j /' \
+          -e 's/\s*;;.*//' >"$tmpFile"
+      tmux load-buffer -b 'ticket-data' "$tmpFile"
+      if [[ $(wc -l "$tmpFile" 2>/dev/null | cut -d' ' -f1) -gt 1 ]]; then
+        vim --fast "$tmpFile"
+      fi
   else
-    command grep "^\(${list:0:-2}\):" "$kb_file"
+    [[ -z "$list" ]] && cat "$kb_file" || command grep "^\($list\):" "$kb_file"
   fi # }}}
   exit 0
 fi # }}}
@@ -327,44 +405,10 @@ if [[ -z $issue ]]; then # {{{
   if [[ ! -z $wNr ]]; then # {{{
     issue="$(getIssue "$(tmux display-message -p -F '#W' -t :$wNr 2>/dev/null)" true)"
     [[ ! -z $issue ]] && ISSUE_FALLBACK="$issue"
+    [[ -z $1 ]] && saveConfiguration && exit 0
     # }}}
   else # {{{
-    # Get issue from current dir # {{{
-    if [[ -z $issue ]]; then
-      p="$PWD" f=
-      while [[ $p == $TICKET_PATH* ]]; do
-        f="${p##*/}"
-        [[ -e "$p/${f}-data.txt" ]] && issue="$f" && break
-        p="$(command cd "$p/.."; pwd)"
-      done
-    fi # }}}
-    # Get issue from window name # {{{
-    if [[ -z $issue ]]; then
-      wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
-      if [[ $wnd_name == *-* ]]; then
-        issue="$(getIssue "$wnd_name")"
-      else
-        issue="$(getIssue "$wnd_name" true)"
-      fi
-    fi
-    # }}}
-    # Get issue from fallback issue # {{{
-    if [[ -z $issue ]]; then
-      [[ ! -z $ISSUE_FALLBACK ]] && issue="$(getIssue "$ISSUE_FALLBACK" true)"
-    fi
-    # }}}
-    # Get issue from first matching window name # {{{
-    if [[ -z $issue ]]; then
-      wnd_name=
-      for wnd_name in $(tmux list-windows -F '#W'); do
-        if [[ $wnd_name == *-* ]]; then
-          issue="$(getIssue "$wnd_name")"
-        else
-          issue="$(getIssue "$wnd_name" true)"
-        fi
-        [[ ! -z $issue ]] && break
-      done
-    fi # }}}
+    issue="$(getIssueID)"
   fi # }}}
   # }}}
 else # {{{
@@ -374,7 +418,8 @@ export verbose
 if [[ $1 == '@@' ]]; then # {{{
   ret= param="$3"
   if [[ $2 == 1 || ${@: -2:1} == '--kb' || ${@: -2:1} == '--KB' ]]; then # {{{
-    ret="-h ?? -j -jj -J -Jj -l -r --kb --KB --setup --init --pred -p"
+    ret="--help ?? -j -jj -J -Jj --issue -l -r --kb --KB --setup --init --pred -p"
+    [[ ! -z "$TICKET_CONF_HISTFILE" ]] && ret+=" --no-hist $(echo --hist{,-full,-issue}  {-,}{h,hl,hf})"
     if [[ -z "$(getIssue "$(tmux display-message -p -t $TMUX_PANE -F '#W')" true)" ]]; then
       i=1 is= issue_list=":"
       for is in $(tmux list-windows -F '#W'); do
@@ -396,7 +441,7 @@ if [[ $1 == '@@' ]]; then # {{{
   [[ ! -z $kb ]] && export TICKET_PATH="$kb"
   issue="${issue,,}"
   case $4 in # {{{
-  --setup | --init) param="$4";;
+  --setup | --init | \?\?) param="$4";;
   esac # }}}
   case $param in
   --pred) # {{{
@@ -420,9 +465,13 @@ if [[ $1 == '@@' ]]; then # {{{
     rm $marker
     files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
     ret+=" $files" ;; # }}}
-  -jj | -JJ | -Jj | --setup | --init | \?\?) # {{{
+  -jj | -JJ | -Jj | --setup | --init | \?\? | --issue) # {{{
     files="$(getIssues)"
     ret+=" $files" ;; # }}}
+  --hist | --hist-full | --hist-issue | -h ) # {{{
+    ret+=" -l --loop";;& # }}}
+  --hist | --hist-full | --hist-issue | -h | h | -hf | hf ) # {{{
+    ret+=" --clean - 10 20 50 100 500 1000";; # }}}
   -l) shift;&
   *) # {{{
     [[ -z $issue ]] && issue="$(getIssue $3 true)"
@@ -454,17 +503,104 @@ if [[ $1 == '@@' ]]; then # {{{
   esac
   echo $ret
   exit
+  # }}}
+elif $do_history; then # {{{
+  [[ -z "$TICKET_CONF_HISTFILE" || ! -s "$TICKET_CONF_HISTFILE" ]] && echo "Empty history" >/dev/stderr && exit 0
+  count=100
+  cmd="$1" && shift
+  loop=true
+  case $cmd in
+  --hist | -h | h)         cmd='hist';;&
+  --hist-full | -hf | hf)  cmd='hist-full';;&
+  --hist-issue)            cmd='hist-issue';;
+  -h | h | --hist | -hf | hf) loop=true;;
+  esac
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -l | --loop) loop=false;;
+    --clean)     cat -n "$TICKET_CONF_HISTFILE" | sed -e '/# [0-9]\+$/d' | sort -k2 -u | sort -k1,1n | cut -c8-;;
+    -)           count=;;
+    *) # {{{
+      if [[ $1 =~ ^[0-9]+$ ]]; then
+        count="$1"
+      fi;; # }}}
+    esac
+    shift
+  done # }}}
+  fzf_params="-0 --cycle --prompt 'Ticket history> ' -m --no-sort --expect 'ctrl-r' --expect 'ctrl-d'"
+  check_file="$TMP_MEM_PATH/.j-cmd-sh.$$.tmp"
+  [[ ! -z "$issue" && "$cmd" != 'hist-issue' ]] && fzf_params+=" --query='$issue '"
+  while true; do
+    rm -f "$check_file"
+    items=$( \
+      cat "$TICKET_CONF_HISTFILE" \
+      | sed -e '/^\s*$/d' -e '/^#/d' -e 's/\s\s\+/ /' \
+      | if [[ $cmd == 'hist' ]]; then
+          tail -n${count:-100}
+        elif [[ $cmd == 'hist-issue' && ! -z $issue ]]; then
+          grep "$issue" | tail -n$count
+        else
+          if [[ ! -z $count && $count != 100 ]]; then
+            tail -n$count
+          else
+            cat -
+          fi
+        fi \
+      | tac - \
+      | eval fzf $fzf_params)
+    [[ $? != 0 || -z "$items" ]] && break
+    key="$(echo "$items" | head -n1)"
+    case $key in
+    ctrl-r) continue;;
+    ctrl-d) break;;
+    esac
+    items="$(echo "$items" | tail -n +2)"
+    [[ -z "$items" ]] && break
+    echo "$items" \
+    | while read -r l; do
+        [[ ! -e "$check_file" ]] && touch "$check_file"
+        l="${l%% #*}"
+        [[ $verbose -ge 1 ]] && echo "Executing '$l'" >/dev/stderr
+        l_eval="$l"
+        case $l in
+        j\ *) l_eval="${l_eval/j /$TICKET_TOOL_PATH/j-cmd.sh }";;
+        esac
+        [[ $verbose -ge 2 ]] && set -xv
+        eval $l_eval
+        err=$?
+        [[ $verbose -ge 2 ]] && set +xv
+        saveInHistory "$l" "$err"
+      done
+      if ! $loop || [[ ! -e "$check_file" ]]; then
+        break
+      fi
+  done
+  rm -f "$check_file"
+  exit 0
+  # }}}
+elif [[ ! -z $do_wait ]]; then
+  $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue wait-on "$do_wait" "$@"
+  exit
 fi # }}}
 [[ -z $issue ]] && echo "Ticket not found" >/dev/stderr && exit 1
 saveConfiguration
 [[ $verbose -ge 1 ]] && echo "i=[$issue] params=[$@]" >/dev/stderr
 [[ $verbose -ge 2 ]] && set -xv
+args=
+for i; do
+  i="$(echo -e "$i" | sed -e 's/"/\\"/g' -e 's/'"'"'/\\'"'"'/g')"
+  [[ $i == *\ * ]] && args+=" \"$i\"" || args+=" $i"
+done
+args="${args# }"
 $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue $subcmd "$@"
 err=$?
-if [[ $err != 0 && ! -z $subcmd ]] && $BASH_PATH/aliases progress --msg "Fallback command ($fallback) did not success, trying without it" --wait 2s --key; then
+l="j -j $issue $subcmd $args"
+if [[ $err != 0 && ! -z $subcmd ]] && $ALIASES progress --msg "Fallback command ($fallback) did not success, trying without it" --wait 2s --key; then
   $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue "$@"
   err=$?
+  l="j -j $issue $args"
 fi
+saveInHistory "$l" "$err"
 [[ $verbose -ge 2 ]] && set +xv
 exit $err
 

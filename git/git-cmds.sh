@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Functions {{{
@@ -353,7 +353,7 @@ do_sync() { # {{{
   local dir=${PWD/$HOME/~}
   if ! $quiet; then # {{{
     if $dots; then
-      $BASH_PATH/aliases progress --mark --msg "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+3)) 3)"
+      $ALIASES progress --mark --msg "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+3)) 3)"
     elif ! $verbose; then
       echo -en "Repository [${CGreen}${dir}${COff}]$(add_spaces $((${#dir}+20)))"
     fi
@@ -395,7 +395,7 @@ do_sync() { # {{{
         fi # }}}
         # }}}
       elif $interactive; then # {{{
-        ! $quiet && $dots && { $BASH_PATH/aliases progress --unmark; dots=false; }
+        ! $quiet && $dots && { $ALIASES progress --unmark; dots=false; }
         echo "Resolve confilicts and exit shell..." >/dev/stderr
         if $SHELL && ! $skipBackup; then # {{{
           $verbose && echo "Backing up..."
@@ -403,7 +403,7 @@ do_sync() { # {{{
         fi # }}}
         # }}}
       else # {{{
-        ! $quiet && $dots && { $BASH_PATH/aliases progress --unmark;  dots=false; }
+        ! $quiet && $dots && { $ALIASES progress --unmark;  dots=false; }
         echo "Rebase was aborted due to conflicts..." >/dev/stderr
         git rebase --abort
       fi # }}}
@@ -411,7 +411,7 @@ do_sync() { # {{{
       break
     fi
   done
-  ! $quiet && $dots && $BASH_PATH/aliases progress --unmark
+  ! $quiet && $dots && $ALIASES progress --unmark
 } # }}}
 sync() { # {{{
   local remote=
@@ -460,7 +460,7 @@ commit_fast() { # {{{
   case $1 in
   -m)  msg="$2";;
   -m*) msg="${1/-m}";;
-  *)   msg="[$($BASH_PATH/aliases date)] ${1:-"Fast commit"}";;
+  *)   msg="[$($ALIASES date)] ${1:-"Fast commit"}";;
   esac
   local template=$(git config --get utils.commit-fast)
   # e.g. git config --add user.commit-fast 'printf "%s%s" "$(date +"%Y%m%d")" "$( [[ ! -z $1 ]] && echo ": $@" || echo "")"'

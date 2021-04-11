@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+# complete: h
+
+bash_phistory() { # {{{
+  [[ ! -z $BASH_PHISTORY_FILE ]] || return
+  [[ ${BASH_LAST_ERR:-0} != 0 ]] && return
+  [[ $(history 1) =~ ^\ *[0-9]+\ +([0-9]+-[0-9]+\ +)?\ *(.*)$ ]] || return
+  local date_part="$(command date +"$DATE_FMT")"
+  local command_part="${BASH_REMATCH[2]%"${BASH_REMATCH[2]##*[![:space:]]}"}"
+  [[ ! -z "$command_part" && "$BASH_PHISTORY_LAST" != "$command_part" && "$command_part" != '#'* ]] || return
+  local ignored_commands=
+  ignored_commands+=":$PHISTORY_IGNORED_COMMANDS"
+  ignored_commands="${ignored_commands#:}"
+  local i= oldIFS=$IFS IFS=':'
+  for i in ${HISTIGNORE#:}; do # {{{
+    [[ -z $i ]] && continue
+    case $i in
+    *\*) [[ "$command_part" =~ ^${i//\*/.*} ]] && return 0;;
+    *)   [[ $command_part == ${i} ]] && return 0;;
+    esac
+  done # }}}
+  for i in $ignored_commands; do # {{{
+    [[ -z $i ]] && continue
+    case $i in
+    @*@) [[ "@$command_part@" == $i ]] && return 0;;
+    *)   [[ $command_part == ${i} || $command_part == ${i}\ * ]] && return 0;;
+    esac
+  done # }}}
+  IFS=$oldIFS
+  [[ $(id -u) == 0 ]] && command_part="$command_part #[Root]"
+  export BASH_PHISTORY_LAST="$command_part"
+  local today="${date_part/-*}"
+  local sha_today=$(printf "%s" "$today-$command_part" | eval $BASH_PHISTORY_SUM_CMD)
+  if [[ $today != $BASH_PHISTORY_TODAY ]]; then
+    [[ -e "$BASH_PHISTORY_FILE" ]] || touch $BASH_PHISTORY_FILE
+    export BASH_PHISTORY_TODAY=$today
+    export BASH_PHISTORY_TODAY_LINE="$(cut -d\  -f4 "$BASH_PHISTORY_FILE" | command grep -anm1 "^$BASH_PHISTORY_TODAY" | cut -d: -f1)"
+    [[ -z $BASH_PHISTORY_TODAY_LINE ]] && export BASH_PHISTORY_TODAY_LINE=1
+  fi
+  if ! tail -n +$BASH_PHISTORY_TODAY_LINE "$BASH_PHISTORY_FILE" | command grep -qF "$sha_today"; then
+    echo "| $sha_today | $date_part | $command_part" >> "$BASH_PHISTORY_FILE"
+  fi
+}
+# Find collisions/dupes # {{{
+# command grep "^| " ~/.bash_phistory | cut -d\  -f2 | LC_ALL=C sort | uniq -c | command grep -v "^\s\+1\s\+" | cut -c9- | xargs -i grep --color -n "{}" ~/.bash_phistory
+# }}}
+# }}}
+phist () { # @@ # {{{
+  local auto_paste= use_colors=true in_pipe=false igncase= use_rem=${BASH_PHIST_USE_REM:-true} tail_n="5000"
+  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*PHIST:[^,]\+,' | command grep -o 'true\|false')"
+  $use_rem && ! type rem >/dev/null 2>&1 && use_rem=false
+  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+  if [[ $1 == '@@' ]]; then
+    case $3 in
+    -n) echo "- 100 1000 5000 10000";;
+    *)
+      local ret="--list -n"
+      $use_rem && ret+=" -nr --no-rem" || { type rem >/dev/null 2>&1 && ret+=" --rem -r"; }
+      $use_fzf && ret+=" -np --no-paste" || ret+=" -p --paste"
+      echo "$ret"
+      ;;
+    esac
+    return 0
+  fi
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -p|--paste)      auto_paste=true;;
+    -np|--no-paste)  auto_paste=false;;
+    -nc|--no-colors) use_colors=false;;
+    -nf|--no-fzf)    use_fzf=false;;
+    -f |--fzf)       use_fzf=$FZF_INSTALLED;;
+    +fzf=*)          use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+    -r|--rem)        use_rem=true;;
+    -nr|--no-rem)    use_rem=false;;
+    -i)              igncase=1;;
+    -I)              igncase=0;;
+    -v)              in_pipe=true;;
+    -n)              tail_n="$2"; shift;;
+    -l|--list)       BASH_PHISTORY_LAST_REGEXP="$";;
+    *)               break;;
+    esac
+    shift
+  done # }}}
+  [[ -z $1 ]] && BASH_PHISTORY_LAST_REGEXP="$" || BASH_PHISTORY_LAST_REGEXP="$@"
+  [[ ! -t 1 ]] && use_colors=false && in_pipe=true && use_fzf=false
+  $use_fzf && use_colors=false
+  [[ -z $BASH_PHISTORY_LAST_REGEXP ]] && echo "Nothing to do" >/dev/stderr && return 1
+  if [[ -z $igncase ]]; then
+    igncase=1
+    echo "$BASH_PHISTORY_LAST_REGEXP" | command grep -q "[A-Z]" && echo "$BASH_PHISTORY_LAST_REGEXP" | command grep -q "[a-z]" && igncase=0
+  fi
+  local grep_output=
+  readarray grep_output < \
+    <(  { [[ $tail_n == '-' ]] && cat $BASH_PHISTORY_FILE || tail -n $tail_n $BASH_PHISTORY_FILE; } \
+        | awk \
+          -v icase="$igncase" \
+          -v re="$BASH_PHISTORY_LAST_REGEXP" \
+          'BEGIN{IGNORECASE = icase}; {if (match(substr($0, index($0, $6)), re)) print $0;}' \
+        | sed 's//\\n/' \
+        | cat -n | sort -uk3,3 | sort -nrk1,1 | sort -uk7 | sort -nrk1,1 | cut -d'|' -f3- | sed 's/\s\+//')
+  [[ -z $grep_output ]] && echo "Empty list" >/dev/stderr && return 1
+  export BASH_PHISTORY_LAST_REGEXP
+  local color_off= color_nr= color_date= color_reg= color_hl=
+  if $use_colors; then # {{{
+    [[ -z $COff ]] && source $BASH_PATH/colors
+    color_off=$COff
+    color_nr=$CGreen
+    color_date=$CRed
+    color_reg=$CSearch
+    color_hl="+cGr"
+  fi # }}}
+  local cmd=
+  if $use_fzf; then # {{{
+    [[ -z $auto_paste ]] && auto_paste=true
+    cmd=$( \
+      printf '%s' "${grep_output[@]}"  | \
+        gawk -v re="${BASH_PHISTORY_LAST_REGEXP#^}" -v c_d=${color_date} -v c_r=${color_reg} -v c_off=${color_off} \
+        '{
+          o = gensub(/^([0-9]+-[0-9]+)/, c_d "\\1" c_off, "G")
+          o = gensub(re, c_r "\\0" c_off, "G", o)
+          print o;
+        }' | \
+        cat -n | \
+        gawk -v c=${color_nr} -v c_off=${color_off} \
+        '{
+          o = gensub(/^(\s+[0-9]+)/, c "\\1" c_off, "G")
+          print o;
+        }' | \
+        fzf --exit-0 --no-sort --multi --height 100% --prompt='History> ')
+    # }}}
+  else # {{{
+    printf '%s' "${grep_output[@]}"  | \
+      gawk -v re="${BASH_PHISTORY_LAST_REGEXP#^}" -v c_d=${color_date} -v c_r=${color_reg} -v c_off=${color_off} \
+      '{
+        o = gensub(/^([0-9]+-[0-9]+)/, c_d "\\1" c_off, "G")
+        o = gensub(re, c_r "\\0" c_off, "G", o)
+        print o;
+      }' | \
+      cat -n | \
+      gawk -v c=${color_nr} -v c_off=${color_off} \
+      '{
+        o = gensub(/^(\s+[0-9]+)/, c "\\1" c_off, "G")
+        print o;
+      }' | \
+      { $use_colors && hl --lines $color_hl || cat -; } | \
+      { ! $in_pipe && less || cat -; }
+    $in_pipe && return 0
+    local len=${#grep_output[*]} do_exec=
+    read -p "Exec (Quit/First/[1,$len]) ? " do_exec # {{{
+    case ${do_exec^^} in
+    Q|N|'')  return;;
+    F|FIRST) do_exec='first';;
+    esac # }}}
+    if [[ ! -z $do_exec ]]; then # {{{
+      cmd="${grep_output[0]}"
+      if [[ $do_exec != 'first' ]]; then
+        [[ $do_exec -lt 1 || $do_exec -gt $len ]] && echo "Out of range ($do_exec):[1,$len]" >/dev/stderr && return 1
+        cmd="${grep_output[$(($do_exec-1))]}"
+      fi
+    fi # }}}
+  fi # }}}
+  if [[ ! -z $cmd ]]; then # {{{
+    cmd="$(echo "$cmd" | cut -d'|' -f 2- | sed 's/^\s\+//')"
+    $use_rem && echo "$cmd" | $ALIASES rem
+    ! $use_fzf && [[ $(echo "$cmd" | wc -l) == 1 ]] && echo -e "\n${color_reg}\$ ${color_nr}${cmd}${color_off}"
+    if [[ -n $TMUX ]]; then
+      tmux set-buffer -b 'last-cmd' "$cmd"
+      $auto_paste && [[ $(echo "$cmd" | wc -l | awk '{print $1}') == 1 ]] && tmux paste-buffer -b 'last-cmd'
+      return 0
+    else
+      [[ $(echo "$cmd" | wc -l) != 1 ]] && echo "More than one command chosen, evaluation skipped" >/dev/stderr && echo -e "$cmd" >/dev/stderr && return 1
+      eval $cmd
+    fi
+  fi # }}}
+} # }}}
+
+export HISTIGNORE+=":phist*"
+

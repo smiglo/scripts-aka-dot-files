@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+cpp() { # @@ # {{{
+  local default_params="--no-edit --file --append --no-reset --no-keep --no-abs --ign --split --fzf"
+  local setup="--var CPP --mask cpp --quiet" i=
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    --file | -f | -F | --restore)
+      rem $setup $default_params @@@ $2 $3;;
+    *)
+      echo "--edit -e --keep --list -l --move -m -n --reset -r - --ls --ls-rec . --no-ls --no-ign"
+      rem $setup $default_params @@@ $2 $3 | \
+        sed \
+          -e 's/-\(F\|q\)\>//g' \
+          -e 's/--\(quiet\|--ign\)\>//g'
+      ;;
+    esac
+    return 0
+  fi # }}}
+  # Setup # {{{
+  # Debug features # {{{
+  local dbg_level=0 dry_run=false
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    --dbg | --dbg1)  dbg_level=1;;
+    --dbg2)          dbg_level=2;;
+    -n | --dry-run)  dry_run=true;;
+    *)               break;;
+    esac
+    shift
+  done # }}}
+  [[ $dbg_level -ge 2 ]] && set -xv
+  local do_mv=false do_keep=false do_edit=false do_reset=false do_ls=true do_ls_rec=false do_list=false do_fzf=true
+  params="$default_params"
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --edit | -e)   do_edit=true;;&
+    --fzf)         do_fzf=true;;&
+    --keep | -k | --list | -l)
+                    do_keep=true;;&
+    --list | -l)   do_list=true;;&
+    --ls)          do_ls=true;;
+    --no-ls)       do_ls=false;;
+    --no-fzf)      do_fzf=false;;&
+    --ls-rec)      do_ls_rec=true;;
+    --move | -m)   do_mv=true;;
+    --reset | -r)  do_reset=true; do_ls=false; do_ls_rec=false;;&
+    -)       shift; break;;
+    -*)      params+=" $1";;
+    *)       break;;
+    esac
+    shift
+  done # }}}
+  # }}}
+  # What to do # {{{
+  local mode=
+  [[ -z $mode ]] && [[ ! -t 0 ]] && mode='add'
+  [[ -z $mode ]] && [[ ! -z $1 && $1 != '.' ]] && mode='add'
+  [[ -z $mode ]] && [[ -z $1 ]] && $do_list && mode='copy'
+  [[ -z $mode ]] && [[ -z $1 ]] && $do_ls && mode='add'
+  [[ -z $mode ]] && [[ -z $1 ]] && $do_ls_rec && mode='add'
+  [[ -z $mode ]] && mode='copy'
+  # }}}
+  if [[ "$mode" == 'add' ]]; then # Add files {{{
+    if [[ -t 0 ]]; then
+      if [[ -z $1 ]]; then
+        if $do_ls_rec; then
+          params="--ls --ls-mode rec-all --fzf-prompt 'Add> ' $params"
+        elif $do_ls; then
+          params="--ls --ls-mode 1 --fzf-prompt 'Add> ' $params"
+        fi
+      fi
+    fi
+    eval rem $setup $params ${@// /%20}
+    [[ $? != 0 ]] && echo "Error when remembering files" >/dev/stderr && return 1
+  fi # }}}
+  if [[ "$mode" == 'copy' ]]; then # Copy files to {{{
+    if [[ -z $1 ]]; then
+      $do_reset && { rem $setup -r; return 0; }
+      echo "Dry Run because not specified what to do" >/dev/stderr && dry_run=true && do_keep=true
+    fi
+    local files=
+    files=$(eval rem $setup -k $( $do_edit || ! $do_fzf || echo "--fzf --fzf-prompt '$($do_mv && echo 'Move' || echo 'Copy') here> '") $params $@)
+    [[ $? != 0 ]] && echo "Error when getting files" >/dev/stderr && return 1
+    [[ -z $files ]] && echo "No files have been chosen" >/dev/stderr && return 1
+    echo -e "$files" | while read i; do # {{{
+      local p="${i//%20/ }"
+      if [[ $dbg_level -ge 1 ]] || $dry_run; then # {{{
+        $do_mv && echo "mv \"$p\" \"$PWD/\"" || echo "cp -R \"$p\" \"$PWD/\""
+      fi >/dev/stderr # }}}
+      $dry_run && continue
+      [[ ! -e $p ]] && echo "File does not exist [$p]" >/dev/stderr && continue
+      $do_mv && mv "$p" "$PWD/" || cp -R "$p" "$PWD/"
+    done # }}}
+    ! $do_keep && rem $setup -r
+  fi # }}}
+  [[ $dbg_level -ge 2 ]] && set +xv
+  return 0
+} # }}}
+
+export PHISTORY_IGNORED_COMMANDS+=":cpp"
+

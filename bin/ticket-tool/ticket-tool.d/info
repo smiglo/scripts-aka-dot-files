@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+func="${func#source*; }"
+len="$(tput cols)"
+[[ $len -gt 60 ]] && len=60
+l1="$(eval printf "─%.0s"  {1..$len})"
+l2="$(eval printf "═%.0s"  {1..$len})"
+multi=$((${#l1} / 4))
+multi="$(printf "\\\\0%.s" $(eval echo {1..$multi}))"
+[[ -t 1 ]] || unset $($BASH_PATH/colors --list)
+if [[ -z $1 ]]; then
+  echo -ne "$func\n" | sed -e "s/^\(##\+ @\) .*}}[}]/\1/"
+else
+  while [[ ! -z $1 ]]; do
+    s="${1,,}"
+    s="$(echo -ne "$func\n" | command grep -ai "^##\+ @ $s\( .*\)\{0,1\}" | head -n1 | sed -e 's/^##\+ @ //' -e 's/ #.*//')"
+    [[ -z $s ]] && echo "Section [$1] not found" >/dev/stderr && shift && continue
+    if echo -ne "$func\n" | grep -aq  "^##\+ @ $s .*}}[}]"; then
+      echo -ne "$func\n" | sed -n -e "/^##\+ @ $s .*{{[{]/,/^##\+ @ $s .*}}[}]/p" | sed -e "s/^\(##\+ @\).*}}[}]/\1/"
+    else
+      indent="$(echo -ne "$func\n" | command grep -a "^##\+ @ $s" | head -n1 | sed -e 's/^\(##\+\) .*/\1/')"
+      max="$((${#indent}-1))"
+      [[ $max -lt 2 ]] && max=2
+      echo -ne "$func\n" | sed -n -e "/^##\+ @ $s/,/^#\{2,$max\}$\|^$indent @\|^$indent @ }}[}]/p" \
+      | sed -e "s/##\+ @ $s/--@@\0/" -e "s/^#\{2,$max\}$\|^#\{2,${#indent}\} @.*/$indent @/" -e 's/^--@@//'
+    fi
+    shift
+  done
+fi | sed \
+  -e '/^"\+$/ d' \
+  -e "/^'''$/ d" \
+  -e "s/^---$/$l1/" -e "s/^===$/$l2/" -e "s/^\(.\)\1\{3\}$/$multi/" \
+  -e 's/^## \([^@]*$\)/# \1/' \
+  -e "s/^\(##\+\) @ \([a-zA-Z0-9][^ ]*\).*/\1 ${CGold}\2${COff}/g" \
+  -e '/^##\+ [@#].*/ d' \
+  -e '/^##\+$/ d'
+

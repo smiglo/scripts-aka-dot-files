@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+# env:  ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
+
+f() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "-+tee=false +tee=true +-fzf +fzf +find"
+    return 0
+  fi
+  local use_tee=true use_fzf=true fallback=false params= query= force_find=false
+  ! which fd >/dev/null 2>&1 && force_find=true
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    +t | +tee)   use_tee=true;;
+    +tee=*)      use_tee=${1/+tee=};;
+    +-fzf | +-f) use_fzf=false;;
+    +fzf)        use_fzf=$FZF_INSTALLED;;
+    +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+    +find | +f)  force_find=true;;
+    *) # {{{
+      query="$1"
+      if [[ ! -z $2 ]]; then
+        if [[ ! -d $1 ]]; then
+          params+=" ."
+        else
+          params+=" $1"
+          shift
+          query="$1"
+        fi
+        [[ $1 != -* ]] && params+=" -name" || query="$2"
+        local msg="Falling back to find command: 'find $params $@'"
+        progress --msg "$msg" --dots --cnt 30 --no-err --out /dev/stderr || return 0
+        if [[ ! -t 1 ]]; then
+          echo "find $params $@"
+          echo
+        fi
+        fallback=true
+      fi
+      break;; # }}}
+    esac
+    shift
+  done
+  [[ ! -t 1 ]] && use_fzf=false
+  if ! $fallback; then
+    if ! $force_find; then
+      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'fd: $query> '" --no-err fd "$1"
+    else
+      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find . -name "$1"
+    fi
+  else
+    output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find $params "$@"
+  fi
+  return $?
+} # }}}
+
+alias ff="f +find" # @@
+

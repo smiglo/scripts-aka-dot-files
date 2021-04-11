@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+reminder() { # @@ # {{{
+  local i= tool='/usr/bin/notify-send' verbose=">/dev/null 2>&1" be_verbose=false
+  if [[ $1 == @@ ]]; then # {{{
+    local ret="-v -i"
+    case $3 in
+    -i) # {{{
+      ret="$(at -l | awk '{print $1}')" ;; # }}}
+    *) # {{{
+      if [[ ! -z $REMINDER_DIR && -e $REMINDER_DIR ]]; then
+        for i in $(command cd "$REMINDER_DIR"; ls -d *); do
+          [[ -f $REMINDER_DIR/$i && -x $REMINDER_DIR/$i ]] && ret+=" $i"
+        done
+      fi ;; # }}}
+    esac
+    echo "$ret"
+    return 0
+  fi # }}}
+  $IS_MAC && tool="$BASH_PATH/messages.sh"
+  type $tool >/dev/null 2>&1 || { echo "Notifier tool [$tool] not found" >/dev/stderr; return 1; }
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -i) # {{{
+      local no="$2"
+      if [[ -z $no ]]; then # {{{
+        for no in $(at -l | sort -k1,1n | awk '{print $1}'); do
+          reminder -i $no
+        done
+        return 0
+      fi # }}}
+      ! at -l | command grep -q "^$no\s" && return 1
+      at -l | command grep "^$no\s"
+      at -c "$no" | sed -e '1,/exit 1/ d' -e '/^[{}]/d' -e '/^\s*$/d' | sed 's/^/\t/'
+      return 0;; # }}}
+    -v) verbose=; be_verbose=true;;
+    *)  break;;
+    esac
+    shift
+  done # }}}
+  local msg="$1" ts="${2#+}" h= m= s= file=false err=0 params=
+  if [[ $# -gt 2 ]]; then
+    ts="${@:$#:$#}"
+    params="${@:2:$#-2}"
+  fi
+  [[ ! -z $msg && ! -z $ts ]] || { echo "Argument missing [$@]" >/dev/stderr && return 1; }
+  [[ ! -z "$REMINDER_DIR" && -e "$REMINDER_DIR/$msg" ]] && msg="$REMINDER_DIR/$msg"
+  [[ "$msg" == ./* ]] && msg="$PWD/$msg"
+  [[ "$msg" == /* && -e "$msg" ]] && file=true
+  ts="$($ALIASES time2s "$ts")" && ts=${ts%:*}
+  if $file; then # {{{
+    echo "$msg $params" | ( command cd $HOME; eval at $ts $verbose )
+    err="$?"
+    ! command grep -q "${tool##*/}\|no-notify" "$msg" && msg="Script [${msg##*/}] executed" && file=false
+  fi # }}}
+  if ! $file && [[ $err == '0' ]]; then # {{{
+    local msg_wrapper="$REMINDER_DIR/.msg.sh"
+    if [[ -e "$msg_wrapper" ]]; then
+      echo "$msg_wrapper \"Reminder: $msg\""
+    else
+      if ! $IS_MAC; then
+        echo "$tool 'Reminder: $msg' -i starred -u critical"
+      else
+        echo "$tool 'Reminder' '$msg'"
+      fi
+    fi | ( command cd $HOME; eval at $ts $verbose )
+    err="$?"
+  fi # }}}
+  if [[ $err == 0 ]]; then
+    at -l | sort -k1,1n | tail -n1
+    if $be_verbose; then
+      at -c "$(at -l | sort -k1,1n | tail -n1 | awk '{print $1}')" | sed -n -e '/^\s*$/d' -e '/^\/home/,$ p' | sed 's/^/\t/'
+    fi
+  else
+    echo "Failed to schedule the reminder" >/dev/stderr
+  fi
+  return $err
+} # }}}
+
+export PHISTORY_IGNORED_COMMANDS+=":reminder:at"
+

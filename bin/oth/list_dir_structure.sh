@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 indent() {
   [ $1 == 0 ] && return

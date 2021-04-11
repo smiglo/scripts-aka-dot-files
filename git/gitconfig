@@ -22,7 +22,8 @@
 [diff "bin"] # {{{
   textconv = hexdump -v -C # }}}
 [difftool "vimdiff"] # {{{
-  cmd = vimdiff $LOCAL $REMOTE # }}}
+  cmd = vimdiffgit $LOCAL $REMOTE
+  trustExitCode = true # }}}
 [difftool "kdiff3"] # {{{
   path = kdiff3
   trustExitCode = false # }}}
@@ -86,7 +87,7 @@
   stv = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim -; }; f "$@";'" -
   sync = !"git-cmds.sh sync"
   userset = !"git-cmds.sh userset"
-  vimdiff = difftool -y -t vimdiff
+  vimdiff = difftool -y -t vimdiff --trust-exit-code
   vimdiff-p = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f "$@";'" -
   wipe = !"git-cmds.sh commit-fast 'WIPE SavePoint' >/dev/null 2>&1 && git reset HEAD~1 --hard >/dev/null 2>&1"
   # }}}

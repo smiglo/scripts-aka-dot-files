@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #convert m4a to mp3
 
 FILES="*.m4a"

@@ -20,7 +20,7 @@ dashboard -style value_truncation_string '+'
 
 dashboard assembly  -style function 0
 dashboard history   -style limit 10
-dashboard source    -style context 15
+# dashboard source    -style context 15
 dashboard source    -style height 25
 dashboard stack     -style limit 3
 dashboard stack     -style arguments True

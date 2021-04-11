@@ -1,0 +1,612 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+tm() { # @@ # {{{
+  ! type tmux >/dev/null 2>&1 && return 1
+  local buffers_path="$APPS_CFG_PATH/tmux/buffers" layouts_path="$APPS_CFG_PATH/tmux/layouts"
+  local lFile="$layouts_path/l.layout"
+  if [[ $1 == '@@' ]]; then # {{{
+    local dir=${PWD/*\/}
+    local sessions="$(tmux list-sessions -F '#S')"
+    local ret=""
+    if [[ $2 == 1 ]]; then
+      ret="-d -a --attach -p --path --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l --new --pane"
+    else
+      case $4 in
+      -a|--attach) ret="$sessions";;
+      -p|--path)   ret="@@-d";;
+      --b-restore) ret="$(command cd $buffers_path; command ls -Ad *)";;
+      --pane) # {{{
+        case $3 in
+        \?\?)   ret="$(tmux list-panes -a -F '#T' | sed 's/ /@SP@/g')";;
+        \?)     ret="$(tmux list-panes -s -F '#T' | sed 's/ /@SP@/g')";;
+        --pane) ret="?? ? $(tmux list-windows -a -F '#S:#I')";;
+        [0-9]) # {{{
+          case $5$6$7 in
+          [A-Z]*:[0-9]*) ret="$(tmux list-panes -t $5$6$7 -F '#T' | sed 's/ /@SP@/g')";;
+          esac;; # }}}
+        *)      ret="- nl";;
+        esac;; # }}}
+      --l-dump | --l-restore | --l-edit | ld | lr) # {{{
+        case $3 in
+        --file) # {{{
+          ret="-"
+          [[ -e "$layouts_path/l.layout" ]] && ret+=" l"
+          [[ -e "$layouts_path/predefined.layout" ]] && ret+=" predefined"
+          ret+=" $($ALIASES getFileList '*.layout' | sed -e 's/^/.\//' -e 's/\.layout//g')"
+          ret+=" $($ALIASES getFileList -d --pwd $layouts_path '*.layout' | head -n4 | sed -e 's/\.layout//g')"
+          echo "$ret"
+          return 0
+          ;; # }}}
+        *)  # {{{
+          case $4 in
+          --l-dump | --l-restore | ld | lr) ret="--all -v --file $(tmux display-message -pF '#S #S:* #S:#W')";;
+          --l-edit) ret="--file"
+          esac;; # }}}
+        esac;;& # }}}
+      --l-dump | ld) # {{{
+        ret+=" --paths --no-paths"
+        [[ -e $lFile ]] && ret+=" $(awk '!/^#/ && /^[^:]* /{print $1}' "$lFile")"
+        ;; # }}}
+      --l-restore | lr) # {{{
+        ret+=" --all-all --cd --acd --mcd --no-cd --match"
+        [[ -e "$lFile" ]] && ret+=" $(sed -e '/^#/d' -e '/^-/d' $lFile | awk '{print $1}')"
+        ;; # }}}
+      --layout | l) # {{{
+        ret=" --swap -s"
+        ret+=" orig o next n prev p save s even-horizontal even-vertical main-horizontal h main-vertical v tiled";; # }}}
+      esac
+    fi
+    echo -e "$ret"
+    return 0
+  fi # }}}
+  local title= inBackground=false utils= nest=false cmd=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    ld | lr | l    | \
+    -a | --attach  | \
+    -p | --path    | \
+    -b | --buffers | \
+    --b-dump       | \
+    --b-restore    | \
+    --install      | \
+    --l-dump       | \
+    --l-restore    | \
+    --l-edit       | \
+    --layout       | \
+    --pane         | \
+    --new          | \
+    --exec)
+          case $1 in # {{{
+          -a) utils='attach';;
+          -p) utils='path';;
+          -b) utils='buffers';;
+          l)  utils='layout';;
+          ld) utils='l-dump';;
+          lr) utils='l-restore';;
+          *)  utils="${1#--}";
+          esac # }}}
+          shift; break;;
+    -d)             inBackground=true;;
+    -n | --nest)    nest=true;;
+    *)              break;;
+    esac
+    shift
+  done # }}}
+  [[ ! -z $utils ]] || return 1
+  local var= i= buffer_fix='buffer'
+  case $utils in # {{{
+  layout) # {{{
+    local toChange= layoutV="$(tmux show-window-options -v '@layout' 2>/dev/null)" swap=false
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --swap | -s) swap=true;;
+      *) toChange="$1";;
+      esac
+      shift
+    done # }}}
+    if [[ -z $toChange ]]; then
+      [[ ! -z "$layoutV" ]] && toChange='orig' || toChange="main-horizontal"
+    fi
+    case $toChange in # {{{
+    o | orig) [[ ! -z $layoutV ]] && tmux select-layout "$layoutV" \; set-window-option -u '@layout';;
+    s | save) tmux set-window-option '@layout' "$(tmux display-message -pF '#{window_layout}')";;
+    *) [[ -z $layoutV ]] && tmux set-window-option '@layout' "$(tmux display-message -pF '#{window_layout}')";;&
+    n | next) tmux next-layout;;
+    p | prev) tmux previous-layout;;
+    h)        toChange='main-horizontal';;&
+    v)        toChange='main-vertical';;&
+    *)        tmux select-layout "$toChange"; $swap && tmux swap-pane -t .1 \; select-pane -t .1;;
+    esac # }}}
+    ;; # }}}
+  l-edit) # {{{
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --file) # {{{
+        lFile="$2"; shift
+        if [[ "$lFile" != '/dev/std'* && "$lFile" != '-' ]]; then
+          [[ "$lFile" != "./"* && "$lFile" != "/"*  && "$lFile" != '~'* ]] && lFile="$layouts_path/$lFile"
+          [[ "$lFile" != *".layout" ]] && lFile+=".layout"
+        fi
+        ;; # }}}
+      esac
+    done # }}}
+    [[ ! -e $lFile && $lFile != "-" ]] && echo "Layout file does not exist" && return 1
+    if [[  $lFile = "-" ]]; then
+      cat - | vim --fast
+    else
+      vim --fast "$lFile"
+    fi
+    return 0
+    ;; # }}}
+  l-dump | l-restore) # {{{
+    local session= wName= all=false entry= lOrig= l= e= all_all=false entries= file= paths= do_cd= real_paths= verbose=false match=
+    read session wName lOrig <<<$(tmux display-message -pF '#S #S:#W #{window_layout}')
+    entry="$wName"
+    [[ ! -e "$layouts_path" ]] && command mkdir -p "$layouts_path"
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --file) # {{{
+        lFile="$2"; shift
+        if [[ "$lFile" != '/dev/std'* && "$lFile" != '-' ]]; then
+          [[ "$lFile" != "./"* && "$lFile" != "/"*  && "$lFile" != '~'* ]] && lFile="$layouts_path/$lFile"
+          [[ "$lFile" != *".layout" ]] && lFile+=".layout"
+        fi
+        ;; # }}}
+      -v) # {{{
+        verbose=true;; # }}}
+      *) # {{{
+        case $utils in
+        l-dump) # {{{
+          case $1 in
+          --all)      all=true;;
+          --paths)    real_paths=true;;
+          --no-paths) real_paths=false;;
+          *)          entry="$1"; [[ -z $real_paths ]] && real_paths=false;;
+          esac;; # }}}
+        l-restore) # {{{
+          case $1 in
+          --all) all=true;;
+          --all-all) all_all=true;;
+          --cd)  do_cd='auto';;
+          --acd) do_cd='auto';;
+          --mcd) do_cd=true;;
+          --no-cd) do_cd=false;;
+          --match) match="$2"; shift;;
+          *)     entry="$1";;
+          esac # }}}
+        esac;; # }}}
+      esac
+      shift
+    done # }}}
+    case $utils in # {{{
+    l-dump) # {{{
+      [[ -z $real_paths ]] && real_paths=true
+      [[ ! -t 1 ]] && lFile="/dev/stdout"
+      [[ "$lFile" == '-' ]] && lFile='/dev/stdout'
+      ;; # }}}
+    l-restore) # {{{
+      [[ -z $do_cd ]] && do_cd=false
+      [[ ! -t 0 ]] && lFile="/dev/stdin"
+      [[ "$lFile" == '-' ]] && lFile='/dev/stdin'
+      ;; # }}}
+    esac # }}}
+    ;;& # }}}
+  l-dump) # {{{
+    if $all; then # {{{
+      local lFileOld="${lFile%.layout}.backup-$(command date +"$DATE_FMT").layout" wId=
+      [[ -e "$lFile" ]] && mv "$lFile" "$lFileOld"
+      echo -e "# vim ft=conf\n" >"$lFile"
+      [[ -e $lFileOld ]] && { awk '!/^#/ && /^[^:]* /' "$lFileOld"; echo ""; } >>"$lFile"
+      tmux list-windows -a -F '#S:#W #S:#I #{window_layout}' | while read wName wId layout; do
+        echo "$wName $layout # $(\
+          tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
+          | sed -e 's/::/~/g' -e 's/://g' \
+          | tr '\n' ':' \
+          | sed -e "s|$HOME|~|g" -e 's/:$//' \
+          )" >>"$lFile"
+      done # }}}
+    else # {{{
+      if [[ "$lFile" != '/dev/stdout' ]]; then # {{{
+        if [[ -e "$lFile" ]]; then # {{{
+          sed -i "s/^$entry /# $(command date +"$DATE2_FMT") \0/" "$lFile"
+        else
+          echo -e "# vim ft=conf\n" >"$lFile"
+        fi # }}}
+      fi # }}}
+      if $real_paths; then # {{{
+        echo "$entry $lOrig # $( \
+          tmux list-panes -t "$wName" -F ':#{pane_current_path}:' \
+          | sed -e 's/::/~/g' -e 's/://g' \
+          | tr '\n' ':' \
+          | sed -e "s|$HOME|~|g" -e 's/:$//' \
+          )" >>"$lFile"
+          # }}}
+      else # {{{
+        echo "$entry $lOrig # $( \
+          tmux list-panes -t "$wName" -F '-' \
+          | tr '\n' ':' \
+          | sed -e 's/:$//' \
+          )" >>"$lFile"
+      fi # }}}
+    fi # }}}
+    return 0
+    ;; # }}}
+  l-restore) # {{{
+    if [[ "$lFile" != "/dev/stdin" ]]; then
+      [[ ! -e "$lFile" ]] && echo "Layout file [$lFile] not exist" >/dev/std/err && return 1
+      if $all_all; then # {{{
+        file="$(sed -e '/^#/d' -e 's/\s\s\+/ /g' "$lFile" | sort -k1,1)"
+        tmux list-windows -a -F '#S:#W #{window_layout}' | while read entry lOrig; do
+          if [[ -z $match ]]; then
+            entries="$entry ${entry%%:*}:\\* ${entry%%:*}"
+          else
+            entries="$match-$entry"
+          fi
+          for e in $entries; do
+            e="$(echo -e "$file" | command grep "^$e ")"
+            [[ -z "$e" ]] && continue
+            read l paths <<<$(echo -e "$e" | head -n1 | cut -d' ' -f2,4-)
+            [[ -z "$l" ]] && continue
+            [[ "$l" != "$lOrig" ]] || break
+            tmux select-layout -t "$entry" "$l" >/dev/null 2>&1 && $verbose && echo "lOrig_$entry=\"$lOrig\" # $e"
+            break
+          done
+        done
+        return 0 # }}}
+      elif $all; then # {{{
+        entry="$(sed -e '/^#/d' -e '/^\s*$/d' -e 's/\s\s\+/ /g' -e 's/ .* # / # /' "$lFile" | sort -k1,1 | fzf -1 -0 | cut -d' ' -f1)"
+        read l paths <<<$(sed -n -e '/^'"$entry"' /p' "$lFile" | head -n1 | cut -d' ' -f2,4-) # }}}
+      else # {{{
+        local out= e_out=
+        entries="$entry"
+        [[ "$entry" == "$wName" ]] && entries="$entry $session:\\* $session@.* $session $(awk '!/^#/ && /^[^:]* / {print $1}' "$lFile")"
+        out="$(sed -n -e 's/^# \([0-9]\+\) \('"${entry//\//\\/}"'\) \(.*\)/\2@\1 \3/p' "$lFile")\n"
+        for e in $entries; do
+          e_out="$(command grep -i "^$e " "$lFile")"
+          [[ -z "$e_out" ]] && continue
+          out+="$e_out\n"
+          [[ $e == $entry ]] && break
+        done
+        out="$(echo -e "$out" | sed -e 's/\s\s\+/ /g')"
+        entry="$(echo -e "$out" | sed -e '/^#/d' -e '/^\s*$/d' -e 's/ .* # / # /' | sort -k1,1 -u | fzf -1 -0 | cut -d' ' -f1)"
+        [[ "$entry" =~ ^(.*)@([0-9]+)$ ]] && entry="# ${BASH_REMATCH[2]} ${BASH_REMATCH[1]}"
+        read l paths <<<$(echo -e "$out" | sed -n -e '/^'"$entry"' /p' | head -n1 | cut -d' ' -f2,4-)
+      fi # }}}
+    else
+      read l paths <<<$(cat - | sed -n -e 's/\s\s\+/ /g' -e '/.* # .*/s|\(.* \)\{0,1\}\(.*\) # \(.*\)|\2 \3|p;t;' -e 's|\(.* \)\{0,1\}\(.*\)|\2|p')
+    fi
+    [[ -z "$l" ]] && return 1
+    local err=0
+    [[ "$l" != "$lOrig" ]] && { tmux select-layout "$l" >/dev/null 2>&1; err=$?; }
+    [[ $err == 0 && "${l#*,}" != "${lOrig#*,}" ]] && $verbose && echo "lOrig=\"$lOrig\""
+    if [[ ! -z $paths ]]; then # {{{
+      local pDiff= pNow="$(tmux list-panes -t "$wName" -F '#{pane_current_path}' | tr '\n' ' ' | sed -e "s|$HOME|~|g" -e 's/\s\+$//' -e 's/ \+/:/g')" i=
+      IFS=':' read -a pNow <<<$(echo "$pNow")
+      IFS=':' read -a paths <<<$(echo "$paths")
+      if [[ $err != 0 || ${#paths[*]} != ${#pNow[*]} ]]; then # {{{
+        if [[ $do_cd == 'auto' ]]; then # {{{
+          local pd=$((${#paths[*]} - ${#pNow[*]}))
+          if [[ $pd -lt 0 ]]; then # {{{
+            pd=$((-$pd))
+            for i in $(seq 1 $pd); do
+              [[ $(tmux display-message -t ".$i" -pF '#{pane_active}') == 1 ]] && i=$((i+1))
+              tmux kill-pane -t .$i
+            done
+          elif [[ $pd -gt 0 ]]; then
+            for i in $(seq 1 $pd); do
+              tmux split-window -d
+            done
+          fi # }}}
+          [[ "$l" != "$lOrig" ]] && { tmux select-layout "$l" >/dev/null 2>&1; err=$?; }
+        else
+          echo "Different number of panes (${#paths[*]} vs ${#pNow[*]})" >/dev/stderr
+        fi # }}}
+      fi # }}}
+      for i in ${!paths[*]}; do # {{{
+        [[ ${paths[i]} == ${pNow[i]} || ${paths[i]} == '-' ]] && continue
+        if [[ $do_cd == 'true' || $do_cd == 'auto' ]]; then
+          [[ $i -lt ${#pNow[*]} || $do_cd == 'auto' ]] && tmux send-keys -t ".$((i+1))" " cd \"${paths[i]}\" && clr"
+        else
+          pDiff+="  $((i+1)): ${paths[i]}\n"
+        fi
+      done # }}}
+      if [[ $do_cd == 'false' && ! -z $pDiff ]] && $verbose; then # {{{
+        echo -en "Paths:\n$pDiff"
+      fi # }}}
+    fi # }}}
+    return $err
+    ;; # }}}
+  b-dump) # {{{
+    if [[ ! -z $1 ]]; then
+      buffers_path+="/$1"
+      shift
+    else
+      buffers_path+="/$(command date +"$DATE_FMT")"
+    fi
+    command rm -rf $buffers_path
+    ;;& # }}}
+  b-restore) # {{{
+    if [[ ! -z $1 ]]; then
+      buffers_path+="/$1"
+      shift
+    else
+      buffers_path+="/$(command cd $buffers_path; ls -Adt * | tail -n1)"
+    fi
+    [[ ! -d $buffers_path ]] && echo "Buffer directory [$buffers_path] does not exis" >/dev/stderr && return 1
+    buffers_path+="/restore.backup"
+    ;;& # }}}
+  b-restore | b-dump) # {{{
+    command mkdir -p $buffers_path
+    local var=0
+    for i in $(tmux list-buffers -F '#{buffer_name}' | command grep "^buffer[0-9]\+" | sort); do
+      tmux save-buffer -b $i $buffers_path/buffer$(printf "%04d" "$var").$buffer_fix
+      var=$(($var+1))
+    done
+    ;;& # }}}
+  b-restore) # {{{
+    buffers_path="${buffers_path%/*}"
+    for i in $(tmux list-buffers -F '#{buffer_name}' | command grep "^buffer[0-9]\+"); do
+      tmux delete-buffer -b $i >/dev/null 2>&1
+    done
+    for i in $(command cd $buffers_path; ls *.$buffer_fix); do
+      tmux load-buffer -b ${i%.$buffer_fix} $buffers_path/$i
+    done
+    ;; # }}}
+  buffers) # {{{
+    local buffers_path=$RUNTIME_PATH/tmux-buffers
+    local tmp_buffer_file=$TMP_MEM_PATH/tmux-organize.tmp
+    local to_remove=" $(tmux list-buffers -F '#{buffer_name}' | tr '\n' ' ') "
+    tmux list-buffers -F '#{buffer_name}: #{buffer_sample}' | sed 's/^/pick /' >$tmp_buffer_file # {{{
+    if [[ $(command cd $buffers_path; echo .*.buffer) != '.*.buffer' ]]; then # {{{
+      (
+        echo
+        echo "# Stored, hidden buffers:"
+        for i in $(command cd $buffers_path; command ls .*.buffer | command sed -e 's/^\.//' -e 's/\.buffer//'); do
+          echo "# unhide $i: $(head -n1 $buffers_path/.$i.buffer)"
+        done
+      ) >>$tmp_buffer_file
+    fi # }}}
+    # Description # {{{
+    (
+      echo
+      echo "# Commands:"
+      echo "# p, pick = leave buffer as it is"
+      echo "# e, edit = edit buffer's name and content, and save if not starts with '$buffer_fix'"
+      echo "# r, rename = rename buffer and save if not starts with '$buffer_fix'"
+      echo "# d, drop = remove buffer, also from filesystem if was saved"
+      echo "# h, hide = remove buffer, hide on filesystem if was saved"
+      echo "# u, unhide = add stored, hidden buffer"
+      echo "# a, add = add buffer and save if not starts with '$buffer_fix'"
+      echo "# s, save = save buffer if not starts with '$buffer_fix'"
+      echo
+    ) >> $tmp_buffer_file # }}} # }}}
+    vim $tmp_buffer_file || return 0
+    local b_cmd=, b_name= b_buf= line= b_new_name=
+    local lines=()
+    i=0
+    while read line; do
+      lines[$i]="$line"
+      i=$(($i+1))
+    done < <(cat $tmp_buffer_file | sed -e '/^\s*$/ d' -e '/^#.*/ d')
+    i=0
+    while [[ $i -lt ${#lines[*]} ]]; do # {{{
+      line=${lines[$i]}
+      i=$(($i+1))
+      [[ -z $line ]] && continue
+      b_cmd=$line b_name=$line b_buf=$line
+      b_cmd=${b_cmd%% *}
+      b_name=${b_name#$b_cmd} b_name=${b_name# } b_name=${b_name%%:*}
+      b_buf=${b_buf#$b_cmd} b_buf=${b_buf# } b_buf=${b_buf#$b_name} b_buf=${b_buf#: }
+      to_remove="${to_remove/ $b_name / }"
+      case $b_cmd in # {{{
+      p | pick) # {{{
+        ;; # }}}
+      d | drop) # {{{
+        to_remove+="$b_name "
+        ;; # }}}
+      h | hide) # {{{
+        to_remove+="@@$b_name "
+        ;; # }}}
+      u | unhide) # {{{
+        mv $buffers_path/.$b_name.$buffer_fix $buffers_path/$b_name.$buffer_fix
+        tmux load-buffer -b $b_name $buffers_path/$b_name.$buffer_fix
+        ;; # }}}
+      # Common: edit/rename/add: Make file header # {{{
+      e | edit   | \
+      r | rename | \
+      a | add    )
+        local function=
+        case $b_cmd in
+          e | edit   ) function='edit';;
+          r | rename ) function='rename';;
+          a | add    ) function='add';;
+        esac
+        (
+          echo "${b_name:-$buffer_fix-$(date +"$DATE_FMT")}"
+          echo
+          echo "# Buffer to $function:"
+        ) >$tmp_buffer_file
+        ;;& # }}}
+      # Common: edit/rename: Do job # {{{
+      e | edit   | \
+      r | rename )
+        local function=
+        case $b_cmd in
+          e | edit   ) function='edit';;
+          r | rename ) function='rename';;
+        esac
+        tmux show-buffer -b $b_name >>$tmp_buffer_file
+        vim $tmp_buffer_file || continue
+        b_new_name="$(head -n 1 $tmp_buffer_file)"
+        [[ -z $b_new_name || $b_new_name == \#* ]] && continue
+        [[ $function == 'rename' && $b_new_name == $b_name ]] && continue
+        if [[ $b_new_name != $b_name ]]; then
+          tmux show-buffer -b $b_new_name >/dev/null 2>&1 && continue
+          tmux set-buffer -b $b_name -n $b_new_name
+          rm -f $buffers_path/$b_name.$buffer_fix
+          b_name=$b_new_name
+        fi
+        ;;& # }}}
+      a | add) # {{{
+        if [[ ! -z $b_buf ]]; then
+          echo -en "$b_buf" >> $tmp_buffer_file
+        else
+          vim $tmp_buffer_file || continue
+        fi
+        b_name="$(head -n 1 $tmp_buffer_file)"
+        [[ -z $b_name || $b_name == \#* ]] && continue
+        ;;& # }}}
+      # Common: edit/add: Load buffer from file # {{{
+      e | edit | \
+      a | add  )
+        tail -n +4 $tmp_buffer_file >$tmp_buffer_file.tmp
+        mv $tmp_buffer_file.tmp $tmp_buffer_file
+        if [[ $(wc -l $tmp_buffer_file | cut -d\  -f1) -le 3 ]]; then
+          tmux set-buffer -b $b_name "$(echo -n "$(cat $tmp_buffer_file)")"
+        else
+          tmux load-buffer -b $b_name $tmp_buffer_file
+        fi
+        ;;& # }}}
+      # Common: save/edit/rename/add: Save buffer # {{{
+      s | save   | \
+      e | edit   | \
+      r | rename | \
+      a | add    )
+        [[ $b_name != $buffer_fix* ]] && tmux save-buffer -b $b_name $buffers_path/$b_name.$buffer_fix
+        ;; # }}}
+      esac # }}}
+    done # }}}
+    for b_name in $to_remove; do # {{{
+      tmux delete-buffer -b ${b_name#@@} >/dev/null 2>&1
+      if [[ $b_name != @@* ]]; then
+        rm -f $buffers_path/$b_name.$buffer_fix
+      else
+        mv $buffers_path/${b_name#@@}.$buffer_fix $buffers_path/.${b_name#@@}.$buffer_fix
+      fi
+    done # }}}
+    return 0
+    ;; # }}}
+  attach) # {{{
+    var=${1^^}
+    if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
+      [[ -e $TMP_PATH/.tmux_last_session ]] && var="$(cat $TMP_PATH/.tmux_last_session)"
+      if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
+        var=${TMUX_DEFAULT_SESSION:-'MAIN'}
+      fi
+    fi
+    ! tmux has-session -t $var >/dev/null 2>&1 && echo "Session [$var] not found" >/dev/stderr && return 1
+    if [[ -n $TMUX ]]; then
+      [[ -z $var ]] && return 1
+      if $nest; then
+        tmux set-option -t "$var" -q @master_pane $TMUX_SESSION
+        tmux set-option -t "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" -qw @marked_pane $(tmux display-message -p -t $TMUX_PANE -F '#P')
+        $ALIASES set_title --from-tmux "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" "$var"
+        cmd="TMUX= tmux attach-session -t \"$var\""
+      else
+        cmd="tmux switch-client -t \"$var\""
+      fi
+    else
+      cmd='tmux attach'
+      [[ ! -z $var ]] && cmd+=" -t \"$var\""
+    fi
+    ;; # }}}
+  path) # {{{
+    [[ -n $TMUX ]] || return 1
+    var=${1:-$PWD}
+    [[ -d $var ]] || return 1
+    cmd="tmux set -q @tmux_path \"$var\""
+    ;; # }}}
+  install) # {{{
+    [[ -n $TMUX ]] || return 1
+    cmd="tmux run-shell \"~/.tmux/plugins/tpm/scripts/update_plugin_prompt.sh\""
+    ;; # }}}
+  exec) # {{{
+    [[ -n $TMUX ]] || return 1
+    [[ ! -z $1 ]] || return 1
+    local message="$@"
+    var="$TMUX_SESSION"
+    local w= p=
+    for w in $(tmux list-windows -t $var | cut -d: -f1 ); do
+      for p in $(tmux list-panes -t $var:$w | cut -d: -f1 ); do
+        tmux send-keys -t $var:$w.$p -l "$message"
+      done
+    done
+    ;; # }}}
+  new) # {{{
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      *) title="$1";;
+      esac; shift
+    done # }}}
+    if [[ -z $title ]]; then # {{{
+      title=${PWD//\/*\//}
+      [[ "$PWD" == "$HOME" ]] && title="\"~\""
+    fi # }}}
+    title="${title^^}"
+    local params='new-session'
+    local params_set=
+    local fix_for_v16=
+    case $(tmux -V) in # {{{
+    *1.6) if tmux has-session -t $title 2>/dev/null; then
+            params="attach-session -t $title"
+          else
+            params+=" -s $title"
+            fix_for_v16="&& tmux attach-session -t $title"
+          fi
+          ;;
+    *)    params+=' -A'
+          params+=" -s $title"
+          params_set+=' -q'
+          ;;
+    esac # }}}
+    local switchTo=false
+    if $inBackground; then # {{{
+      params+=' -d'
+    elif [[ -n $TMUX ]]; then
+      switchTo=true
+      params+=' -d'
+    fi # }}}
+    cmd+=" tmux $params \; set -t $title $params_set @tmux_path \"$PWD\""
+    cmd+=" $fix_for_v16"
+    _aliases_dbg "$cmd"
+    local pid=$$
+    [[ $(ps | command grep $pid) == *aliases* ]] && pid=$PPID
+    trap "kill -SIGHUP $pid" SIGHUP
+    ( unset TMUX; eval $cmd; )
+    if $switchTo; then # {{{
+      cmd="tmux switch-client -t $title"
+      _aliases_dbg "$cmd"
+      eval $cmd
+    fi # }}}
+    return 0
+    ;; # }}}
+  pane) # {{{
+    [[ -z $1 || -z $2 ]] && return 1
+    local p= i=
+    case $1 in
+    \?\?) p=$(tmux list-panes -a      -F '#S:#I.#P #T' | command grep -P "^.*:\d+\.\d+ $2$" | head -n1 | awk '{print $1}');;
+    \?)   p=$(tmux list-panes -s      -F '#S:#I.#P #T' | command grep -P "^.*:\d+\.\d+ $2$" | head -n1 | awk '{print $1}');;
+    *)    p=$(tmux list-panes -t "$1" -F '#S:#I.#P #T' | command grep -P "^.*:\d+\.\d+ $2$" | head -n1 | awk '{print $1}');;
+    esac
+    [[ -z $p ]] && return 1
+    shift 2
+    [[ -z $1 ]] && echo "$p" && return 0
+    for i; do
+      [[ $i == '-' || ${i,,} == 'nl' ]] && i=""
+      tmux send-keys -t $p "$(echo -e "${i//\\n/}")"
+    done
+    ;; # }}}
+  esac # }}}
+  if [[ ! -z $cmd ]]; then # {{{
+    echo $cmd
+    eval $cmd
+  fi # }}}
+} # }}}
+tmux_progress() { # @@ # {{{
+  $HOME/.tmux.bash progress_bar "$@"
+} # }}}
+
+export PHISTORY_IGNORED_COMMANDS+=":tm"
+export PHISTORY_IGNORED_COMMANDS+=":tmux_progress"
+

@@ -1,7 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # INIT {{{
+if [[ $1 == '@@' ]]; then
+  echo "fix_ssh_agent start_if_needed fix_tmux"
+  exit 0
+fi
+
 [[ "$BASH_SOURCE" == "$0" ]] && echo "Script has to be sourced!" && exit 1
 
 SSH_PATH="$TMP_MEM_PATH/.ssh/$(hostname)"
@@ -25,12 +30,12 @@ fix_tmux() { # {{{
 start_agent() { # {{{
   local stderr="$SSH_PATH/stderr"
   ssh-agent -a "$SSH_PATH/bind" -s 2>$stderr | sed 's/^echo/#echo/' >$SSH_ENV
-  if [[ ! -e $stderr || $(wc -c $stderr | awk '{print $1}') == '0' ]]; then
-    chmod 600 $SSH_ENV
-    source $SSH_ENV > /dev/null
-  else
+  if [[ -s $stderr ]]; then
     echo "Failed to start ssh-agent !" >/dev/stderr
     rm $SSH_ENV
+  else
+    chmod 600 $SSH_ENV
+    source $SSH_ENV > /dev/null
   fi
   rm -f $stderr
 } # }}}

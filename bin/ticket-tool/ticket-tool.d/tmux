@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+[[ $PWD != $TICKET_PATH* ]] && exit 1
+title="${issue}"
+declare -f __ticket_title >/dev/null 2>&1 && title="$(__ticket_title "$title")"
+isInit=false
+if [[ $1 == 'INIT' ]]; then
+  shift && isInit=true
+else
+  title="${title}-ext"
+fi
+tmux list-windows -F '#W' | command grep -q "$title" && exit 0
+export w=$(($(tmux display-message -p -F '#I') + 1))
+export pl_abs="$(command cd $path_issue; pwd)"
+export title
+if $isInit; then # {{{
+  tmux \
+    new-window   -a -n $title -d -c $pl_abs  \; \
+    set-option   -t $w -w @locked_title 1    \; \
+    split-window -t $w.1 -d -c $pl_abs -v -p30
+  $ALIASES set_title --from-tmux $w --lock-force "$title"
+  func="$(getFunctionBody "tmux-init" --plain)"
+  [[ ! -z $func ]] && bash -c "$func" - "$@"
+  sleep 1
+  cmd="${@:-vim-session}"
+  tmux \
+    select-pane -t.1 \; \
+    send-keys -l -t $w.1 "$cmd"
+  # }}}
+else # {{{
+  func="$(getFunctionBody "tmux-splits")"
+  if [[ ! -z $func ]]; then
+    if bash -c "$func" - "$@"; then
+      tmux select-pane -t $w.1
+      $ALIASES set_title --from-tmux $w --lock-force "$title"
+      sleep 1
+      func="$(getFunctionBody "tmux-cmds")"
+      [[ ! -z $func ]] && bash -c "$func" - "$@"
+    fi
+  fi
+fi # }}}
+exit 0
+

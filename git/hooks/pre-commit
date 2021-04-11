@@ -1,56 +1,47 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 maindir() {
-  local dir=$PWD
-  while true; do
-    [[ -e "$dir/.git" ]] && break
-    [[ "$dir" == '/' ]] && echo "" && return 1
-    dir=$(cd $dir/.. && pwd)
-  done
+  local dir=$(git rev-parse --git-dir 2>/dev/null)
+  [[ $? != 0 ]] && return 1
   echo "$dir"
   return 0
 }
 
 check() {
-  local dir=$(maindir)
-  local files=$(cd $dir; git diff --cached --name-only)
-  local err=0
-  local _err=0
-  local line=
-  local skip=
+  local dir="$(maindir)"
+  local files=$(command cd "$dir"; git diff --cached --name-only)
+  local err=0 line= skip=
   local keyword="GIT-HOOK-IGNORE:"
   [[ -z "$files" ]] && return 0
+  cd $dir
   for f in $files; do
-    [[ ! -e $f || -d $f ]] && continue
-    _err=0
-    cd $dir; git diff --cached $f | command grep -q --color "^+.*$1" && _err=1
-    if [[ $_err != 0 ]]; then
-      skip=false
-      cd $dir; command grep --color -Hn -E "$1" $f
-      while read line; do
-        [[ $line != \#* && $line != //#* ]] && break
-        [[ $line != *$keyword* ]] && continue
-        [[ $line != *$1* ]] && continue
-        skip=true
-        break
-      done < $f
-      ! $skip && err=$_err || echo "[$keyword] File was ignored"
-    fi
+    [[ ! -e "$f" || -d "$f" ]] && continue
+    git diff --cached "$f" | command grep -q "^+.*$1" || continue
+    skip=false
+    command grep --color -Hn -E "$1" "$f"
+    while read line; do
+      [[ $line != \#* && $line != //#* ]] && break
+      [[ $line != *$keyword* ]] && continue
+      [[ $line != *$1* ]] && continue
+      skip=true
+      break
+    done < $f
+    ! $skip && err=1 || echo "[$keyword] File was ignored" >/dev/stderr
   done
+  cd - >/dev/null
   return $err
 }
 
 check_special() {
   local dir=$(maindir)
-  local files=$(cd $dir; git diff --cached --name-only)
-  local err=0
-  local _err=0
-  local line=
-  local to_check=
+  local files=$(command cd $dir; git diff --cached --name-only)
+  local err=0 line= to_check=
   local keyword="GIT-HOOK-SPECIAL:"
   [[ -z "$files" ]] && return 0
+  command cd $dir
   for f in $files; do
     [[ ! -e $f || -d $f ]] && continue
+    ! command grep -q "$keyword" "$f" && continue
     to_check=
     while read line; do
       [[ $line != \#* && $line != //#* ]] && break
@@ -59,18 +50,17 @@ check_special() {
       break
     done < $f
     [[ -z $to_check ]] && continue
-    _err=0
-    cd $dir; git diff --cached $f | command grep -q --color "^+.*$to_check" && _err=1
-    if [[ $_err != 0 ]]; then
-      cd $dir; command grep --color -Hn "$to_check" $f
-      err=$_err
+    if git diff --cached "$f" | command grep -q "^+.*$to_check"; then
+      command grep --color -Hn "$to_check" "$f"
+      err=1
     fi
   done
+  cd - >/dev/null
   return $err
 }
 
 check_debugs() {
-  local i= debugs="//\\<TB].* \<printf( \<cout\> \<cerr\> Thread\.dumpStack() \<System\.\(out\|err\)\.print $GIT_PRE_COMMIT_DEBUGS"
+  local i= debugs="//\\s*\\<TB].* \<printf( \<cout\> \<cerr\> Thread\.dumpStack() \<System\.\(out\|err\)\.print $GIT_PRE_COMMIT_DEBUGS"
   for i in $debugs; do
     check "$i" || return 1
   done
@@ -91,8 +81,6 @@ displayTB() {
   echo -e "$sep"
   return 0
 }
-
-source ~/.bashrc --do-min
 
 [[ ! -z $GIT_PRE_COMMIT_IGNORE ]] && echo "$PWD" | command grep -q -e "---$GIT_PRE_COMMIT_IGNORE" && exit 0
 

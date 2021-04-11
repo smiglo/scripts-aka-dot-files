@@ -3,10 +3,12 @@
     <autosaveImages>false</autosaveImages>
     <autopasteKeyModifiers>2</autopasteKeyModifiers>
     <autopasteKeyCode>86</autopasteKeyCode>
+    <focusActiveWindowKeyModifiers>2</focusActiveWindowKeyModifiers>
+    <focusActiveWindowKeyCode>115</focusActiveWindowKeyCode>
     <autostart>true</autostart>
     <lookAndFeel>SYSTEM</lookAndFeel>
     <mainFrameWidth>1318</mainFrameWidth>
-    <mainFrameHeight>476</mainFrameHeight>
+    <mainFrameHeight>674</mainFrameHeight>
     <paused>false</paused>
     <itemPreviewHidden>false</itemPreviewHidden>
     <pasteMode>PASTE</pasteMode>
@@ -18,7 +20,7 @@
     <toolbarHidden>false</toolbarHidden>
     <trayIconHidden>false</trayIconHidden>
     <allGroupsManuallyDeleted>false</allGroupsManuallyDeleted>
-    <dividerLocation>315</dividerLocation>
+    <dividerLocation>311</dividerLocation>
     <previewAreaPosition>BOTTOM</previewAreaPosition>
     <clipboardHistoryPreviewDialogLineWrap>false</clipboardHistoryPreviewDialogLineWrap>
     <namedItemsPreviewDialogLineWrap>false</namedItemsPreviewDialogLineWrap>
@@ -28,6 +30,8 @@
     <namedItemsPreviewDialogWidth>600</namedItemsPreviewDialogWidth>
     <namedItemsPreviewDialogHeight>400</namedItemsPreviewDialogHeight>
     <maxHistorySize>10000</maxHistorySize>
+    <installationDate>1596545012583</installationDate>
+    <donateReminderOff>false</donateReminderOff>
     <autopaste>false</autopaste>
   </item>
 </list>

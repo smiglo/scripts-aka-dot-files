@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [[ ! -z $SSH_CLIENT ]]; then
   sender="sshd@localhost"

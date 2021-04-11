@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+func="$(getFunctionBody 'setup')"
+while [[ $1 == -* || $1 == @ ]]; do # {{{
+  case $1 in
+  @)    p='@';  shift  ;;&
+  --on) p="$2"; shift 2;;&
+  --on | @) # {{{
+    eval $cmd_tt wait-on "'$p'" "'$cmd \"$@\"'"
+    exit
+    ;; # }}}
+  --loop) break;;
+  -*) # {{{
+    case $1 in
+    *) # {{{
+      handled=false
+      for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+        v="$($ext $cmd $1)"
+        [[ ! -z $v ]] && { eval "$v"; handled=true; break; }
+      done # }}}
+      ! $handled && [[ ! -z "$func" ]] && eval $(bash -c "$func" - "$1") ;; # }}}
+    esac;; # }}}
+  esac
+  shift
+done # }}}
+case $1 in
+@@) # {{{
+  shift
+  case ${@: -1} in
+  --on) echo "$TICKET_CONF_WAIT_ON_PHRASES_COMPL"; exit 0;;
+  esac
+  while [[ $1 == -* || $1 == '@' ]]; do # {{{
+    case $1 in
+    -n) ;;
+    --on | @) shift;;
+    --full) break;;
+    esac
+    shift
+  done # }}}
+  if [[ -z $1 || $1 == --full ]]; then # {{{
+    ret="--on @"
+    [[ $orig_cmd == 'setup' ]] && ret+=" --loop ?"
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ret+=" $($ext $cmd "get-ext-commands" $1)"
+      ret+=" $($ext $cmd "get-ext-switches")"
+    done # }}}
+    [[ ! -z "$func"  ]] && ret+=" $(bash -c "$func" - @@ "$@")"
+    # }}}
+  else # {{{
+    ret=
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ret="$($ext $cmd @@ "$@")"
+      [[ -z $ret ]] || break
+    done # }}}
+    [[ -z $ret && ! -z "$func" ]] && ret+=" $(bash -c "$func" - @@ "$@")"
+  fi # }}}
+  echo "$ret"
+  ;; # }}}
+\?) # {{{
+  case $2 in
+  '' | @@)  # {{{
+    echo "$($setup @@ --full)";; # }}}
+  \#show-all) # {{{
+    echo "Show all commands";; # }}}
+  \#travelsal) # {{{
+    echo "Toggle travelsal mode";; # }}}
+  \#reload) # {{{
+    echo "Reload configuration";; # }}}
+  @Quit) # {{{
+    echo  "Quit";; # }}}
+  *) # {{{
+    source $BASH_PATH/colors
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ret="$($ext $cmd "$@")"
+      [[ -z $ret ]] || break
+    done # }}}
+    if [[ -z "$ret" && ! -z "$func" ]]; then
+      ret="$(bash -c "${func#source*; }" - '?' "$2")"
+      [[ -z "$ret" ]] && ret="$(echo "$func" | sed -n "/^\s*$2)/,// p" | sed -e "s/^\(\s*$2\)\().*\)/${CGold}\1${COff}\2/")"
+    fi
+    echo "$ret";; # }}}
+  esac
+  ;; # }}}
+--loop | '') # {{{
+  $ALIASES set_title --set-pane "$issue: setup"
+  source $BASH_PATH/colors
+  utils_cmd="#reload\n#show-all\n#travelsal\n"
+  reload_cmds=true use_travelsal=
+  while $reload_cmds; do # {{{
+    l= op= use_travelsal=${use_travelsal:-true} reload_cmds=false hidden="!^@"
+    if [[ ! -z "$func" ]]; then # {{{
+      l="$(bash -c "${func#source*; }" - '@@')"
+      l="$(echo "${l//  / }" | tr ' ' '\n' | sed '/^\s*$/ d' | sort)"
+      [[ ! -z "$l" ]] && l+="\n"
+    fi # }}}
+    ext_cmds=
+    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+      ext_cmds+=" $($ext $cmd "get-ext-commands")"
+    done # }}}
+    ext_cmds="$(echo "$ext_cmds" | tr ' ' '\n')\n"
+    l="$(echo -e "${utils_cmd}${ext_cmds}${l}${CGold}@Quit${COff}" | sed -e '/^\s*$/d')"
+    $use_travelsal && op="$($setup '@travelsal' '-INIT-')"
+    [[ $op == @* ]] && hidden=''
+    while true; do # {{{
+      op="$(echo -e "$l" | fzf $fzf_params --query="$([[ ! -z $hidden ]] && echo "$hidden ")$([[ ! -z $op ]] && echo "$op ")" --preview="$0 setup ? {1}")"
+      [[ $? != 0 || $op == '@Quit' ]] && break
+      [[ -z $op ]] && continue
+      case $op in
+      '#show-all') hidden=''; use_travelsal=false; op=''; continue;;
+      '#travelsal') # {{{
+        if $use_travelsal; then
+          use_travelsal=false
+          op=''
+        else
+          use_travelsal=false
+          op="$($setup '@travelsal' '-INIT-')"
+        fi
+        continue;; # }}}
+      '#reload')   reload_cmds=true; func="$(getFunctionBody 'setup')"; break;;
+      *) # {{{
+        params="$($setup @@ "$op")" arg=
+        [[ "$params" != "$($setup @@ @@)" ]] && arg="$(echo "$params" | sed 's/ /\n/g' | fzf $fzf_params)"
+        $setup "$op" $arg;; # }}}
+      esac
+      err="$?"
+      [[ $err != 0 ]] && break 2
+      $use_travelsal && { op="$($setup '@travelsal' "$op")"; } || { op=''; }
+      [[ $op == @* ]] && hidden=''
+    done # }}}
+  done;; # }}} # }}}
+*) # {{{
+  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
+    $ext $cmd "$@" && exit 0
+  done # }}}
+  [[ ! -z "$func" ]] && bash -c "$func" - "$@" ;; # }}}
+esac
+

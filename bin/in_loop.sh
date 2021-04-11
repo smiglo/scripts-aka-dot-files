@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 DELAY=10
 FUNC=
@@ -15,7 +15,7 @@ while [[ ! -z "$1" ]]; do
 done
 
 while true; do
-  echo -n "$($BASH_PATH/aliases date): "
+  echo -n "$($ALIASES date): "
   eval "$FUNC"
   [[ $? != 0 ]] && break;
   sleep $DELAY

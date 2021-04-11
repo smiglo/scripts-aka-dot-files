@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 [[ -z $TMP_MEM_PATH ]] && source $HOME/.bashrc --do-min
 
@@ -18,19 +18,26 @@ if [[ "$1" == 'login' ]]; then
   $debug && log_file=$TMP_MEM_PATH/msg_receiver.log
 
   log() {
-    $debug && echo "$($BASH_PATH/aliases date): $1" >>$log_file
+    $debug && echo "$($ALIASES date): $1" >>$log_file
   }
 
   _msg_receiver_() {
     rm -f $msg_receiver_file
     touch $msg_receiver_file
     log "Waiting"
+    local chromaCmd="chroma-effects-wrapper.sh"
     tail -F $msg_receiver_file 2>/dev/null | while read line; do
       log "New Msg [$line]"
       [[ -z "$line" ]] && log "Skipped-1" && continue
       local title= msg= rest= icon= timeout=
       IFS='|' read title msg rest <<<$(echo "$line")
       [[ -z "$title" ]] && log "Skipped-2" && continue
+      if [[ $title == 'BLINK' ]]; then
+        log "Blink"
+        which $chromaCmd >/dev/null 2>&1 && $chromaCmd --test && [[ ! -z $msg ]] || continue
+        $chromaCmd $msg
+        continue
+      fi
       title="$(echo "$title" | xargs)"
       msg="$(echo "$msg" | xargs)"
       rest="$(echo "$rest" | xargs)"

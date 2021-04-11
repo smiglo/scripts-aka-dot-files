@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 getKey() { # {{{
@@ -9,12 +9,37 @@ getKey() { # {{{
 readKey() { # {{{
   local key="$(getKey)"
   case $key in
+  01) echo "c-a";;
+  02) echo "c-b";;
+  # 03) echo "c-c";; // ctrl-c: abort
   04) echo "c-d";;
+  05) echo "c-e";;
+  06) echo "c-f";;
+  07) echo "c-g";;
+  08) echo "c-h";;
+  09) echo "c-i";;
+  # 0a) echo "c-j";; // enter
+  0b) echo "c-k";;
+  0c) echo "c-l";;
+  # 0d) echo "c-m";; // enter
+  0e) echo "c-n";;
+  0f) echo "c-o";;
+  10) echo "c-p";;
+  11) echo "c-q";;
+  12) echo "c-r";;
+  13) echo "c-s";;
+  14) echo "c-t";;
+  15) echo "c-u";;
+  16) echo "c-v";;
+  17) echo "c-w";;
+  18) echo "c-x";;
+  19) echo "c-y";;
+  # 1a) echo "c-z";; // ctrl-z: background
   07) echo "tab";;
   20) echo "space";;
   7f) echo "back";;
   '') echo "enter";;
-  1b)
+  1b) # {{{
     key+="$(getKey 2 -t .1)"
     while true; do
       case $key in
@@ -51,7 +76,7 @@ readKey() { # {{{
       *) echo "?$key";;
       esac
       break
-    done ;;
+    done ;; # }}}
   *)  [[ $(echo "$(( 0x$key ))") -ge 32 ]] && echo -e "\x$key" || echo "?$key";;
   esac
 } # }}}

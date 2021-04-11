@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 __ticket_title() {
   local title="$issue" f=

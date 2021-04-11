@@ -1,6 +1,19 @@
-#!/bin/bash -e
+#!/usr/bin/env bash -e
 # vim: fdl=0
 
+if [[ $1 == @@ ]]; then # {{{
+  case $3 in
+  -i) # {{{
+    {
+      sed -n '/if\s\+install/s/.*install\s\+'"'"'\([^'"'"']*\)'"'"'.*/\1/p' $0
+      for i in $bin_path/bash/profiles/*; do
+        [[ -e $i/mk_install_scripts.sh ]] && sed -n '/if\s\+install/s/.*install\s\+'"'"'\([^'"'"']*\)'"'"'.*/\1/p' $i/mk_install_scripts.sh
+      done
+    } | sort;; # }}}
+  *) echo -i --all-{yes,no} --selent --no-exit ?;;
+  esac
+  exit 0
+fi # }}}
 # Functions {{{
 dbg() { # {{{
   local silent=$IS_SILENT
@@ -109,6 +122,7 @@ appender() { # {{{
   local srcs=$@ src=
   [[ -e $dst ]] || touch $dst
   for src in $srcs; do
+    src="$(echo "$src" | sed -e 's/[{}]//g')"
     [[ -e $src ]] || continue
     ! command grep -q "$(head -n1 $src)" $dst || continue
     cat $src >> $dst
@@ -127,6 +141,9 @@ fi # }}}
 script_path=$MY_PROJ_PATH/scripts
 bin_path=$HOME/.bin
 TMP_PATH=${TMP_PATH:-$HOME/.tmp}
+RUNTIME_PATH=${RUNTIME_PATH:-$HOME/.runtime}
+APPS_CFG_PATH=${APPS_CFG_PATH:-$RUNTIME_PATH/apps}
+[[ ! -e $APPS_CFG_PATH ]] && command mkdir -p $APPS_CFG_PATH
 
 SETUP_PROFILES=$MK_INSTALL_SETUP_PROFILES
 INSTALL_YES=${MK_INSTALL_INSTALL_YES:-false}
@@ -149,14 +166,29 @@ while [[ ! -z $1 ]]; do
     --all-no)  INSTALL_NO=true;;
     --silent)  IS_SILENT=true;;
     --no-exec) DO_EXEC=false;;
-    -i)        DO_EXEC=false; shift; INSTALL_FROM_ARGS+=" ${1//,/ }"; INSTALL_YES=true;;
+    -i)        DO_EXEC=false; shift; INSTALL_YES=true
+               INSTALL_FROM_ARGS+=" ${1//,/ }"
+               ;;
+    --tools | \?\?) # {{{
+      sed -n -e "/^\s*if install.*/s/[^\"']*[\"']\([^\"']*\)[\"'].*/\1/p" $0 | sort -u
+      for i in $bin_path/bash/profiles/*; do # {{{
+        [[ -e $i/mk_install_scripts.sh ]] && sed -n -e "/^\s*if install.*/s/[^\"']*[\"']\([^\"']*\)[\"'].*/${i##*/}:\1/p" $i/mk_install_scripts.sh
+      done | sort -u # }}}
+      exit 0;; # }}}
+    \?)
+      echo "$0" [--all-{yes,no}] "--silent --no-exec [-i TOOL,...] [--tools|??] [?] PROFILE ..."
+      echo
+      echo "Basic:     $INSTALL_FEATURES_BASIC"
+      echo "Ext:       $INSTALL_FEATURES_EXT $( ! $IS_MAC && echo "$INSTALL_FEATURES_EXT_UBU" || echo "$INSTALL_FEATURES_EXT_MAC")"
+      echo "Bin-Basic: $INSTALL_BIN_MISC_BASIC"
+      exit 0;;
     *)         SETUP_PROFILES+=" $1";;
   esac
   shift
 done
 # }}}
 # Select profiles to install {{{
-PROFILES_FILE=$TMP_PATH/.setup_profiles
+PROFILES_FILE=$APPS_CFG_PATH/setup_profiles
 [[ -z $SETUP_PROFILES && -e $PROFILES_FILE ]] && SETUP_PROFILES="$(cat $PROFILES_FILE)"
 [[ -z $SETUP_PROFILES ]] && echo "WARNING: Profiles not specifed" >/dev/stderr
 # }}}
@@ -167,13 +199,13 @@ PROFILES_FILE=$TMP_PATH/.setup_profiles
 dbg -n "Loading cfg file... "
 set +e
 [[ -e $script_path/bash/runtime ]] && source $script_path/bash/runtime >/dev/null 2>&1
-if [[ ! -e $PROFILES_PATH/$i ]]; then
+if [[ -e $PROFILES_PATH/$i ]]; then
   for p in $SETUP_PROFILES; do
     [[ -e $script_path/bash/profiles/$p/runtime ]] && source $script_path/bash/profiles/$p/runtime >/dev/null 2>&1
   done
 fi
 [[ -e $script_path/bash/cfg ]] && source $script_path/bash/cfg >/dev/null 2>&1
-if [[ ! -e $PROFILES_PATH/$i ]]; then
+if [[ -e $PROFILES_PATH/$i ]]; then
   for p in $SETUP_PROFILES; do
     [[ -e $script_path/bash/profiles/$p/cfg ]] && source $script_path/bash/profiles/$p/cfg >/dev/null 2>&1
   done
@@ -221,10 +253,11 @@ if [[ -z $INSTALL_FROM_ARGS ]]; then # {{{
     done
   fi
 else
+  INSTALL_FROM_ARGS="$(echo "$INSTALL_FROM_ARGS" | sed -e 's/\s*\w*:\(\w*\)/ \1/g')"
   TO_INSTALL="$INSTALL_FROM_ARGS"
 fi # }}}
-TO_INSTALL="@ $TO_INSTALL @"
 dbg "To install: [$TO_INSTALL]"
+TO_INSTALL="@ $TO_INSTALL @"
 # }}}
 # }}}
 # Installation {{{
@@ -241,6 +274,8 @@ if install 'bashrc'; then # {{{
   ln -sf $script_path/bash/bashrc ~/.bashrc
   ln -sf $script_path/bash/bash_profile ~/.bash_profile
   ln -sf $script_path/bash/bash_login ~/.bash_login
+  ln -sf $script_path/bash/profile ~/.profile
+  ln -sf $script_path/bash/inputrc ~/.inputrc
   dbg "[DONE]"
 fi # }}}
 if install 'bin-path'; then # {{{
@@ -249,6 +284,7 @@ if install 'bin-path'; then # {{{
   for i in $script_path/bin/*; do
     [[ -f $i ]] && ln -s $i $bin_path/
   done
+  [[ -e $script_path/bin/ticket-tool ]] && ln -s $script_path/bin/ticket-tool $bin_path/
   dbg "[DONE]"
 fi # }}}
 if install 'bin-misc'; then # {{{
@@ -261,8 +297,10 @@ if install 'bin-misc'; then # {{{
     paths+=" $script_path/bash/profiles/$i/bin/misc"
   done
   for i in $TO_INSTALL_BIN_MISC; do
+    found=false
     for p in $paths; do
       if [[ -e "$p/$i" ]]; then
+        found=true
         if [[ -d "$p/$i" ]]; then
           for j in $(cd $p/$i; echo *); do
             ln -sf $p/$i/$j $bin_path/misc/
@@ -272,7 +310,7 @@ if install 'bin-misc'; then # {{{
         fi
       fi
     done
-    dbg "  Not found [$i]"
+    $found || dbg "  Not found [$i]"
   done
   dbg "[DONE]"
 fi # }}}
@@ -293,13 +331,13 @@ if install 'bash-path'; then # {{{
   done
   dbg "[DONE]"
 fi # }}}
-if install 'fonts'; then # {{{
+if install 'fonts' && [[ -e $SHARABLE_PATH ]]; then # {{{
   dbg -n "Configuring (fonts)... "
   fonts="FiraMono Inconsolata" dst="$HOME/.local/share/fonts"
   $IS_MAC && dst="$HOME/Library/Fonts"
   for f in $fonts; do
     [[ "$(command cd $dst; echo $f*)" == "$f"'*' ]] || continue
-    unzip -q -d "$dst" "$DROPBOX_PATH/sharable/fonts/${f}.zip" \*.ttf
+    unzip -q -d "$dst" "$SHARABLE_PATH/sharable/fonts/${f}.zip" \*.ttf
   done
   dbg "[DONE]"
 fi # }}}
@@ -324,7 +362,7 @@ if install 'colors'; then # {{{
   dbg "  -- From: https://github.com/morhetz/gruvbox"
   if ! ${IS_MAC:-false}; then
     if [[ -z $TERMINAL_PROFILE ]]; then
-      TERMINAL_PROFILE="$(dconf list "/org/gnome/terminal/legacy/profiles:/" | head -n1)"
+      TERMINAL_PROFILE="$(dconf list "/org/gnome/terminal/legacy/profiles:/" | command grep "^:" |  head -n1)"
       TERMINAL_PROFILE="${TERMINAL_PROFILE#:}"
       TERMINAL_PROFILE="${TERMINAL_PROFILE%/}"
     fi
@@ -367,7 +405,7 @@ if install 'vim'; then # {{{
   command mkdir -p $vim_path
   ln -s $vim_repo_path/mvim $vim_path/
   pushd $vim_path >/dev/null
-  for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
+  for i in {,_}{,g,m,r}{vi,view,vim,vimdiff} vimdiffgit; do
     [[ "$i" == 'mvim' ]] && continue
     ln -s mvim $i
   done
@@ -497,12 +535,19 @@ fi # }}}
 if install 'marblemouse' && ! $INSTALL_NO; then # {{{
   dbg -n "Configuring (X11 Marble Mouse)... "
   if [[ ! -e /usr/share/X11/xorg.conf.d/50-marblemouse.conf ]]; then
+    f=
+    v="$(lsb_release -a 2>/dev/null | awk '/^Release:/ {print $2}')"
+    if [[ -e "$script_path/bash/inits/x11/50-marblemouse-$v.conf" ]]; then
+      f="$script_path/bash/inits/x11/50-marblemouse-$v.conf"
+    else
+      f="$script_path/bash/inits/x11/50-marblemouse.conf"
+    fi
     while true; do
       dbg
       read -p "Install support for Marble Mouse [y/n] ? " key
       case $key in
       y|Y)
-        sudo ln -sf $script_path/bash/inits/x11/50-marblemouse.conf /usr/share/X11/xorg.conf.d/
+        sudo ln -sf $f /usr/share/X11/xorg.conf.d/
         ;&
       n|N) break;;
       esac
@@ -615,7 +660,7 @@ if install 'radare2'; then # {{{
     dbg "Configuring [radare2]... "
     [[ ! -e $MY_PROJ_PATH/oth ]] && command mkdir -p $MY_PROJ_PATH/oth
     pushd $MY_PROJ_PATH/oth >/dev/null 2>&1
-    git clone https://github.com/radare/radare2
+    [[ ! -e radare2 ]] && git clone https://github.com/radare/radare2
     cd radare2
     sudo sys/install.sh
     ln -sf $script_path/bash/inits/radare2rc $HOME/.radare2rc
@@ -655,14 +700,6 @@ if install 'gitsh'; then # {{{
   # ./configure
   # make
   # sudo make install
-fi # }}}
-if install 'ticket-tool'; then # {{{
-  dbg -n "Configuring (ticket-tool)... "
-  command mkdir -p $bin_path/ticket-tool
-  for i in $script_path/bin/ticket-tool/*; do
-    [[ -f $i && ! -e $bin_path/ticket-tool/${i##*/} ]] && ln -s $i $bin_path/ticket-tool/
-  done
-  dbg "[DONE]"
 fi # }}}
 # Install tools {{{
 if install 'install-tools'; then

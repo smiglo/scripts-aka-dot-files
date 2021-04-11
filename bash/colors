@@ -1,86 +1,134 @@
 # vim: filetype=sh fdl=0
 
 # Is installed # {{{
+if [[ $1 == '--list' ]]; then
+  cat $0 | grep "^export" | awk -F'[= ]' '{print $2}' | grep '^C[A-Z]' | sort -u
+  exit 0
+fi
 ${RCSTUFF_COLORS_INSTALLED:-false} && [[ $1 != '--force' ]] && [[ ! -z ${COff} ]] && return 0
 export RCSTUFF_COLORS_INSTALLED=true
 [[ $1 == '--force' ]] && shift
 # }}}
 # Reset {{{
-COff='[0m'
+export COff='[0m'
 # }}}
 # Regular Colors {{{
-CBlack='[0;30m'
-CRed='[0;31m'
-CGreen='[0;32m'
-CYellow='[0;33m'
-CBlue='[0;34m'
-CPurple='[0;35m'
-CCyan='[0;36m'
-CWhite='[0;37m'
+export CBlack='[0;30m'
+export CRed='[0;31m'
+export CGreen='[0;32m'
+export CYellow='[0;33m'
+export CBlue='[0;34m'
+export CPurple='[0;35m'
+export CCyan='[0;36m'
+export CWhite='[0;37m'
 # }}}
+if [[ $TERM_ORIG == 'linux' ]]; then # {{{
+  export CSearch="$CCyan"
+  export CHLSearch="$CBlue"
+  export CGoldOrig="$CYellow"
+  export CGold="$CYellow"
+
+  export CBBlack="$CBlack"
+  export CBRed="$CRed"
+  export CBGreen="$CGreen"
+  export CBYellow="$CYellow"
+  export CBBlue="$CBlue"
+  export CBPurple="$CPurple"
+  export CBCyan="$CCyan"
+  export CBWhite="$CWhite"
+
+  export CUBlack="$CBlack"
+  export CURed="$CRed"
+  export CUGreen="$CGreen"
+  export CUYellow="$CYellow"
+  export CUBlue="$CBlue"
+  export CUPurple="$CPurple"
+  export CUCyan="$CCyan"
+  export CUWhite="$CWhite"
+
+  export CIBlack="$CBlack"
+  export CIRed="$CRed"
+  export CIGreen="$CGreen"
+  export CIYellow="$CYellow"
+  export CIBlue="$CBlue"
+  export CIPurple="$CPurple"
+  export CICyan="$CCyan"
+  export CIWhite="$CWhite"
+
+  export CBIBlack="$CBlack"
+  export CBIRed="$CRed"
+  export CBIGreen="$CGreen"
+  export CBIYellow="$CYellow"
+  export CBIBlue="$CBlue"
+  export CBIPurple="$CPurple"
+  export CBICyan="$CCyan"
+  export CBIWhite="$CWhite"
+  return
+fi # }}}
 # 256 Colors {{{
-CSearch='[38;5;214m'
-CHLSearch='[38;5;208m'
-CGoldOrig='[38;5;220m'
-CGold="$CSearch"
+export CSearch='[38;5;214m'
+export CHLSearch='[38;5;208m'
+export CGoldOrig='[38;5;220m'
+export CGold="$CSearch"
+export CGray='[38;5;244m'
 # }}}
 # Bold {{{
-CBBlack='[1;30m'
-CBRed='[1;31m'
-CBGreen='[1;32m'
-CBYellow='[1;33m'
-CBBlue='[1;34m'
-CBPurple='[1;35m'
-CBCyan='[1;36m'
-CBWhite='[1;37m'
+export CBBlack='[1;30m'
+export CBRed='[1;31m'
+export CBGreen='[1;32m'
+export CBYellow='[1;33m'
+export CBBlue='[1;34m'
+export CBPurple='[1;35m'
+export CBCyan='[1;36m'
+export CBWhite='[1;37m'
 # }}}
 # Underline {{{
-CUBlack='[4;30m'
-CURed='[4;31m'
-CUGreen='[4;32m'
-CUYellow='[4;33m'
-CUBlue='[4;34m'
-CUPurple='[4;35m'
-CUCyan='[4;36m'
-CUWhite='[4;37m'
-# }}}
-# Background {{{
-COnBlack='[40m'
-COnRed='[41m'
-COnGreen='[42m'
-COnYellow='[43m'
-COnBlue='[44m'
-COnPurple='[45m'
-COnCyan='[46m'
-COnWhite='[47m'
+export CUBlack='[4;30m'
+export CURed='[4;31m'
+export CUGreen='[4;32m'
+export CUYellow='[4;33m'
+export CUBlue='[4;34m'
+export CUPurple='[4;35m'
+export CUCyan='[4;36m'
+export CUWhite='[4;37m'
 # }}}
 # High Intensity {{{
-CIBlack='[0;90m'
-CIRed='[0;91m'
-CIGreen='[0;92m'
-CIYellow='[0;93m'
-CIBlue='[0;94m'
-CIPurple='[0;95m'
-CICyan='[0;96m'
-CIWhite='[0;97m'
+export CIBlack='[0;90m'
+export CIRed='[0;91m'
+export CIGreen='[0;92m'
+export CIYellow='[0;93m'
+export CIBlue='[0;94m'
+export CIPurple='[0;95m'
+export CICyan='[0;96m'
+export CIWhite='[0;97m'
 # }}}
 # Bold High Intensity {{{
-CBIBlack='[1;90m'
-CBIRed='[1;91m'
-CBIGreen='[1;92m'
-CBIYellow='[1;93m'
-CBIBlue='[1;94m'
-CBIPurple='[1;95m'
-CBICyan='[1;96m'
-CBIWhite='[1;97m'
+export CBIBlack='[1;90m'
+export CBIRed='[1;91m'
+export CBIGreen='[1;92m'
+export CBIYellow='[1;93m'
+export CBIBlue='[1;94m'
+export CBIPurple='[1;95m'
+export CBICyan='[1;96m'
+export CBIWhite='[1;97m'
+# }}}
+# Background {{{
+export COnBlack='[40m'
+export COnRed='[41m'
+export COnGreen='[42m'
+export COnYellow='[43m'
+export COnBlue='[44m'
+export COnPurple='[45m'
+export COnCyan='[46m'
+export COnWhite='[47m'
 # }}}
 # High Intensity backgrounds {{{
-COnIBlack='[0;100m'
-COnIRed='[0;101m'
-COnIGreen='[0;102m'
-COnIYellow='[0;103m'
-COnIBlue='[0;104m'
-COnIPurple='[10;95m'
-COnICyan='[0;106m'
-COnIWhite='[0;107m'
+export COnIBlack='[0;100m'
+export COnIRed='[0;101m'
+export COnIGreen='[0;102m'
+export COnIYellow='[0;103m'
+export COnIBlue='[0;104m'
+export COnIPurple='[10;95m'
+export COnICyan='[0;106m'
+export COnIWhite='[0;107m'
 # }}}

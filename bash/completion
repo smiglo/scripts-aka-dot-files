@@ -1,10 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Is installed # {{{
 ${RCSTUFF_COMPLETION_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 export RCSTUFF_COMPLETION_INSTALLED=true
 [[ $1 == '--force' ]] && shift
+if [[ -e $TMP_MEM_PATH/.bashrc/completion-list ]]; then
+  source $TMP_MEM_PATH/.bashrc/completion-list
+  [[ $1 != '--do-full' ]] && return 0
+fi
+[[ $1 == '--do-'* ]] && shift
 # }}}
 _completion_generic() { # {{{
   local cur= prev= opts= cmd= _alias= param= i=
@@ -44,7 +49,7 @@ _completion_generic() { # {{{
              done < <(compgen ${1:2} -- "$cur");; # }}}
          esac;; # }}}
     ---) opts="---"; break;;
-    *) opts+=" $1";;
+    *) opts+=" ${1//@SP@/\\ }";;
     esac
     shift
   done # }}}
@@ -60,6 +65,7 @@ _completion_generic() { # {{{
   fi
   __ltrim_colon_completions "$cur"
 }
+export -f _completion_generic
 # }}}
 _completion_git_cmds() { # {{{
   local cur opts
@@ -84,6 +90,7 @@ _completion_git_cmds() { # {{{
   fi
   COMPREPLY=( $(compgen -W "$opts" -- $cur) )
 }
+export -f _completion_git_cmds
 # }}}
 _completion_vim() { # {{{
   COMPREPLY=()
@@ -91,6 +98,7 @@ _completion_vim() { # {{{
   [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
   _completion_generic
 }
+export -f _completion_vim
 # }}}
 _do_vim_completion() { # {{{
   local i
@@ -100,6 +108,10 @@ _do_vim_completion() { # {{{
  complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim vim-session
 }
 # }}}
+recomplete() { # {{{
+  complete | command grep -q "$1" && complete -r "$1" 2>/dev/null
+  complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic "$1"
+}  # }}}
 # Brew & Mac-Ports # {{{
 if $IS_MAC; then
   if type brew 1>/dev/null 2>&1; then
@@ -117,13 +129,18 @@ _git_ch_pick()  { _completion_generic; }
 _git_userset()  { _completion_generic; }
 # }}}
 # Set generic completion {{{
-COMPLETION_GENERIC_UTILS+=" mk_tar.sh asciidoc2html.sh gitst do_sync.sh tmux-startup.sh"
+COMPLETION_GENERIC_UTILS+=" fix_ssh_agent.sh mk_tar.sh asciidoc2html.sh gitst do_sync.sh tmux-startup.sh"
 for i in $COMPLETION_GENERIC_UTILS $TO_INSTALL_BIN_MISC; do
   type $i >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i # || echo "Util [$i] not found" >/dev/stderr
 done
 unset COMPLETION_GENERIC_UTILS
-for i in $COMPLETION_GENERIC_FUNCTIONS; do
-  type $i >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i || echo "Function [$i] not found" >/dev/stderr
+for i in $(echo "$COMPLETION_GENERIC_FUNCTIONS" | tr ' ' '\n' | sort -u | tr '\n' ' '); do
+  if type $i >/dev/null 2>&1; then
+    complete -r $i >/dev/null 2>&1
+    complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i
+  else
+    echo "Function [$i] not found" >/dev/stderr
+  fi
 done
 unset COMPLETION_GENERIC_FUNCTIONS
 # }}}
@@ -136,9 +153,10 @@ if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command g
 fi # }}}
 # Vim # {{{
 _do_vim_completion
+unset _do_vim_completion
 # }}}
 # Oth # {{{
-complete | command grep " cdd$" || complete -o bashdefault -o default -o nospace -W "$($BASH_PATH/aliases cd_wrapper -- @@ - -i)" cdd
+complete | command grep -q " cdd$" || complete -o bashdefault -o default -o nospace -W "$($ALIASES cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
 # }}}
 # tldr # {{{
 complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
@@ -151,7 +169,7 @@ if [[ -e $BASH_PATH/completion.d ]]; then
 fi
 if [[ -e $RUNTIME_PATH/completion.d ]]; then
   for i in $(ls $RUNTIME_PATH/completion.d); do
-    [[ -f $RUNTIME_PATH/completion.d/$i && ( -x $RUNTIME_PATH/completion.d/$i || $i == *.sh ) ]] && source $RUNTIME_PATH/completion.d/$i
+    [[ -f $RUNTIME_PATH/completion.d/$i && ( -x $RUNTIME_PATH/completion.d/$i || $i == *.sh || $i == *.bash ) ]] && source $RUNTIME_PATH/completion.d/$i
   done
 fi
 # }}}

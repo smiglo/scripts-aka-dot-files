@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+extract() { # @@ # {{{
+  local use_dir=true
+  if [[ $1 == '@@' ]]; then
+    local ret=""
+    $use_dir && ret="-nd --no-dir" || ret="-d --dir"
+    local archives="$(ls | command grep ".tar\|.tar.bz2\|.tbz2\|.tar.gz\|.tgz\|.bz2\|.gz\|.zip\|.rar\|.Z\|.7z")"
+    if $use_dir; then
+      local i=
+      for i in $archives; do
+        local dir=${i/*\/}
+        dir=${dir%.*}
+        [[ ! -d $dir ]] && ret+=" $i"
+      done
+    else
+      ret+=" $archives"
+    fi
+    echo $ret
+    return 0
+  fi
+  local file=
+  while [[ ! -z $1 ]]; do
+    case $1 in
+      -d|--dir)     use_dir=true;;
+      -nd|--no-dir) use_dir=false;;
+      *)            file=$1;;
+    esac
+    shift
+  done
+  [[ ! -f $file ]] && _aliases_dbg "[$1] is not a valid file!" && return 1
+  if $use_dir; then
+    local dir=${file/*\/}
+    dir=${dir%.*}
+    command mkdir $dir
+    command cd $dir
+    [[ $file != /* ]] && file="../$file"
+  fi
+  local usePV=true
+  ! type pv &>/dev/null && usePV=false
+  local cmd=
+  case $file in
+  *.tar)            cmd="tar xf";;
+  *.tar.bz2|*.tbz2) cmd="tar xjf";;
+  *.tar.gz|*.tgz)   cmd="tar xzf";;
+  *.bz2)            cmd="bunzip2";;
+  *.gz)             cmd="gunzip";;
+  *.zip)            cmd="unzip"; usePV=false;;
+  *.rar)            cmd="unrar x";;
+  *.Z)              cmd="uncompress";;
+  *.7z)             cmd="7z x";;
+  *)                _aliases_dbg "[$file] cannot be extracted via >extract<"; return 1;;
+  esac
+  if $usePV; then
+    cmd="pv -p $file | $cmd -"
+    echo $cmd
+    eval $cmd
+  else
+    cmd="$cmd $file"
+    echo $cmd
+    $ALIASES progress --mark --dots --msg "Extracting '$file'"
+    eval $cmd 1>/dev/null
+    $ALIASES progress --unmark
+    echo
+  fi
+} # }}}
+
