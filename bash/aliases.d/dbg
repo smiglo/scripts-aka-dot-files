@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+# Levels # {{{
+export DBG_L_FAT=0
+export DBG_L_ERR=1
+export DBG_L_WRN=2
+export DBG_L_INF=3
+export DBG_L_DBG=4
+export DBG_L_TRC=5 # }}}
+dbg() { # @@ # {{{
+  local flagsIn=$- flagsOut=
+  set +xv
+  [[ $flagsIn == *v* ]] && flagsOut+="v"
+  [[ $flagsIn == *x* ]] && flagsOut+="x"
+  local out=${DBG_OUT:-/dev/stderr}
+  local print=${DBGS_PRINT:-true}
+  case $1 in # {{{
+  true  | 0)  print=true;  shift;;
+  false | 1)  print=false; shift;;
+  esac # }}}
+  $print && echo "$@" >>$out
+  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+} # }}}
+dbgF() { # {{{
+  local flagsIn=$- flagsOut=
+  set +xv
+  [[ $flagsIn == *v* ]] && flagsOut+="v"
+  [[ $flagsIn == *x* ]] && flagsOut+="x"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -v) # {{{
+      echo "F E W I D T 6 7 8";; # }}}
+    *) # {{{
+      [[ -z $3 ]] && echo "-id id="
+      case ${4:-$3} in
+      --set | --init)
+        echo "F E W I D T --ts-add --ts-remove --ts-reset --ts-reset= --out --prefix --no-prefix --print-id -v -v="
+        ;;
+      *) [[ -z $4 ]] && echo "--unset --set --init --deinit -? - -- $(seq $DBG_L_FAT $DBG_L_TRC)" || echo "---" ;;
+      esac;; # }}}
+    esac
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return 0
+  fi # }}}
+  local id=${DBG_ID:-$$} l= p=
+  [[ $2 == '-id' || $2 == '-id=*' ]] && l=$1 && shift
+  case $1 in # {{{
+  -id)   id=$2; shift 2;;
+  -id=*) id=${1#-id=}; shift;;
+  esac # }}}
+  [[ ! -z $l ]] && set -- $l "$@" || l=$DBG_L_INF
+  local p="__dbg_verbose_$id"
+  ! declare -F time2s >/dev/null 2>&1 && echo "!!! sourcing time2s" >/dev/stderr && source $SCRIPT_PATH/bash/aliases.d/time2s
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --set | --init) # {{{
+      [[ $1 == '--init' ]] && vClean $p
+      local moduleDbg="$(__echor_util --convert-to-var)_DBG" l=$DBG_L_INF
+      local -n refDbg=$moduleDbg
+      if [[ ! -z $refDbg ]]; then # {{{
+        case $refDbg in
+        F | E | W | I | D | T)  l=$refDbg;;
+        [0-9] | :* | true:*)    l=${refDbg#*:};;
+        on  | + | true)         l=$DBG_L_INF;;
+        off | - | false | * )   l=$DBG_L_ERR;;
+        esac
+      fi # }}}
+      ! prefixVars_util_isVar $p && vSet $p - $l
+      shift
+      while [[ ! -z $1 ]]; do # {{{
+        case $1 in
+        F | E | W | I | D | T) # {{{
+                      vSet $p - $1;; # }}}
+        -v)           vSet $p - $2; shift;;
+        -v=*)         vSet $p - ${1#-v=};;
+        --ts-add)     vSet $p ts_add true;;
+        --ts-remove)  vSet $p ts_add false;;
+        --ts-reset)   vSet $p ts_zero "";;
+        --ts-reset=*) vSet $p ts_zero "${1#--ts-reset=}";;
+        --out)        vSet $p out "$2"; shift;;
+        --no-prefix)  vSet $p prefix false;;
+        --prefix)     vSet $p prefix true;;
+        --print-id)   vSet $p id true;;
+        esac; shift
+      done # }}}
+      local v=$(vGet $p)
+      case $v in # {{{
+      F) vSet $p - $DBG_L_FAT;;
+      E) vSet $p - $DBG_L_ERR;;
+      W) vSet $p - $DBG_L_WRN;;
+      I) vSet $p - $DBG_L_INF;;
+      D) vSet $p - $DBG_L_DBG;;
+      T) vSet $p - $DBG_L_TRC;;
+      esac # }}}
+      if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      return 0;; # }}}
+    --unset | --deinit) # {{{
+      vClean $p
+      if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      return 0;; # }}}
+    -\?) # {{{
+      vGet --all $p
+      return 0;; # }}}
+    --) shift; break;;
+    -)  l="$((-$l))"; shift; [[ $1 == '--' ]] && shift; break;;
+    *) # {{{
+      if [[ $1 =~ ^-?[FEWIDT]$ ]]; then
+        local s=
+        [[ $1 == -* ]] && s=-
+        case ${1#-} in # {{{
+        F) l=$s$DBG_L_FAT;;
+        E) l=$s$DBG_L_ERR;;
+        W) l=$s$DBG_L_WRN;;
+        I) l=$s$DBG_L_INF;;
+        D) l=$s$DBG_L_DBG;;
+        T) l=$s$DBG_L_TRC;;
+        esac # }}}
+      elif [[ $1 =~ ^-?[0-9]+$ ]]; then
+        l=$1
+        [[ $2 == "-" ]] && l="$((-$l))" && shift
+      else
+        break
+      fi;; # }}}
+    esac; shift
+  done # }}}
+  if [[ $(vGet $p - $DBG_L_INF) -lt $l ]]; then
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return 0
+  fi
+  l=${l#-}
+  # ts # {{{
+  local ts=$(vGet $p ts_add false) ts_diff=
+  if $ts; then
+    local ts0=$(vGet $p ts_zero ${EPOCHSECONDS:-$(epochSeconds)})
+    vIsSet $p ts_zero || vSet $p ts_zero $ts0
+    ts_diff="$(time2s --diff-HMS @$ts0): "
+  fi # }}}
+  # out # {{{
+  local out=$(vGet $p out ${DBG_OUT:-/dev/stderr}) # }}}
+  # prefix # {{{
+  local prefix=$(vGet $p prefix)
+  if [[ -z $prefix ]]; then
+    [[ -f $out ]] && prefix=true || prefix=false
+  fi
+  if $prefix; then
+    case $l in # {{{
+    $DBG_L_FAT) prefix="F ";;
+    $DBG_L_ERR) prefix="E ";;
+    $DBG_L_WRN) prefix="W ";;
+    $DBG_L_INF) prefix="I ";;
+    $DBG_L_DBG) prefix="D ";;
+    $DBG_L_TRC) prefix="T ";;
+    *)          prefix="L$l ";;
+    esac # }}}
+  else
+    prefix=""
+  fi # }}}
+  # id # {{{
+  $(vGet $p id false) && id="$(printf "%10s " "$id")" || id="" # }}}
+  echo "$prefix$id$ts_diff$@" >>$out
+  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+} # }}}
+# Level wrappers # {{{
+FAT() { dbgF $DBG_L_FAT "$@"; }
+ERR() { dbgF $DBG_L_ERR "$@"; }
+WRN() { dbgF $DBG_L_WRN "$@"; }
+INF() { dbgF $DBG_L_INF "$@"; }
+DBG() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    dbgF "$@"
+    return 0
+  fi # }}}
+  local l=$DBG_L_DBG
+  if   [[ $1 == '-' ]]; then l=-$l && shift
+  elif [[ $1 =~ ^-?[0-9]+$ || $l =~ ^-?[FEWIDT]$ ]]; then l=$1 && shift
+  fi
+  dbgF $l "$@"
+} # }}}
+TRC() { dbgF $DBG_L_TRC "$@"; } # }}}
+export -f dbg dbgF FAT ERR WRN INF DBG TRC
+

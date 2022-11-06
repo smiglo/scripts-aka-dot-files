@@ -43,10 +43,13 @@ output_to_file() { # @@ # {{{
   esac
   fi
   local err=
+  [[ ! -z $GREP_LAST_PATH && ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
   if $use_tee; then # {{{
-    [[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
-    local file="$GREP_LAST_PATH/last-$(date).txt"
-    [[ -n $TMUX ]] && file="$GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')-$(date).txt"
+    local file="/dev/null"
+    if [[ ! -z $GREP_LAST_PATH ]]; then
+      file="$GREP_LAST_PATH/last-$(date).txt"
+      [[ -n $TMUX ]] && file="$GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')-$(date).txt"
+    fi
     (
       echo "$cmd $@"
       echo "# "${PWD/$HOME/~}
@@ -64,16 +67,18 @@ output_to_file() { # @@ # {{{
       $use_eval command $cmd "$@" 2>$errout | tee -a $file
     fi # }}}
     err=${PIPESTATUS[0]}
-    if [[ $err == 0 ]] || $ignoreErr; then # {{{
-      sed -i "s/\x1B\[[0-9;]*[mGK]//g" $file
-      if [[ -n $TMUX ]]; then
-        ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')
-        ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')
-        ln -sf $file $GREP_LAST_PATH/$TMUX_SESSION
+    if [[ ! -z $GREP_LAST_PATH ]]; then # {{{
+      if [[ $err == 0 ]] || $ignoreErr; then
+        sed -i "s/\x1B\[[0-9;]*[mGK]//g" $file
+        if [[ -n $TMUX ]]; then
+          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')
+          ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')
+          ln -sf $file $GREP_LAST_PATH/$TMUX_SESSION
+        fi
+        ln -sf $file $GREP_LAST_PATH/last
+      else
+        rm $file
       fi
-      ln -sf $file $GREP_LAST_PATH/last
-    else
-      rm $file
     fi # }}}
     # }}}
   else # {{{
@@ -91,6 +96,7 @@ output_to_file() { # @@ # {{{
   return $err
 } # }}}
 last_grep() { # @@ # {{{
+  [[ -z $GREP_LAST_PATH ]] && return 1
   if [[ $1 == '@@' ]]; then # {{{
     if [[ $2 == 1 ]]; then
       local ret="+fzf -L -l -a -s -w -p --clean -f --file -F --follow"

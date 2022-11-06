@@ -2,57 +2,65 @@
 # vim: fdl=0
 
 # INIT {{{
-DATE_FILE=$TMP_PATH/.date-update
+DATE_FILE=$TMP_PATH/.repo-update
 MIN_DELTA="${BASH_UPDATE_TIME:-"$((7*60*60*24))"}"
 created=false
 forced=false
+ask=true
 do_install=false
 currentTime=0
 # }}}
+! declare -f echorm >/dev/null 2>&1 && [[ -e $ECHOR_PATH/echor ]] && source $ECHOR_PATH/echor
 # Functions {{{
+if ! declare -f epochSeconds >/dev/null 2>&1; then # {{{
+  epochSeconds() {
+    command date +%s
+  }
+fi # }}}
 do_update() { # {{{
   pwd=$PWD
   local i
   for i in $BASH_UPDATE_REPOS; do
-    [[ ! -e $i ]] && echo "Repository ($i) does not exist" && continue
+    [[ ! -e $i ]] && echor "Repository ($i) does not exist" && continue
     cd $i
     git sync --interactive --skip-backup
   done
   cd $pwd
 } # }}}
 saveTime() { # {{{
-  [[ $currentTime == 0 ]] && currentTime="$(date +"%s")"
-  echo $currentTime > $DATE_FILE
+  [[ $currentTime == 0 ]] && currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
+  if [[ -e $DATE_FILE ]] && command grep -q '^tLastUpdateTime=' $DATE_FILE; then
+    sed -i 's/^tLastUpdateTime=.*/tLastUpdateTime='$currentTime'/' $DATE_FILE
+    return
+  fi
+  echo "tLastUpdateTime=$currentTime" >> $DATE_FILE
 } # }}}
 checkTime() { # {{{
-  local lastUpdateTime=
-  currentTime="$(date +"%s")"
-  [[ ! -e $DATE_FILE ]] && echo "0" > $DATE_FILE
-  lastUpdateTime="$(cat $DATE_FILE)"
-  lastUpdateTime=$(($lastUpdateTime+$MIN_DELTA))
-  $forced && lastUpdateTime="0"
-  [[ $currentTime -lt $lastUpdateTime ]] && return 1
+  local tLastUpdateTime="0"
+  currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
+  [[ ! -e $DATE_FILE ]] && echo "tLastUpdateTime=0" > $DATE_FILE
+  $forced && return 0
+  if ${SETUP_UPDATER_ASK_EVERYDAY:-true}; then
+    local lastMod=0
+    [[ -e $DATE_FILE ]] && lastMod="$(command date +%Y%m%d -d @$(stat -c %Y $DATE_FILE))"
+    [[ "$(command date +%Y%m%d)" == "$lastMod" ]] && return 1
+    if $ask; then
+      local msg="$(echor -1 "Update repos [Yn]")"
+      $ALIASES progress --wait 5s --key --no-err --msg "$msg" --out /dev/stderr || return 1
+    fi
+  else
+    source $DATE_FILE
+    tLastUpdateTime=$(($tLastUpdateTime+$MIN_DELTA))
+    [[ $currentTime -lt $tLastUpdateTime ]] && return 1
+  fi
   return 0
-} # }}}
-waitForLan() { # {{{
-  local delay=1
-  local cnt=5
-  local msg=false
-  while [[ $cnt > 0 ]]; do
-    ping -c 1 8.8.8.8 >/dev/null 2>&1 && return 0
-    ! $msg && echo "Wait for LAN..." && msg=true
-    sleep $delay
-    cnt=$(($cnt-1))
-  done
-  echo "No ethernet connection"
-  return 1
 } # }}}
 check() { # {{{
   [[ $BASH_UPDATE_TIME == 0 ]] && return 1
   [[ -z $BASH_UPDATE_REPOS ]] && return 1
   checkTime || return 1
-  echo "Environment auto-update"
-  waitForLan || return 1
+  echor "Environment auto-update"
+  $ALIASES net --wait=5s || return 1
   return 0
 } # }}}
 start() { # {{{
@@ -60,12 +68,11 @@ start() { # {{{
   source $SCRIPT_PATH/bash/aliases.d/mutex-locking
   mutex_init "setup-update" --auto-clean-after $((10*60))
   mutex_lock || return 1
-  local key=
-  if [[ ! -n "$SSH_CLIENT" ]]; then
-    local KEY_PATH=$SETUP_UPDATER_KEY
-    [[ ! -e $KEY_PATH ]] && echo "Could not add ssh key" && return 1
-    if ! ssh-add -l | command grep $(ssh-keygen -lf $KEY_PATH | cut -d' ' -f2 ) >/dev/null; then
-      key=$KEY_PATH
+  local key=$SETUP_UPDATER_KEY
+  if [[ ! -n "$SSH_CLIENT" && ! -z $key ]]; then
+    [[ $key == /* ]] || key="$HOME/.ssh/keys/$key"
+    [[ ! -e $key ]] && echor "Updater key not set" && return 1
+    if ! ssh-add -l | command grep $(ssh-keygen -lf $key | cut -d' ' -f2 ) >/dev/null; then
       ssh-add $key >/dev/null 2>&1
     fi
   fi
@@ -76,11 +83,13 @@ start() { # {{{
 } # }}}
 # }}}
 # MAIN {{{
+echorm --name repo-update -M +
 while [[ ! -z $1 ]]; do
   case $1 in
   --force|-f) forced=true;;
   --install)  do_install=true;;
   --saveTime) saveTime; exit 0;;
+  -y)         ask=false;;
   esac
   shift
 done

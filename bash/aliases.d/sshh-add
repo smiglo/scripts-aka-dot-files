@@ -13,7 +13,7 @@ sshh-add() { # @@ # {{{
         [[ -e $key ]] && ret+=" $key"
       done
     fi
-    keys="$(find $key_location -name *.pub)"
+    keys="$(find $key_location -name '*.pub')"
     if [[ ! -z $keys ]]; then
       for key in $keys; do
         key=${key/.pub}
@@ -21,13 +21,13 @@ sshh-add() { # @@ # {{{
       done
     fi
     ret+=" $(ssh-add --help 2>&1 | command grep  ^"  -" | cut -d' ' -f3)"
-    ret+=" --lock"
+    ret+=" --lock -v --keys"
     echo $ret
     return 0
   fi # }}}
   local params=$@
   if [[ -z $params ]]; then # {{{
-    keys="$(find $key_location -maxdepth 1 -not -name *_pwd* -name *.pub)"
+    keys="$(find $key_location -maxdepth 1 -not -name '*_pwd*' -name '*.pub')"
     for key in $keys; do
         key=${key/.pub}
         [[ -e $key ]] && params+=" ${key/$key_location\/}"
@@ -70,8 +70,9 @@ sshh-add() { # @@ # {{{
           return 1
         fi
         if [[ ! -z $timeout && $timeout != 0 ]]; then
+          [[ $timeout == -1 ]] && timeout=$((3 * 60 * 60))
           [[ $timeout -lt 5 ]] && timeout=5
-          $ALIASES run_for_some_time --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --wait $((timeout-2)):2
+          $ALIASES run_for_some_time --no-fallback --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --wait $((timeout-2)):2
           [[ $? != 255 ]] && { read -s -n 10000 -t 0.5 tmp; mutex_unlock; mutex_deinit; return 0; }
         fi
         { # {{{
@@ -89,23 +90,23 @@ sshh-add() { # @@ # {{{
         # }}}
       else # {{{
         local err= locked=false
-        _aliases_dbg -e "Locking ssh-agent...\n"
+        echorm "Locking ssh-agent...\n"
         while true; do
           ssh-add -x 2>/dev/null
           case $? in
           0) locked=true; break;;
-          2) _aliases_dbg -e "Cannot connect to ssh-agent\n"; break;;
+          2) echorm 0 "Cannot connect to ssh-agent\n"; break;;
           esac
-          _aliases_dbg -e "Password mismatch, try again...\n"
+          echorm 0 "Password mismatch, try again...\n"
         done
       fi # }}}
       while true; do # {{{
         eval $cmatrix_cmd -C ${colors[$c2]}
         reset
         if $locked; then # {{{
-          _aliases_dbg -e "Unlocking ssh-agent...\n"
+          echorm "Unlocking ssh-agent...\n"
           while true; do # {{{
-            $ALIASES run_for_some_time --cmd "ssh-add -X 2>/dev/null" --wait 12:2
+            $ALIASES run_for_some_time --no-fallback --cmd "ssh-add -X 2>/dev/null" --wait 12:2
             local err=$?
             if [[ $err == 255 ]]; then # {{{
               while true; do
@@ -115,7 +116,7 @@ sshh-add() { # @@ # {{{
               continue 2
             fi # }}}
             [[ $err == 0 ]] && break 2
-            _aliases_dbg -e "Incorrent password, try again...\n"
+            echorm 0 "Incorrent password, try again...\n"
           done # }}}
         fi # }}}
       done # }}}
@@ -129,19 +130,45 @@ sshh-add() { # @@ # {{{
         fi
       fi
       return 0;; # }}}
+    -v) echorm +;;
+    --keys) shift; break;;
     -*) params+=" $1";;
-    *) # {{{
-      k=$1
-      [[ ! -e $k ]] && k=$key_location/$k
-      [[ ! -e $k ]] && _aliases_dbg "Key file [$1] not found" && return 1
-      key+=" $k"
-      ;; # }}}
+    *) break;;
     esac # }}}
     shift
   done # }}}
+  for k; do # {{{
+    [[ $k == -* ]] && continue
+    [[ $k == 'STOP' ]] && shift $# && break
+    [[ ! -e $k ]] && k=$key_location/$k
+    [[ ! -e $k ]] && echorm 0 "Key file [$1] not found" && return 1
+    key+=" $k"
+  done; shift $# # }}}
+  local fSshAsk=$TMP_MEM_PATH/ssh-ask.sh list=
+  which keep-pass.sh >/dev/null 2>&1 && list="$(keep-pass.sh --list-all-keys)"
+  local kList="$(ssh-add -l)"
   for k in $key; do # {{{
-    local cmd="ssh-add $params $(eval echo $(echo \$SSHH_ADD_PARAMS_${k/*\/} | tr [a-z] [A-Z])) $k"
-    ( set -x; $cmd )
+    [[ $k == -* ]] && continue
+    [[ $kList =~ $k ]] && continue
+    local kName=${k##*/}
+    local paramK=SSHH_ADD_PARAMS_${kName^^}
+    local cmd="ssh-add $params ${!paramK} $k"
+    if echo "$list" | command grep -q "^$kName$" && keep-pass.sh --get --key $kName --no-intr >/dev/null 2>&1; then
+      if [[ ! -e $fSshAsk ]]; then
+        cat <<-'EOF' >$fSshAsk
+					#!/usr/bin/env bash
+					read k
+					keep-pass.sh --get --key $k --no-intr
+				EOF
+        chmod +x $fSshAsk
+      fi
+      cmd="SSH_ASKPASS=$fSshAsk $cmd <<<$kName"
+    fi
+    echorv -M 1 cmd
+    local out="$(eval $cmd 2>&1)"
+    echorm 2 "$out"
   done # }}}
+  [[ -e $fSshAsk ]] && rm -f $fSshAsk
+  return 0
 } # }}}
 

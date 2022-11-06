@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if false; then # {{{
+# BASH # {{{
+  prefixVars_util_isVar() {
+    [[ -v "$1" ]]
+  }
+# BASH }}}
+# OS-X # {{{
+  prefixVars_util_isVar() {
+    compgen -v | command grep -q "^$1$"
+  }
+# OS-X }}}
+fi # }}}
+if ! $IS_MAC; then
+  source <(sed -n '/^# BASH/,/^# BASH/p' "$SCRIPT_PATH/bash/aliases.d/prefixVars")
+else
+  source <(sed -n '/^# OS-X/,/^# OS-X/p' "$SCRIPT_PATH/bash/aliases.d/prefixVars")
+fi
+prefixVars_util() { # {{{
+  local cmd=$1 ret=0 all=false
+  shift
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --all) all=true;;
+    *)     break;;
+    esac; shift
+  done # }}}
+  local prefix="$1" name="$2"
+  shift 2
+  [[ -z $prefix ]] && echor "No prefix provided" && return 1
+  [[ $1 == '-' ]] && prefix="vv_PID$$"
+  [[ ! -z $name && $name != '-' ]] && name="${prefix}_$name" || name="$prefix"
+  case $cmd in
+  --isSet) # {{{
+    case $1 in
+    '')     [[ ! -z ${!name} ]];;
+    -z)     [[ -z ${!name} ]];;
+    true)   [[ ${!name} == true ]];;
+    false)  [[ ${!name} == false ]];;
+    -v)     prefixVars_util_isVar $name;;
+    *)      [[ ${!name} == $1 ]];;
+    esac
+    ret=$?;; # }}}
+  --get) # {{{
+    if ! $all; then # {{{
+      local default=$1 defaultOnEmpty=false
+      [[ $1 == '-z' ]] && default=$2 && defaultOnEmpty=true
+      if ! prefixVars_util_isVar $name || ( $defaultOnEmpty && [[ -z ${!name} ]] ); then
+        echo -en "$default"
+      else
+        echo -en "${!name}"
+      fi # }}}
+    else # {{{
+      for name in $(eval echo \${!$prefix*}); do
+        echo "export $name=\"${!name}\""
+      done
+    fi;; # }}}
+    # }}}
+  --set) # {{{
+    eval export $name="$1";; # }}}
+  --clean) # {{{
+    eval unset \${!$prefix*};; # }}}
+  esac
+  return $ret
+} # }}}
+vIsSet() { prefixVars_util --isSet "$@"; }
+vGet()   { prefixVars_util --get   "$@"; }
+vSet()   { prefixVars_util --set   "$@"; }
+vClean() { prefixVars_util --clean "$@"; }
+vBool() { # {{{
+  local ret=false
+  case $1 in
+  false | [1-9] | '');;
+  true  | 0) ret=true;;
+  *)
+    if [[ $1 =~ ^[1-9][0-9]+$ ]]; then # only digits: assuming error code
+      :
+    elif eval "$@" >/dev/null 2>&1; then
+      ret=true
+    fi;;
+  esac
+  echo "$ret"
+  $ret
+} # }}}
+export -f vIsSet vGet vSet vClean vBool prefixVars_util prefixVars_util_isVar
+

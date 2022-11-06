@@ -17,8 +17,7 @@ unset RUNTIME_POST_FILE
 # TMUX_STATUS_RIGHT_EXTRA # {{{
 TMUX_STATUS_RIGHT_EXTRA_SORTED=
 while read l; do
-  l=${l#*:}
-  l=$(echo $l)
+  l=$(echo ${l#*:})
   [[ -z $l ]] && continue
   export TMUX_STATUS_RIGHT_EXTRA_SORTED+="$l "
 done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
@@ -37,13 +36,13 @@ unset CHANGE_UTILS_PATHS
 # }}}
 # Remote changes # {{{
 src_dir="$SHARED_BASH_PATH/to-apply"
-if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && -d $src_dir ]]; then
-  now="$(command date +'%s')" rmt_chngs_file="$TMP_MEM_PATH/.remote.changes"
-  [[ -z $REMOTE_CHANGES_LAST ]] && REMOTE_CHANGES_LAST=0
-  if [[ $REMOTE_CHANGES_LAST != -1 && $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
+if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH ]]; then
+  now="${EPOCHSECONDS:-$(epochSeconds)}" rmt_chngs_file="$TMP_MEM_PATH/.remote.changes"
+  if [[ -z $REMOTE_CHANGES_LAST || $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
+    REMOTE_CHANGES_LAST=0
     [[ -e "$rmt_chngs_file" ]] && source "$rmt_chngs_file"
   fi # }}}
-  if [[ $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then
+  if [[ $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now && -d $src_dir ]]; then
     export REMOTE_CHANGES_LAST="$now"
     echo "export REMOTE_CHANGES_LAST=\"$REMOTE_CHANGES_LAST\"" > $rmt_chngs_file
     i= sum= h_sum= file= p= found=

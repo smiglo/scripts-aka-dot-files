@@ -37,14 +37,15 @@ def write_string(driver_path, device_file, payload):
         open_file.write(payload)
 
 
-def find_devices(vid, pid):
-    driver_paths = glob.glob(os.path.join('/sys/bus/hid/drivers/razerkbd', '*:{0:04X}:{1:04X}.*'.format(vid, pid)))
+def find_devices(vid, pids):
+    for pid in pids:
+        driver_paths = glob.glob(os.path.join('/sys/bus/hid/drivers/razerkbd', '*:{0:04X}:{1:04X}.*'.format(vid, pid)))
 
-    for driver_path in driver_paths:
-        device_type_path = os.path.join(driver_path, 'device_type')
+        for driver_path in driver_paths:
+            device_type_path = os.path.join(driver_path, 'device_type')
 
-        if os.path.exists(device_type_path):
-            yield driver_path
+            if os.path.exists(device_type_path):
+                yield driver_path
 
 
 parser = argparse.ArgumentParser()
@@ -118,7 +119,7 @@ elif args.brightness is not None:
     b = args.brightness[0] * 255 / 100
 
     found_chroma = False
-    for index, driver_path in enumerate(find_devices(0x1532, 0x021E), start=1):
+    for index, driver_path in enumerate(find_devices(0x1532, [0x021E, 0x022A]), start=1):
         found_chroma = True
         write_string(driver_path, 'matrix_brightness', str(b))
         break

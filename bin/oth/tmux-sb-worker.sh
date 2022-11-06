@@ -1,0 +1,456 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+# Defaults  # {{{
+verbose=false
+log_level=I
+
+info_file=$TMP_MEM_PATH/.tmux-sb.info
+
+default_interval=120
+default_sleep=10
+
+battery_interval=${TMUX_SB_BATTERY_DELTA:-$((60))}
+cpu_interval=${TMUX_SB_CPU_DELTA:-$((30))}
+lockstatus_interval=${TMUX_SB_LOCKSTATUS_DELTA:-$((30))}
+mic_interval=${TMUX_SB_MIC_DELTA:-$((60))}
+net_interval=${TMUX_SB_NET_DELTA:-$((30))}
+notifications_interval=${TMUX_SB_NOTIFICATIONS_DELTA:-$((30))}
+ssh_interval=${TMUX_SB_MIC_DELTA:-$((15))}
+usb_interval=${TMUX_SB_USB_DELTA:-$((15))}
+weather_interval=${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}
+# }}}
+battery_tmux_sb_worker() { # @@ {{{
+  is_ac() { # {{{
+    if $IS_MAC; then
+      pmset -g batt  | command grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
+    else
+      upower -i /org/freedesktop/UPower/devices/line_power_AC | command grep -q "online: *yes" && echo 'true' || echo 'false'
+    fi
+  } # }}}
+  get_percentage() { # {{{
+    local perc=
+    if $IS_MAC; then
+      perc="$(pmset -g batt  | command grep 'InternalBattery' | awk '{print $3}')"
+      perc="${perc%\%;}"
+    else
+      perc="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | command grep -F "percentage:" | awk '{print $2}')"
+      perc="${perc%\%}"
+    fi
+    echo "${perc%\%}"
+  } # }}}
+  local thresholds="${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95}" colors="1 3 2 14"
+  local value=
+  local ac_on="$(is_ac)" perc="$(get_percentage)" max=${thresholds##* }
+  if ! $ac_on || [[ $perc -lt ${max%%:*} ]]; then
+    battery_interval=30
+    local c= i= showPerc=
+    # Colors  # {{{
+    for i in $thresholds; do
+      showPerc=${TMUX_SB_BATTERY_SHOW_PERC:=false}
+      if [[ $i == *:* ]]; then # {{{
+        showPerc="${i#*:}"
+        i="${i%%:*}"
+      fi # }}}
+      [[ $perc -lt $i ]] && c="${colors%% *}" && break
+      colors="${colors#* }"
+    done # }}}
+    value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[battery]}"
+    if ! $ac_on; then
+      $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
+    fi
+    $showPerc && { value+="#[fg=colour$c]${perc}%"; $ac_on && value+=" "; }
+    $ac_on && value+="#[fg=colour2]${UNICODE_EXTRA_CHARS[power]}"
+  else
+    value=
+    battery_interval="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}"
+  fi
+  unset is_ac get_percentage
+  printf "%b" "$value"
+} # }}}
+cpu_tmux_sb_worker() { # @@ {{{
+  local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
+  local value= cpu_1m= cpu_5m= c= i=
+  if ! $IS_MAC; then # {{{
+    read cpu_1m cpu_5m <<<$(cat /proc/loadavg | awk '{print int($1), int($2)}')
+  else
+    read cpu_1m cpu_5m <<<$(uptime | awk '{print int($11), int($12)}')
+  fi # }}}
+  if [[ $cpu_1m -ge ${thresholds##* } ]]; then # {{{
+    local first=true showPerc="${TMUX_SB_CPU_SHOW_PERC:-false}"
+    cpu_interval=15
+    # Colors # {{{
+    for i in $thresholds; do
+      if [[ $cpu_1m -ge $i ]]; then
+        $first && showPerc=true;
+        c="${colors%% *}"
+        break
+      fi
+      first=false
+      colors="${colors#* }"
+    done # }}}
+    value="#[fg=colour$c,bold]"
+    value+="${UNICODE_EXTRA_CHARS[high_cpu]}"
+    if $showPerc; then
+      value+="${cpu_1m}/${cpu_5m}%"
+    elif $IS_MAC; then
+      value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
+    fi
+    value+="#[fg=default,none]"
+  else
+    cpu_interval=${TMUX_SB_CPU_DELTA:-$((30))} value=
+  fi # }}}
+  printf "%b" "$value"
+} # }}}
+lockstatus_tmux_sb_worker() { # @@ # {{{
+  local value= lockCmd="$(tmux show-options -vg 'lock-command')"
+  if [[ 'false' == 'true' \
+        || ( "$lockCmd" != *sshh-add* || "$lockCmd" == *'--tmux -1'* ) \
+        || ( "$(tmux show-options -vg 'lock-after-time')" == 0 ) \
+        || ( "$(tmux show-option  -qv @lock_allowed)" == 'false' || "$(tmux show-option -gqv @lock_allowed)" == 'false' ) \
+     ]]; then
+     value="$(printf "#[fg=colour10]%b#[fg=default,none]" "${UNICODE_EXTRA_CHARS[padlock]}")"
+  fi
+  printf "%b" "$value"
+} # }}}
+mic_tmux_sb_worker() { # {{{
+  local level=80 isInternal=false
+  local TMUX_SB_WORKER_MIC_USE_INTERNAL_MIC_BOOST=true
+  if ${TMUX_SB_WORKER_MIC_USE_INTERNAL_MIC_BOOST}; then
+    local v="$(amixer sget 'Internal Mic Boost' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    [[ $v -gt 0 ]] && isInternal=true
+  else
+    if ! amixer sget 'Headset Mic' 1>/dev/null 2>&1 || amixer sget 'Headset Mic' | command grep -q "Mono:.*\[off\]"; then
+      return
+    fi
+  fi
+  local mic="$(getUnicodeChar 'mic')" mute="$(getUnicodeChar 'mute')"
+  local value=
+  if amixer sget 'Capture' | command grep -q "Front Left:.*\[off\]"; then
+    value="#[fg=colour9]$mic$mute"
+  else
+    $isInternal && return
+    local v="$(amixer sget 'Capture' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    if [[ $v -le $level ]]; then
+      value="#[fg=colour11]$mic$mute"
+    elif ! $isInternal; then
+      value="#[fg=colour14]$mic"
+    fi
+  fi
+  printf "%b" "$value"
+} # }}}
+net_tmux_sb_worker() { # {{{
+  local value= char=$(getUnicodeChar 'link') con="#[bg=colour124]#[fg=colour226,bold]" coff="#[bg=default,none]"
+  ping -c1 8.8.8.8 -w1 >/dev/null 2>&1 && value=0 || value=$(fromAliases net -s; echo $?)
+  case $value in
+  0)  value="";;
+  1)  value="$char$con 8 $coff";;
+  2)  value="$con$char$con D $coff";;
+  10) value="$con$char$con G $coff";;
+  *)  value="$con$char$con ? $value$coff";;
+  esac
+  printf "%b" "$value"
+} # }}}
+notifications_tmux_sb_worker() { # @@ {{{
+  local delta=$((5*60)) ntf_file="${NOTIFICATION_FILE_TMUX:-$TMP_MEM_PATH/notifications-tmux.txt}" icon= value=
+  if [[ ! -e "$ntf_file" ]]; then
+    icon='#'
+  elif [[ "$(stat -c "%Y" "$ntf_file")" -ge "$(($now - $delta))" ]]; then
+    icon=" ${UNICODE_EXTRA_CHARS[envelope]} "
+  fi
+  [[ ! -z $icon ]] && value="$(printf "#[bg=colour124]#[fg=colour226,bold]%b#[bg=colour235,none]" "$icon")"
+  printf "%b" "$value"
+} # }}}
+ssh_tmux_sb_worker() { # {{{
+  local w="$(w -h -i)" isRoot=false isSsh=false moreThanOne=false d="${TMUX_SB_WORKER_SSH_FROM_NO:-:0}"
+  echo "$w" | command grep -q "^root" && isRoot=true
+  w="$(echo "$w" | cut -c19- | command grep -v "^$d")"
+  if ! $IS_MAC; then
+    if [[ ! -z $w ]]; then
+      moreThanOne=true
+      echo "$w" | command grep -q "^[0-9\.:]\+ " && isSsh=true
+    fi
+  fi
+  local sign="$(getUnicodeChar 'exclamation')" value=
+  if $isSsh; then
+    value="#[bg=colour124]#[fg=colour226,bold] $sign$sign$sign #[bg=default,none]"
+  elif $isRoot; then
+    value="#[bg=colour124]#[fg=colour226,bold] $sign$sign #[bg=default,none]"
+  elif $moreThanOne; then
+    value="#[bg=colour124]#[fg=colour226,bold] $sign #[bg=default,none]"
+  fi
+  printf "%b" "$value"
+} # }}}
+usb_tmux_sb_worker() { # {{{
+  local prefix="/media/$USER" value=
+  $IS_MAC && prefix="/Volumes"
+  if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
+    value="#[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
+  fi
+  printf "%b" "$value"
+} # }}}
+weather_tmux_sb_worker() { # @@ {{{
+  local value=
+  weather_icon() { # {{{
+    # Icons: [ 🌣  (  🌞  )  🌤  🌥  ☁️  🌦  🌧  🌨  ⛈  🌩  🌪  🌫  🌬  ]
+    local icon=
+    [[ -z $TMUX_DEFAULT_WEATHER_ICONS ]] &&
+      local TMUX_DEFAULT_WEATHER_ICONS=" \
+        800::🌞 \
+        801:802::🌤 \
+        803::🌥 \
+        804::☁️  \
+        500:501:520:521:531::🌦 \
+        600:601:602:611:612:615:616:620:621:622::🌨 \
+        300:301:302:310:311:312:313:314:321:502:503:504:511:522::🌧 \
+        200:201:202:210:211:212:221:230:231:232::⛈  \
+        701:711:721:731:741:751:761:762:771::🌫 \
+      "
+    [[ ! -z "$TMUX_WEATHER_ICONS" ]] && [[ " $TMUX_WEATHER_ICONS " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] \
+      && icon="${BASH_REMATCH[2]}"
+    [[ -z "$icon" ]] && [[ " $TMUX_DEFAULT_WEATHER_ICONS " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] \
+      && icon="${BASH_REMATCH[2]}"
+    [[ -z $icon ]] \
+      && icon="$1"
+    local colors=" \
+      800::#[fg=colour226] \
+      801:802::#[fg=colour228] \
+      803::#[fg=colour254] \
+      804::#[fg=colour251] \
+      500:501:520:521:531::#[fg=colour228] \
+      600:601:602:611:612:615:616:620:621:622::#[fg=colour74] \
+      300:301:302:310:311:312:313:314:321:502:503:504:511:522::#[fg=colour74] \
+      200:201:202:210:211:212:221:230:231:232)::#[fg=colour250] \
+      701:711:721:731:741:751:761:762:771::#[fg=colour250] \
+    "
+    local c=
+    [[ " $colors " =~ ^.*[\ :]$1([0-9:])*::([^\ ]+)\ .* ]] && c="${BASH_REMATCH[2]}"
+    printf "%b%b" "$c" "$icon"
+  } # }}}
+  weather_wind_arrow() { # {{{
+    local out=()
+    if   [[ $2 -lt 3 ]];                         then out=(↺ ↻)
+    elif [[ $2 -lt ${WEATHER_WIND_SPEED:-15} ]]; then out=(↓ ↙ ← ↖ ↑ ↗ → ↘)
+    elif [[ $2 -lt ${WEATHER_WIND_SPEED:-30} ]]; then out=(⇓ ⇙ ⇐ ⇖ ⇑ ⇗ ⇒ ⇘)
+    else                                              out=(⇊ ⇇ ⇈ ⇉)
+    fi
+    local len="${#out[*]}"
+    local radius="$(echo "$len" | awk '{print 360/$1}')"
+    printf "%b %skm/h" "${out[$(echo "$1" | awk "{print int(\$1/$radius+0.5)%$len}")]}" "$2"
+  } # }}}
+  weather_temp_color() { # {{{
+    if   [[ $1 -lt -5 ]]; then printf "#[fg=colour33]%d°C"  "$1"
+    elif [[ $1 -lt  5 ]]; then printf "#[fg=colour45]%d°C"  "$1"
+    elif [[ $1 -lt 15 ]]; then printf "#[fg=colour172]%d°C" "$1"
+    elif [[ $1 -lt 22 ]]; then printf "#[fg=colour178]%d°C" "$1"
+    else                       printf "#[fg=colour226]%d°C" "$1"
+    fi
+  } # }}}
+  local STORAGE_FILE="$TMP_MEM_PATH/.weather-tmux.log"
+  if [[ -e $STORAGE_FILE ]]; then # {{{
+    WEATHER_INFO=()
+    local line=
+    while read line; do
+      WEATHER_INFO+=("$line")
+    done < <(cat $STORAGE_FILE)
+    [[ ! -z ${WEATHER_INFO[0]} && $now -ge $(( ${WEATHER_INFO[0]} + $((7 * 24 * 60 * 60)) )) ]] && WEATHER_INFO=()
+    [[ -z ${WEATHER_INFO[0]} ]] && WEATHER_INFO[0]="$now"
+  fi # }}}
+  local err=false
+  if [[ -z $WEATHER_API_KEY ]]; then
+    ERR "Error: No API key"
+    err=true
+  fi
+  while ! $err; do # {{{
+    if [[ -z ${WEATHER_INFO[1]} ]]; then
+      local loc=$(curl --silent --connect-timeout 2 http://ip-api.com/csv)
+      if [[ $? != 0 || -z $loc ]]; then # {{{
+        ERR "Error when acquiring location"
+        err=true
+        break
+      fi # }}}
+      WEATHER_INFO[1]=$(echo "$loc" | cut -d , -f 8)
+      WEATHER_INFO[2]=$(echo "$loc" | cut -d , -f 9)
+      [[ ${WEATHER_INFO[1]} == 51.* && ${WEATHER_INFO[2]} == 16.* ]] && WEATHER_INFO[1]=51.099 && WEATHER_INFO[2]=17.039
+    fi
+    local weather="$(curl --silent --connect-timeout 2 "http://api.openweathermap.org/data/2.5/weather?lat=${WEATHER_INFO[1]}&lon=${WEATHER_INFO[2]}&APPID=$WEATHER_API_KEY&units=metric")"
+    if [[ $? == 0 && ! -z $weather && $(echo $weather | jq .cod) == 200 ]]; then
+      WEATHER_INFO[0]="$now"
+      WEATHER_INFO[3]="$(echo "$weather" | jq .main.temp  | cut -d . -f 1)"
+      WEATHER_INFO[4]="$(echo "$weather" | jq .wind.speed | awk '{print int($1*3.6+0.5)}')"
+      WEATHER_INFO[5]="$(echo "$weather" | jq .wind.deg   | cut -d . -f 1)"
+      WEATHER_INFO[6]="$(echo "$weather" | jq .weather[0].id)"
+    else
+      ERR "Error when acquiring forecast"
+      err=true
+      break
+    fi
+    { echo  "${WEATHER_INFO[0]}"
+      echo  "${WEATHER_INFO[1]}"
+      echo  "${WEATHER_INFO[2]}"
+      echo  "${WEATHER_INFO[3]}"
+      echo  "${WEATHER_INFO[4]}"
+      echo  "${WEATHER_INFO[5]}"
+      echo  "${WEATHER_INFO[6]}"
+    } >$STORAGE_FILE
+    break
+  done # }}}
+  if ! $err; then
+    value="$(printf "%s %s #[fg=colour72]%s" "$(weather_icon "${WEATHER_INFO[6]}")" "$(weather_temp_color "${WEATHER_INFO[3]}")" "$(weather_wind_arrow ${WEATHER_INFO[5]} ${WEATHER_INFO[4]})")"
+    weather_interval="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}"
+  else
+    value="#[fg=colour124]✗☁️ #[fg=default,none]"
+    weather_interval=60
+  fi
+  unset weather_icon weather_wind_arrow weather_temp_color
+  printf "%b" "$value"
+  $err && return 1
+  return 0
+} # }}}
+
+isIgnored() { # {{{
+  [[ $(vGet $1 ignored false) == 'true' ]]
+} # }}}
+tryToDo() { # {{{
+  local var=$1 isFunction=false
+  if declare -f ${var}_tmux_sb_worker &>/dev/null; then
+    isFunction=true
+  elif [[ -z "$(vGet $var tmux_sb_worker)" ]]; then
+    local found=false i=
+    for i in $BASH_PROFILES_FULL; do
+      if [[ -e $i/aliases ]] && $i/aliases __util_tmux_sb_worker --defined $var; then
+        vSet $var tmux_sb_worker "'$i/aliases __util_tmux_sb_worker $var'"
+        found=true
+        break
+      fi
+    done
+    if ! $found; then
+      WRN "${var}_tmux_sb_worker is missing"
+      vSet $var ignored true
+      return 1
+    fi
+  fi
+  local last=$(vGet $var last 0) interval=$(vGet $var interval)
+  if [[ -z $interval ]]; then
+    WRN "Interval for $var (\$${var}_interval) not defined, setting to default interval of $default_interval"
+    vSet $var interval $default_interval
+    interval=$default_interval
+  fi
+  [[ $now -gt $(($last+$interval)) ]] || return 1
+  if $isFunction; then
+    eval ${var}_tmux_sb_worker
+  else
+    eval "$(vGet $var tmux_sb_worker)"
+  fi
+  vSet $var last $now
+} # }}}
+fromAliases() { # {{{
+  local f=$1 justSource=false
+  [[ $1 == '--source' ]] && shift && f=$1 && justSource=true
+  ! declare -F $f >/dev/null 2>&1 && source <($ALIASES --source $f)
+  $justSource && return 0
+  "$@"
+} # }}}
+worker() { # {{{
+  source "$UNICODE_EXTRA_CHARS_FILE"
+  fromAliases --source getUnicodeChar
+  local fTmpSingle=$info_file.single.tmp  fTmp=$info_file.tmp markIgn='--IGNORED--' markLU='_last_update'
+  local i= now=
+  declare -A data
+  for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
+    data[$i]=""
+  done
+  while true; do
+    now=${EPOCHSECONDS:-$(epochSeconds)}
+    data[$markLU]=$now
+    for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
+      [[ ${data[$i]} == "$markIgn" ]] && DBG "$i: ignored" && continue
+      TRC "$i: checking"
+      if tryToDo $i >$fTmpSingle; then
+        data[$i]="$(cat $fTmpSingle)"
+        INF "$i: updated"
+      elif isIgnored $i; then
+        DBG "$i: ignored"
+        data[$i]="$markIgn"
+      else
+        DBG "$i: skipped"
+      fi
+    done
+    (
+      echo "declare -A data"
+      echo "data[$markLU]=\"${data[$markLU]}\" # $(command date +$DATE_FMT -d @$now)"
+      for i in $(printf '%s\n' ${!data[*]} | sort); do
+        [[ ${data[$i]} == "$markIgn" || $i == "$markLU" ]] && continue
+        echo "data[$i]=\"${data[$i]}\""
+      done
+    ) >$fTmp
+    $lock mv $fTmp $info_file
+    if $verbose; then
+      echo "---"
+      cat $info_file
+      echo
+    fi
+    sleep $default_sleep
+  done
+} # }}}
+
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  ---tmux);;
+  -v) verbose=true;;
+  -s) verbose=false; log_level=W;;
+  -f) info_file=$2; shift;;
+  *)  break;;
+  esac; shift
+done # }}}
+lock= fLockFile=${info_file}.lock
+type flock >/dev/null 2>&1 && lock="flock $fLockFile"
+case $1 in # {{{
+--test) # {{{
+  shift
+  xv=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -xv) xv=true;;
+    *)   break;;
+    esac; shift
+  done # }}}
+  [[ -z $1 ]] && echor "Worker is missing" && exit 1
+  i=$1
+  f="${i}_tmux_sb_worker" && shift
+  ! declare -f $f &>/dev/null && echor "Function [$f] not defined" && exit 1
+  now=${EPOCHSECONDS:-$(epochSeconds)}
+  DBG --init --ts-add --prefix D
+  fromAliases --source getUnicodeChar
+  $xv && set -xv
+  w="$($f $@)"; err=$?
+  $xv && set +xv
+  [[ $err == 0 ]] || echor "Error when invoking $f"
+  echo "data[$i]=\"$w\""
+  DBG --deinit;; # }}}
+--get-all-values) # {{{
+  [[ -e $info_file ]] || { echo "declare -A data"; exit 1; }
+  $lock cat $info_file;; # }}}
+--get-value) # {{{
+  [[ -e $info_file ]] || exit 1
+  source <($lock cat $info_file)
+  shift
+  for i; do
+    echo "${data[$i]}"
+  done;; # }}}
+--list) # {{{
+  declare -F | awk '/_tmux_sb_worker/{sub(/_tmux_sb_worker/,"",$3); print $3}';; # }}}
+--tmux | --kill) # {{{
+  ps a | awk '/tmux-sb-worker\.sh ---tmux/ {print $1}' | xargs -r kill -9 2>/dev/null
+  if [[ $1 == '--tmux' ]]; then
+    $0 ---tmux -s --out "$TMP_MEM_PATH/.tmux-sb.err" --prefix &
+    disown
+  fi;; # }}}
+*) # {{{
+  DBG --init --ts-add $log_level $@
+  INF -
+  INF - "Start: $(command date +"$DATE_FMT")"
+  worker
+  DBG --deinit;; # }}}
+esac # }}}
+

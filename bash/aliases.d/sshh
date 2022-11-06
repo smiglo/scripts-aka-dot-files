@@ -69,7 +69,7 @@ sshh() { # @@ # {{{
     -key) # {{{
       src=~/.ssh/id_rsa.pub
       [[ ! -z $2 && $2 != -* ]] && src=$2 && shift
-      [[ ! -e $src ]] && _aliases_dbg "Public key ($src) does not exist" && return 1
+      [[ ! -e $src ]] && echorm 0 "Public key ($src) does not exist" && return 1
       if [[ $2 == '-hosts' ]]; then
         shift
         while [[ ! -z $2 ]]; do
@@ -84,22 +84,20 @@ sshh() { # @@ # {{{
       cmd="cat $src | ssh -p ${params[2]} ${params[1]}@${params[0]} cat \">>\" $dst"
       ;; # }}}
     -cp) # {{{
-      [[ -z $2 ]] && _aliases_dbg "Source is missing" && return 1
+      [[ -z $2 ]] && echorm 0 "Source is missing" && return 1
       src=$2 && shift
-      [[ ! -e $src ]] && _aliases_dbg "Source ($src) does not exist" && return 1
+      [[ ! -e $src ]] && echorm 0 "Source ($src) does not exist" && return 1
       cmd="tar czf - $src | $cmd \"tar xzvpf -\""
       ;; # }}}
     -\?) # {{{
-      _aliases_dbg
-      _aliases_dbg "USAGE:"
-      _aliases_dbg -e "\tsshh [ HOST ]"
-      _aliases_dbg -e "\tsshh [ HOST ] -key [ KEY_FILE ]"
-      _aliases_dbg -e "\tsshh -key [ KEY_FILE ] -hosts LIST_OF_HOSTS"
-      _aliases_dbg -e "\tsshh [ HOST ] -cp SRC"
-      _aliases_dbg -e "\tsshh -?"
-      _aliases_dbg
-      _aliases_dbg -e "\tDefault host=($SSHH_DEFAULT_HOST)"
-      _aliases_dbg
+      echorm 0 "USAGE:"
+      echorm 0 "\tsshh [ HOST ]"
+      echorm 0 "\tsshh [ HOST ] -key [ KEY_FILE ]"
+      echorm 0 "\tsshh -key [ KEY_FILE ] -hosts LIST_OF_HOSTS"
+      echorm 0 "\tsshh [ HOST ] -cp SRC"
+      echorm 0 "\tsshh -?"
+      echorm 0 "\t---"
+      echorm 0 "\tDefault host=($SSHH_DEFAULT_HOST)"
       return 0
       ;; # }}}
     -?*) # {{{
@@ -115,11 +113,13 @@ sshh() { # @@ # {{{
     shift
   done # }}}
   cmd="${cmd/ssh /ssh -q $params }"
-  local params="--set-pane"
-  [[ -n $TMUX && $(tmux display-message -p -t $TMUX_PANE -F '#{window_panes}') == 1 ]]  && params+=" --set-window"
+  local params= oldTitle= err=
+  [[ -n $TMUX && $(tmux display-message -p -t $TMUX_PANE -F '#{window_panes}') == 1 ]] && params+=" --set-pane --set-window --unlock-force" && oldTitle="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
   set_title $params "ssh: $host"
-  _aliases_dbg $cmd
+  echorm "$cmd"
   eval $cmd
-  return $?
+  err=$?
+  [[ ! -z $oldTitle ]] && set_title --set-window "$oldTitle"
+  return $err
 } # }}}
 

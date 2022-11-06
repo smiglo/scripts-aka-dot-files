@@ -30,8 +30,7 @@ mg() { # @@ # {{{
     esac
     shift
   done
-  _aliases_dbg $cmd "$@"
-  _aliases_dbg
+  echorm "$cmd $@"
   local err=
   case $cmd in
   grep*) grep_wrapper   --cmd-grep +tee=$tee +fzf=$use_fzf $fzf_params -R "$@" *; err=$?;;

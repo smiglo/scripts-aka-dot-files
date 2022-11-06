@@ -16,13 +16,15 @@ colors[yellow]=" 255 255 0"
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
   --delay) echo "1 3 5 10 30 60";;
+  --blink* ) echo ${!colors[*]};;
   *)
-    echo "-v --no-delay --delay --reset --blink --blink= -h --help"
-    echo "--breath-random --breath-single --breath-dual --reactive --spectrum --starlight-single --static --wave --ripple-single --ripple-random --brightness"
-    for i in ${!colors[*]}; do
-      echo "--blink=$i"
-    done
-    ;;
+    if [[ $@ =~ .*--blink\ =\ [0-9] ]]; then
+      echo ${!colors[*]}
+    else
+      echo "-v --no-delay --delay --reset --blink --blink= -h --help"
+      echo "--breath-random --breath-single --breath-dual --reactive --spectrum --starlight-single --static --wave --ripple-single --ripple-random --brightness"
+      echo --blink={1,2,3}
+    fi;;
   esac
   exit 0
 fi # }}}
@@ -36,8 +38,13 @@ defEffect="static"
 defColor="cyan"
 defBlinkColor="red"
 defCmd="$chroma --brightness $defBrightness; $chroma --$defEffect $(colorConv $defColor)"
+defReset=" --wave LEFT --delay 0.3 --wave RIGHT --delay 0.3"
+defReset+="$defReset"
+defReset+=" --reset"
 
 $chroma --test || exit 0
+
+[[ -z $1 ]] && set -- $defReset
 
 while [[ ! -z $1 ]]; do
   cmd=$1
@@ -45,6 +52,10 @@ while [[ ! -z $1 ]]; do
   case $cmd in
   --help | -h) # {{{
     echo "$(basename $0) [-v] [--delay N|--no-delay] [--reset] [--blink|--blink=DELAY [COLOR]] [--test]"
+    echo
+    echo "Extented parameters:"
+    $chroma -h
+    echo
     exit 0 ;; # }}}
   -v) verbose=true;;
   --no-delay);;
@@ -78,8 +89,8 @@ while [[ ! -z $1 ]]; do
   eval $fullCmd
   if [[ ! -z $1 && $1 != '--delay' && $1 != '--no-delay' ]]; then
     case $cmd in
-    --delay | --brightness | --blink);;
-    *) sleep $defSleep;;
+    --delay | --brightness | --blink | --blink=*);;
+    *) echo "sleep"; sleep $defSleep;;
     esac
   fi
 done

@@ -356,7 +356,7 @@ initTmux_MAIN() { # {{{
   $ALIASES set_title --from-tmux $sessionName:2 'Widgets'
   $ALIASES set_title --from-tmux $sessionName:3 'Root'
   local isNet=false
-  $ALIASES progress --msg "Waiting for Internet connection... " --cmd "command ping -c 1 $($IS_MAC && echo '-W 1' || echo '-w 1') 8.8.8.8" --dots --cnt 90 && isNet=true
+  $ALIASES net --wait=20s && isNet=true
   run_mc $sessionName:1.1
   run $sessionName:3.1 --hide --clear "$ALIASES sudo"
   makePreconfiguredSplits --wnd 2
@@ -487,7 +487,7 @@ if $do_attach; then # {{{
   trap "kill -SIGHUP $PPID" SIGHUP
   # Choose current session {{{
   if [[ -z $sessionName ]] || ! tmux has-session -t $sessionName 1>/dev/null 2>&1; then
-    [[ -e $TMP_PATH/.tmux_last_session ]] && sessionName="$(cat $TMP_PATH/.tmux_last_session)"
+    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && sessionName="$(cat $TMP_PATH/.tmux_last_session.$USER)"
   fi
   if [[ $TMUX_INIT_SESSIONS == 'REMOTE' ]]; then
     sessionName="$(getRemoteSessionName)"

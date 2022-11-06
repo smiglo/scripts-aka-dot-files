@@ -3,19 +3,28 @@
 
 brun() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
+    if [[ $2 == --shorts ]]; then # {{{
+      local f=$(getFileList -t -1 '*.cpp')
+      [[ -z $f ]] && f=$(getFileList -t -1 '*.c')
+      [[ ! -z $f ]] && echo "lo --loop -lpthread $f"
+      return 0
+    fi # }}}
     case $3 in
     --conf) echo "${!BRUN_CONF_*}" | sed 's/BRUN_CONF_//g' | tr 'A-Z' 'a-z' ;;
     --check-files) echo "@@-f";;
     *)
-      echo "-- -R -r -l --conf -c --run --no-run --loop --check-files -s -v --clang --no-clear"
+      echo "-- -V -G -R -r -l --conf -c --run --no-run --loop --check-files -s -v --clang --no-clear"
       echo "-lpthread"
-      echo "$($ALIASES getFileList '*.c') $($BASH_PATH/aliases getFileList '*.cpp') $($BASH_PATH/aliases getFileList '*.sh')"
+      echo "$(getFileList '*.c') $(getFileList '*.cpp') $(getFileList '*.sh')"
+      [[ $2 != -- ]] && compl-short --shorts
       ;;
     esac
     return 0
   fi # }}}
-  local f= p= o= cl="command clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W" run=true compile=true new_params= args= silent=${BRUN_SILENT:-true} s= loop=false loop_delay=${BRUN_LOOP_DELAY:-2} key= modTime= sum= err= autoClear=true
+  local f= p= o= cl="command clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W" run=true compile=true new_params= args= s= loop=false loop_delay=${BRUN_LOOP_DELAY:-2} key= modTime= sum= err= autoClear=true
+  local valgrind=false gdb=false
   local filesToCheck="$BRUN_CHECK_FILES"
+  eval set -- $(compl-short --shorts --args "$@")
   case $@ in # {{{
   --\ *) set -- --run ${BRUN_PARAMS%% -- *} $@;;
   -c | --no-run) set -- -c ${BRUN_PARAMS%% -- *};;
@@ -24,26 +33,29 @@ brun() { # @@ # {{{
   esac # }}}
   [[ -z $1 ]] && set -- $BRUN_PARAMS ## Required to capture file
   [[ -z $1 ]] && set -- $BRUN_PARAMS_DEFAULT
-  [[ -z $1 ]] && set -- $($ALIASES getFileList -t -1 '*.cpp')
-  [[ -z $1 ]] && set -- $($ALIASES getFileList -t -1 '*.c')
+  [[ -z $1 ]] && set -- $(getFileList -t -1 '*.cpp')
+  [[ -z $1 ]] && set -- $(getFileList -t -1 '*.c')
   while [[ ! -z $1 ]]; do # {{{
     case $1 in # {{{
     # Internal switches # {{{
-    -q) silent=true;;&
-    -v) silent=false;;&
+    -q) echorm -M -;;&
+    -v) echorm -M +;;&
+    -V) valgrind=true;;&
+    -G) gdb=true;;&
     -R) BRUN_PARAMS=""; [[ -z $2 ]] && return 0;;&
     -c | --no-run) run=false;;&
     -r | --run)    compile=false; run=true;;&
     -l | --loop)   loop=true;;&
     --check-files) filesToCheck="$2"; shift;;&
     --no-clear)    autoClear=false;;&
-    -q | -v | -R | -c | --no-run | -r | --run) # {{{
+    -lpthread)     cl+=" -lpthread";;
+    -q | -v | -V | -G | -R | -c | --no-run | -r | --run | -lpthread) # {{{
       s+=" $1";& # }}}
     -l | --loop | --check-files | --no-clear) # {{{
       shift; continue;; # }}}
     --conf) # {{{
       local conf="$(eval echo "\$BRUN_CONF_${2^^}")"
-      [[ -z "$conf" ]] && echo "Configuration not found" >/dev/stderr && return 1
+      [[ -z "$conf" ]] && echor "Configuration not found" && return 1
       shift 2
       [[ ! -z "$1" ]] && conf="${conf%% -- *} --no-run"
       brun $s $conf $p
@@ -78,24 +90,37 @@ brun() { # @@ # {{{
     shift
   done # }}}
   if [[ -z $f ]]; then # {{{
-    f="$($ALIASES getFileList -t -1 '*.cpp')"
-    [[ -z $f ]] && f="$($ALIASES getFileList -t -1 '*.c')"
-    [[ -z $f ]] && echo "No file was found" >/dev/stderr && return 1
+    f="$(getFileList -t -1 '*.cpp')"
+    [[ -z $f ]] && f="$(getFileList -t -1 '*.c')"
+    [[ -z $f ]] && echor "No file was found" && return 1
     $ALIASES progress --msg "Auto chosen file [$f] proceed?" --key --dots --cnt 40 || return 0
     new_params+=" $f"
   fi # }}}
-  [[ ! -e $f ]] && echo "File [$f] does not exist" >/dev/stderr && return 1
+  [[ ! -e $f ]] && echor "File [$f] does not exist" && return 1
   [[ ! -z $new_params ]] && export BRUN_PARAMS="$new_params"
   [[ -z $filesToCheck ]] && filesToCheck="$f"
+  local pushed=false
+  case $(echorm -f?; echo $?) in
+  10)
+    pushed=true
+    echorm --push
+    $loop && echorm -M - || echorm -M +
+    ;;
+  esac
   $loop && compile=true && run=true && modTime="$(stat -c %Y $filesToCheck 2>/dev/null)" && sum="$(sha1sum $filesToCheck 2>/dev/null)"
   [[ -z "$COff" ]] && source $BASH_PATH/colors
   if [[ "$f" == *".sh" ]]; then
     o="${f/.\/}"
-    cl="/bin/bash"
+    cl="$SHELL"
     compile=false
     run=true
     loop=true
   else
+    if $gdb; then
+      local gdb_params="${BRUN_GDB_PARAMS}"
+      [[ -z $gdb_params ]] && gdb_params="-g -O0 -g3 -ggdb${GDB_PARAM_GDB_VER:-}3 -gdwarf-${GDB_PARAM_DWART_VER:-4}"
+      cl+=" $gdb_params"
+    fi
     if [[ ! " $p " =~ \ -o\ +([^ ]+)\  ]]; then # {{{
       o="${f%.*}.out"
       p+=" -o $o"
@@ -107,9 +132,10 @@ brun() { # @@ # {{{
         run=false;;
       esac
     fi # }}}
+    [[ $f == *.c && $cl == *clang++* ]] && cl+=" -Wno-deprecated"
   fi
-  set_title --set-pane "$(echo "${cl/command }" | sed -e 's/-W[^ ]*//g' -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
-  local progr_colors=($CYellow $CPurple $CBlue   $CGreen ) progr_i=0 doClear=false
+  set_title "$(echo "${cl/command }" | sed -e 's/-W[^ ]*//g' -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
+  local progr_colors=($CYellow $CPurple $CBlue   $CGreen ) progr_i=0 doClear=false first=true
   local   msg_colors=($CBlue   $CGreen  $CYellow $CPurple)
   while true; do # {{{
     err=0 err_run=0
@@ -122,18 +148,29 @@ brun() { # @@ # {{{
     ! $run && ! ${compile:-false} && compile=true
     $run && [[ ! -e $o ]] && compile=true
     if ${compile:-false} && [[ "$f" != *".sh" ]]; then # {{{
-      $silent || echo "Compiling as '$(echo "${cl/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }'..."
+      echorm "# Compiling as"
+      echorm "\$ $(echo "${cl/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
       rm -f $o
       $cl $f $p
       err=$?
     fi # }}}
     if $run && [[ $err == 0 ]]; then # {{{
-      $silent || echo -e "Running as './$o ${args:-\b}'..."
-      ./$o $args
+      cmd="./${o#./}"
+      if $valgrind; then
+        cmd="valgrind $cmd"
+      elif $gdb; then
+        confFileF="${f%.*}.gdb"
+        confFileM="gdb.conf"
+        cmd="gdb$([[ -e $confFileF ]] && echo " -x $confFileF")$([[ -e $confFileM ]] && echo " -x $confFileM") --args $cmd"
+      fi
+      echorm "# Running as"
+      echorm "\$ $cmd ${args:-\b}"
+      $cmd $args
       err_run=$?
       err=$err_run
     fi # }}}
     ! $loop && break
+    $first && first=false && echorm --push && echorm -M -
     compile=
     [[ $err != 0 ]] && c="$CRed"
     echo -en "${c}---------------$([[ $err_run != 0 ]] && echo " [$err_run]")${COff} "
@@ -159,30 +196,71 @@ brun() { # @@ # {{{
     done # }}}
     $ALIASES progress --unmark
   done # }}}
+  $loop && ! $first && echorm --pop
+  $pushed && echorm --pop
+  [[ ! -z $state ]] && eval $(echo export $state)
   return $err
 } # }}}
-gdb-core() { # @@ # {{{
-  case $1 in
-  @@) # {{{
-    case $2 in
-    1) getFileList "*.out"; echo "--set-core";;
-    2) # {{{
-      [[ $3 == '--set-core' ]] && echo '---' && return 0
-      local l="$(getFileList "core.$3.*")"
-      [[ -z "$l" ]] && echo "---" && return 0
-      echo "$l";; # }}}
-    esac;; # }}}
-  --set-core) # {{{
-    ulimit -c unlimited
-    ! command grep -qF 'core.%e.%p' /proc/sys/kernel/core_pattern && (
-      set -xv;
-      echo 'core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
-    );; # }}}
+gdbenv() { # @@ # {{{
+  if [[ $1 == @@ ]]; then # {{{
+    case $(compl-short -i $3) in
+    --db)
+      echo "asm brk exp his mem reg src sta thr var";;
+    --set-env)
+      echo "core rr asm source"
+      echo "db dashboard --db"
+      echo "+core +rr -rr";;
+    *)
+      case $2 in
+      1) getFileList "*.out";;&
+      2) # {{{
+        [[ $3 == '--set-core' ]] && echo '---' && return 0
+        local l="$(getFileList "core.$3.*")"
+        [[ -z "$l" ]] && echo "---" && return 0
+        echo "$l";; # }}}
+      *) echo "--set-env"; [[ $2 != '--' ]] && compl-short;;&
+      esac;;
+    esac
+    return 0
+  fi # }}}
+  case $(compl-short -i $1) in
+  --set-env) # {{{
+    shift
+    export GDB_DB="dbsource"
+    export GDB_DB_O="$(tmux list-panes -F '#T #{pane_tty}' | awk '/gdb/ {print $2}' | sed 's|.*/||' | head -n 1)"
+    local i=
+    for i in asm brk exp his mem reg src sta thr var; do
+      local -n v="GDB_DB_O_${i^^}"
+      v="$(tmux list-panes -F '#T #{pane_tty}' | awk '/gdb-'$i'/ {print $2}' | sed 's|.*/||' | head -n 1)"
+    done
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      +core) # {{{
+        ulimit -c unlimited
+        echo "core-%e-%p-%t.dmp" | sudo tee /proc/sys/kernel/core_pattern;; # }}}
+      +rr) # {{{
+        ulimit -c unlimited
+        echo "1" | sudo tee /proc/sys/kernel/perf_event_paranoid
+        [[ -e cpufreq-set ]] && sudo cpufreq-set -g performance;; # }}}
+      -rr) # {{{
+        echo "4" | sudo tee /proc/sys/kernel/perf_event_paranoid
+        [[ -e cpufreq-set ]] && sudo cpufreq-set -g powersave;; # }}}
+      esac
+      case $1 in
+      core | +core)   export GDB_DB="dbcore";;
+      rr | asm | +rr) export GDB_DB="dbasm";;
+      source | src)   export GDB_DB="dbsource";;
+      db | dashboard) set_title --lock-force --set-pane gdb;;
+      db-*)           set_title --lock-force --set-pane gdb-${1#db-};;
+      --db)           set_title --lock-force --set-pane gdb-$2;;
+      esac; shift
+    done # }}}
+    ;; # }}}
   *) # {{{
     local f="${1:-$(getFileList -t -1 \*.out)}" && f="${f#./}"
-    [[ -e $f ]] || { echo "Executable not found" >/dev/stderr; return 1; }
+    [[ -e $f ]] || { echor "Executable not found"; return 1; }
     local c="${2:-$(getFileList -t -1 core.$f.\*)}"
-    [[ -e $c ]] || { echo "Core file for executable [$f] not found" >/dev/stderr; return 1; }
+    [[ -e $c ]] || { echor "Core file for executable [$f] not found"; return 1; }
     echo -e "\nRunning: gdb $f $c\n"
     gdb $f $c;; # }}}
   esac

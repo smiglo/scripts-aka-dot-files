@@ -10,12 +10,14 @@ bash_phistory() { # {{{
   local date_part="$(command date +"$DATE_FMT")"
   local command_part="${BASH_REMATCH[2]%"${BASH_REMATCH[2]##*[![:space:]]}"}"
   [[ ! -z "$command_part" && "$BASH_PHISTORY_LAST" != "$command_part" && "$command_part" != '#'* ]] || return
-  local ignored_commands=
+  [[ "$command_part" =~ [!@#$%^\&\*()+\={}[\\|\;\:\"\',\<\>\?\`~] || "$command_part" =~ [\]] ]] && return
+  local ignored_commands=":$PHISTORY_BLACKLISTED"
   ignored_commands+=":$PHISTORY_IGNORED_COMMANDS"
   ignored_commands="${ignored_commands#:}"
   local i= oldIFS=$IFS IFS=':'
   for i in ${HISTIGNORE#:}; do # {{{
     [[ -z $i ]] && continue
+    [[ -d $i  && -e $i/$command_part ]] && return 0
     case $i in
     *\*) [[ "$command_part" =~ ^${i//\*/.*} ]] && return 0;;
     *)   [[ $command_part == ${i} ]] && return 0;;
@@ -29,12 +31,15 @@ bash_phistory() { # {{{
     esac
   done # }}}
   IFS=$oldIFS
-  [[ $(id -u) == 0 ]] && command_part="$command_part #[Root]"
+  [[ $UID == 0 ]] && command_part="$command_part #[Root]"
   export BASH_PHISTORY_LAST="$command_part"
   local today="${date_part/-*}"
   local sha_today=$(printf "%s" "$today-$command_part" | eval $BASH_PHISTORY_SUM_CMD)
   if [[ $today != $BASH_PHISTORY_TODAY ]]; then
     [[ -e "$BASH_PHISTORY_FILE" ]] || touch $BASH_PHISTORY_FILE
+    if [[ -z $BASH_PHISTORY_TODAY && ! -n $TMUX ]]; then
+      sed -i  '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+    fi
     export BASH_PHISTORY_TODAY=$today
     export BASH_PHISTORY_TODAY_LINE="$(cut -d\  -f4 "$BASH_PHISTORY_FILE" | command grep -anm1 "^$BASH_PHISTORY_TODAY" | cut -d: -f1)"
     [[ -z $BASH_PHISTORY_TODAY_LINE ]] && export BASH_PHISTORY_TODAY_LINE=1

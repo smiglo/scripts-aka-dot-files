@@ -3,7 +3,7 @@
 [user] # {{{
   useConfigOnly = true #}}}
 [core] # {{{
-  editor = vim
+  editor = vim --fast
   pager = less -x4
   excludesfile = ~/.gitignore
   whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2
@@ -56,39 +56,48 @@
   dffw = diff --relative --word-diff
   diffc = diff --cached
   diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f "$@";'" -
+  db    = !"bash -c 'f() { local b=\"$(git rev-parse --abbrev-ref --symbolic-full-name @)\" rB=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u})\"; git diff $rB..$b; }; f \"$@\"'" -
   dc    = !"git diffc"
   dp    = !"git diffp"
-  dr    = !"bash -c 'f() { ups=""; \
-              if [[ -z $1 ]]; then ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"; \
-              elif [[ $1 == */* ]]; then ups="$1"; \
-              else ups="$1/$(git rev-parse --abbrev-ref HEAD)"; \
+  dr    = !"bash -c 'f() { local ups=\"\"; \
+              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
+              elif [[ $1 == */* ]]; then ups=\"$1\"; \
+              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
               fi; \
               [[ -z $ups ]] && return 1; \
               git diff $ups..@; \
-            }; f "$@";'" -
-  info = log --pretty=fuller -1
-  lg   = !"bash -c 'f() { local b=$1; [[ $b == -* ]] && b= || shift; if [[ ! -z $b ]]; then local c=$(($(git rev-list --count $b)-1)); [[ $c -gt 15 ]] && c=15; git lgf $@ $b~$c..$b; else git lgf $@; fi; true; }; f "$@";'" -
-  lga  = !"git lg  $GIT_LOG_ALL_PARAMS --all"
-  lgf  = !"git log-default $GIT_LOG_PARAMS"
-  lgfa = !"git lgf $GIT_LOG_ALL_PARAMS --all"
-  log-default = log --graph --pretty=format:'%C(auto)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(blue)<%an>%Creset'
+            }; f \"$@\";'" -
+  i    = info -p
+  info = log --pretty=fuller     --date=local    -1
+  ll   = log --pretty=date-first --date=relative
+  l    = !"git-cmds.sh log --fzf -l 'log --pretty=date-first --date=relative' --this"
+  lf   = !"git-cmds.sh log --fzf"
+  l2   = log --pretty=l2         --date=local
+  lg   = log --pretty=date-first --date=short    --graph
+  lga  = log --pretty=date-first --date=short    --graph --all
+  ld   = log --pretty=date-first --date=format:'%Y-%m-%d-%H%M%S'
+  lgo  = !"git-cmds.sh log"
+  lgf  = !"git lgo --pretty=tb --graph"
+  lgfa = !"git lgo --pretty=tb --graph --all"
   melddiff = difftool -y -t meld
   ps = push --recurse-submodules=check
-  range-diff = !"git-cmds.sh range-diff"
+  range-diff2 = !"git-cmds.sh range-diff"
   rb = rebase
   rba = rebase -i --autosquash
   restash = !"git stash pop && git stash"
-  retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f "$@";'" -
+  retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f \"$@\";'" -
+  Reset = !"bash -c 'f() { git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null); }; f ;'" -
+  s = !"git-cmds.sh stash_toggle"
   sh = show -w
-  shv = !"bash -c 'f() { git shst $@ | vim -; }; f "$@";'" -
-  shst = !"bash -c 'f() { git diffp $@ --name-status; }; f "$@";'" -
-  shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f "$@";'" -
+  shv = !"bash -c 'f() { git shst $@ | vim --Fast -; }; f \"$@\";'" -
+  shst = !"bash -c 'f() { git diffp $@ --name-status; }; f \"$@\";'" -
+  shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f \"$@\";'" -
   st = status --short -b
-  stv = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim -; }; f "$@";'" -
+  stv = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim --Fast -; }; f \"$@\";'" -
   sync = !"git-cmds.sh sync"
   userset = !"git-cmds.sh userset"
   vimdiff = difftool -y -t vimdiff --trust-exit-code
-  vimdiff-p = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f "$@";'" -
+  vimdiff-p = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f \"$@\";'" -
   wipe = !"git-cmds.sh commit-fast 'WIPE SavePoint' >/dev/null 2>&1 && git reset HEAD~1 --hard >/dev/null 2>&1"
   # }}}
 [bash] # {{{
@@ -100,7 +109,12 @@
 [branch] # {{{
   autosetuprebase = always # }}}
 [format] # {{{
-  pretty = format:%h - %s <%an> # }}}
+  pretty = %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(green)(%cd) %C(blue)<%an>%C(reset) # }}}
+[pretty] # {{{
+  tb = %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(green)(%cd) %C(blue)<%an>%C(reset)
+  short2 = %h %s
+  l2 = %C(auto)%h%C(reset) - %C(green)%cd%C(reset) %C(dim green)(%cr)%C(reset)%C(auto)%d%C(reset)%n  %C(white)%s%C(reset) %C(blue)- %an%C(reset)
+  date-first = %C(green)%cd%C(reset): %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(blue)<%an>%C(reset) # }}}
 [giggle] # {{{
   main-window-maximized = false
   main-window-geometry = 974x734+468+116
@@ -142,6 +156,10 @@
   noGreeting = true
   defaultCommand = status --short -b
 # }}}
+[filter "lfs"] # {{{
+  clean = git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f
+  process = git-lfs filter-process
+  required = true # }}}
 [include] # {{{
   path = ~/.runtime/gitconfig # }}}
-

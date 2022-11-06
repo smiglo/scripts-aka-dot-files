@@ -1,0 +1,642 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+__echor_util() { # {{{
+  declare -A colors=([msg]="$CCyan" [module]="$CGreen" [var]="$CYellow" [off]="$COff" )
+  case $1 in
+  --get-color) # {{{
+    case $2 in
+    msg)    echo "${colors[msg]}";;
+    module) echo "${colors[module]}";;
+    var)    echo "${colors[var]}";;
+    off)    echo "$COff";;
+    esac;; # }}}
+  --get-header) # {{{
+    local colorsOn=true module= msg= lvl= lvlMax=1
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      -c:*)    colorsOn=${1#-c:};;
+      -m:*)    module=${1#-m:};;
+      -l:*)    lvl=${1#-l:}; [[ -z $lvl ]] && lvl=1; [[ $lvl == */* ]] && lvlMax=${lvl#*/} && lvl=${lvl%%/*} ;;
+      --msg:*) msg=${1#--msg:};;
+      esac; shift
+    done
+    if   [[ -z $msg     ]]; then msg="$ECHOR_MSG"
+    elif [[ $msg == '-' ]]; then msg=
+    fi
+    [[ ! -z $msg ]] && msg="${msg% } "
+    local txt="ECHOR_NAME_$$"
+    if [[ -z ${!txt} ]]; then
+      if   [[ -z $module      ]]; then module="$(__echor_util --get-name)"
+      elif [[ $module == '-'  ]]; then module=
+      elif [[ $module == '-'* ]]; then
+        local m=$(__echor_util --get-name)
+        [[ $module == -$m ]] && module= || module=$m
+      fi
+    else
+      module=${!txt}
+    fi
+    if [[ ! -z $module && ! -z $lvl ]]; then
+      [[ ! -z $lvlMax && $lvlMax != 1 ]] && module+="-${lvl#-}"
+    fi
+    $colorsOn || { unset colors; declare -A colors; }
+    local out=
+    [[ ! -z $msg    ]] && out+="${colors[msg]}$msg${colors[off]}"
+    [[ ! -z $module ]] && out+="${colors[module]}$module${colors[off]}: "
+    echo "$out"
+    ;; # }}}
+  --get-name) # {{{
+    local i= ffu= exe="$0"
+    local txt="ECHOR_NAME_$$"
+    [[ ! -z ${!txt} ]] && echo "${!txt}" && return 0
+    for ((i=0; i < ${#FUNCNAME[*]}; i++)); do # {{{
+      case ${FUNCNAME[i]} in
+      echor* | __echor_util);;
+      dbg | dbgF | FAT | ERR | WRN | INF | DBG | TRC);;
+      source) # {{{
+        local j=
+        for ((j=0; j < ${#FUNCNAME[*]}; j++)); do
+          [[ ${BASH_SOURCE[j]} == */echor ]] && continue
+          exe=${BASH_SOURCE[j]}
+          break
+        done;; # }}}
+      main | bash | '') break;;
+      *) [[ -z $ffu ]] && ffu=${FUNCNAME[i]} && break;;
+      esac
+    done # }}}
+    exe=${exe##*/}
+    case $exe in
+    environment | -) # {{{
+      [[ $exe == '-' ]] && exe="inline" || exe=
+      txt="ECHOR_NAME_$PPID"
+      [[ ! -z ${!txt} ]] && echo "${!txt}" && return 0;; # }}}
+    -bash | bash) exe='cli'; ${RCSTUFF_IN_BASHRC:-false} && exe='bashrc';;
+    *)            exe="${exe%.sh}";;
+    esac
+    local ffu_name=$ffu exe_name=$exe
+    exe=${exe^^} exe=${exe//./_} exe=${exe//-/_}
+    ffu=${ffu^^} ffu=${ffu//./_} ffu=${ffu//-/_}
+    local var_ffu=${ffu}_DBG
+    local var_exe=${exe}_DBG
+    local -n ref_ffu=$var_ffu
+    local -n ref_exe=$var_exe
+    if [[ ! -z $ffu && ( ! -z $ref_ffu || $2 == '--no-fallback' || " $EXPORTED_FUNCTIONS " == *" $ffu_name "* || $exe_name == 'cli' ) ]]; then
+      echo "$ffu_name"
+    elif [[ ! -z $ref_exe ]]; then
+      echo "$exe_name"
+    else
+      echo "${ffu_name:-$exe_name}"
+    fi
+    ;; # }}}
+  --convert-to-var) # {{{
+    local mod="${2:-$(__echor_util --get-name)}"
+    mod=${mod^^} mod=${mod//./_} mod=${mod//-/_} mod=${mod//:/_}
+    echo "$mod";; # }}}
+  esac
+} # }}}
+echorm() { # @@ # {{{
+  local flagsIn=$- flagsOut=
+  set +xv
+  [[ $flagsIn == *v* ]] && flagsOut+="v"
+  [[ $flagsIn == *x* ]] && flagsOut+="x"
+  [[ -z $COff ]] && source ${BASH_PATH:-$HOME/.bin/bash}/colors
+  local fileCfg="$APPS_CFG_PATH/echor.names"
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ -e $fileCfg ]] && source $fileCfg
+    case $3 in
+    -M | -m | --module | --name) # {{{
+      if [[ $3 == '-M' ]]; then
+        echo "@ Module-Name -Module-Name + +? - -?"
+      elif [[ $3 == '--name' ]]; then
+        echo "-Module-Name"
+      fi
+      (
+        echo "$ECHOR_KNOWN_NAMES"
+        echo "$EXPORTED_FUNCTIONS"
+        declare -Fx | cut -d' ' -f3
+      ) | tr ' ' '\n' | command grep -v "^_\|echor\|FAT\|ERR\|WRN\|INF\|DBG\|TRC";; # }}}
+    -f) # {{{
+      echo "on off 1 0 true false + - true:2 true:3";; # }}}
+    -F) # {{{
+      echo "on off 1 0 true false + -";; # }}}
+    -l) # {{{
+      echo "0 1 2 3 4";; # }}}
+    -o | --out) # {{{
+      echo "/dev/stdout /dev/stderr";; # }}}
+    --msg) # {{{
+      echo "- -- TB] Msg";; # }}}
+    *) # {{{
+      echo "-o --out -n - --colors=off --colors=force -C --msg -l -f -f? -f?var -f?? -f?- -F -F? -F?? -f- -M --check --name -nl -nh --module -m --push --pop -V"
+      echo "-xv +xv -v +v"
+      (
+        echo "$ECHOR_KNOWN_NAMES"
+        echo "$EXPORTED_FUNCTIONS"
+      ) | tr ' ' '\n' | command grep -v "^_\|echor\|FAT\|ERR\|WRN\|INF\|DBG\|TRC" | sed 's/^/+/';; # }}}
+    esac
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return 0
+  fi # }}}
+  local verbose=false module= base=
+  # Switches that have to be parsed first # {{{
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    --module | -m) # {{{
+      module="$2"
+      if [[ $module == *::* ]]; then
+        base="${module#*::}"
+        module="${module%%::*}"
+        [[ -z $base ]] && base="${module^^}"
+      elif [[ $module == '-' ]]; then
+        module=
+      fi
+      shift;; # }}}
+    -V) # {{{
+      verbose=true;; # }}}
+    --name) # {{{
+      shift
+      local -n refTxt="ECHOR_NAME_$$"
+      if [[ $1 == '-' ]]; then
+        unset ECHOR_NAME_$$
+      else
+        [[ -e $fileCfg ]] && source $fileCfg
+        export refTxt="${1#-}"
+        if [[ $1 != '-'* && " $ECHOR_KNOWN_NAMES " != *" $refTxt "* ]]; then # {{{
+          export ECHOR_KNOWN_NAMES+=" $refTxt"
+          if [[ -e $fileCfg ]] && command grep -q "^export ECHOR_KNOWN_NAMES=" $fileCfg; then
+            sed -i 's/^export ECHOR_KNOWN_NAMES=.*/export ECHOR_KNOWN_NAMES="'"$ECHOR_KNOWN_NAMES"'"/' $fileCfg
+          else
+            echo "export ECHOR_KNOWN_NAMES=\"$ECHOR_KNOWN_NAMES\"" >>$fileCfg
+          fi
+        fi # }}}
+      fi;; # }}}
+    -M | + | - | +*) # {{{
+      [[ $1 == '-M' ]] && shift
+      local origModule="$module" enable=${ECHOR_ENABLE_BY_DEFAULT:-true} i=
+      module="$1"
+      shift
+      case $module in
+      +\?*) # Enable if not disabled by purpose: echorm -f?- || echorm -M + # {{{
+        module=${module#+?}
+        echorm $([[ ! -z $module ]] && echo "--module $module") -f?- && return 0
+        enable=true;; # }}}
+      -\?*) # Disable if not enabled by purpose: echorm -f? || echorm -M - # {{{
+        module=${module#-?}
+        echorm $([[ ! -z $module ]] && echo "--module $module") -f?  && return 0
+        enable=false;; # }}}
+      +*)  module=${module#+}; enable=true;;
+      -*)  module=${module#-}; enable=false;;
+      esac
+      [[ -z $module ]] && module="$origModule"
+      case $module in
+      @ | '') module="$(__echor_util --get-name --no-fallback)";;
+      esac
+      local base="$(__echor_util --convert-to-var "$module")"
+      local -n refDbg="${base}_DBG"
+      refDbg=$enable
+      if [[ $1 == 0 ]]; then refDbg=false; shift
+      elif [[ $1 =~ ^[0-9]+$ ]]; then refDbg+=":$1" && shift
+      fi
+      export refDbg
+      ;; # }}}
+    *) break;;
+    esac; shift
+  done # }}}
+  if [[ -z $1 ]]; then # {{{
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return 0
+  fi # }}}
+  local colorMode='auto'
+  local out="/dev/stderr" exitDo=false exitV=0 check=false checkRes=true echoParam=
+  local printForce= level= levelCurrent= flags= justNL=false addHeader=true convertColors=false
+  [[ -z $module ]] && module=$(__echor_util --get-name)
+  [[ -z $base   ]] && base="$(__echor_util --convert-to-var "$module")"
+  local moduleDbg="${base}_DBG" moduleDbgStack=${base}_DBG_STACK
+  local -n refDbg=$moduleDbg refDbgStack=$moduleDbgStack
+  if [[ -z $refDbg ]]; then # {{{
+    if $verbose; then # {{{
+      local moduleHelper="ECHOR_HELPER_${base}"
+      local -n refHelper=$moduleHelper
+      if [[ $refHelper != *printed:* ]]; then
+        echo "echorm -M +$module" >/dev/stderr
+        echo "export $moduleDbg=true" >/dev/stderr
+        export refHelper+='printed:'
+      fi
+    fi # }}} # }}}
+  else # {{{
+    case $refDbg in
+    true) # {{{
+      level=1;; # }}}
+    true:* | :*) # {{{
+      level="${refDbg#*:}"
+      [[ -z $level ]] && level=3;; # }}}
+    [1-9]) # {{{
+      level="$refDbg";; # }}}
+    esac
+  fi # }}}
+  [[ -z $refDbg && $module == 'cli' ]] && export refDbg=true
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -n)            echoParam="-n";;
+    -nl)           justNL=true;;
+    -nh)           addHeader=false;;
+    --color=force) colorMode=force;;
+    --color=off)   colorMode=off;;
+    -C)            convertColors=true;;
+    -o | --out)    out="$2"; shift;;
+    --check)       check=true;;
+    -v)            flags="-v";  [[ -z $levelCurrent ]] && levelCurrent=2;;
+    +v)            flags="+v";  [[ -z $levelCurrent ]] && levelCurrent=2;;
+    -xv)           flags="-xv"; [[ -z $levelCurrent ]] && levelCurrent=3;;
+    +xv)           flags="+xv"; [[ -z $levelCurrent ]] && levelCurrent=3;;
+    -l)            levelCurrent=$2; shift;;
+    -l[0-9])       levelCurrent=${1#-l};;
+    -f) # controls whether to print or not and set level # {{{
+      local val=${2:-$refDbg}; shift
+      case $val in
+      true:* | :*) # {{{
+        export refDbg="true:${val#*:}";; # }}}
+      [1-9]) # {{{
+        export refDbg="true:${val#*:}";; # }}}
+      on  | + | true) # {{{
+        export refDbg="true"
+        ;; # }}}
+      off | - | 0 | false | * ) # {{{
+        export refDbg="false";; # }}}
+      esac;; # }}}
+    -f\?-) # returns true if logging is disabled # {{{
+      case $refDbg in
+      on  | + | [1-9] | true | true:* | :*)  exitV=1;;
+      '') exitV=10;;
+      *)  exitV=0;;
+      esac
+      shift $#;; # }}}
+    -f\? | -f\?\? | -f\?var) # returns true if logging is enabled, ?var: prints true/false, ??: prints logging level # {{{
+      case $refDbg in
+      on  | + | [1-9] | true | true:* | :*)  exitV=0;;
+      '') exitV=10;;
+      *)  exitV=1;;
+      esac
+      if [[ $1 == '-f?var' ]]; then
+        local v=false
+        [[ $exitV == 0 ]] && v=true
+        shift
+        echo "${1:-dbg}='$v' ${2:-module}='$module::$base'"
+      elif [[ $1 == '-f??' ]]; then
+        echo "${level:-0}"
+      fi
+      shift $#;; # }}}
+    -f-) # unset control variables aka clean-up {{{
+      unset $moduleDbg $moduleDbgStack
+      shift $#;; # }}}
+    -F) # forces to print (or deny) once # {{{
+      case $2 in
+      on  | + | 1 | true) # {{{
+        printForce="force:on" ; shift;; # }}}
+      off | - | 0 | false) # {{{
+        printForce="force:off"; shift;; # }}}
+      *) # {{{
+        printForce="force:on";; # }}}
+      esac;; # }}}
+    -F\?) # prints control variables # {{{
+      echo "$moduleDbg"
+      [[ ! -z $refDbgStack ]] && echo "$moduleDbgStack"
+      shift $#;; # }}}
+    -F\?\?) # prints control variables (+values) # {{{
+      echo "$moduleDbg=\"$refDbg\""
+      [[ ! -z $refDbgStack ]] && echo "$moduleDbgStack=\"$refDbgStack\""
+      shift $#;; # }}}
+    --push) # {{{
+      export refDbgStack="$refDbg::$refDbgStack";; # }}}
+    --pop) # {{{
+      if [[ ! -z $refDbgStack ]]; then
+        local v=${refDbgStack%%::*}
+        refDbg=${v%::}
+        refDbgStack=${refDbgStack#*::}
+      fi;; # }}}
+    --msg) # {{{
+      shift
+      export ECHOR_MSG="${1:-TB]}"
+      [[ $ECHOR_MSG == '-' ]] && ECHOR_MSG="TB]"
+      [[ $ECHOR_MSG == '--' ]] && ECHOR_MSG="";; # }}}
+    -) shift; break;;
+    *) # {{{
+      if [[ $1 == 0 ]]; then
+        printForce="force:on"; shift
+      elif [[ ! -z $level && -z $levelCurrent && $1 =~ ^-?[0-9]+$ ]]; then
+        levelCurrent=$1; shift
+      fi
+      break;; # }}}
+    esac; shift
+  done # }}}
+  if [[ $printForce != 'force:on' ]]; then # {{{
+    local dbgVal=false
+    case $refDbg in
+    on  | + | 1 | true | true:* | :*) dbgVal=true;;
+    esac
+    if ! $dbgVal;then
+      $verbose && echo "Not printed due to dbg flag: $moduleDbg=$refDbg" >/dev/stderr
+      exitDo=true; checkRes=false
+    elif [[ ! -z $levelCurrent && $levelCurrent -gt $level ]]; then
+      $verbose && echo "Not printed due to log level: $levelCurrent > $level, $moduleDbg=$refDbg" >/dev/stderr
+      exitDo=true; checkRes=false
+    elif ! $check && ! $justNL && [[ -z $1 ]];then
+      $verbose && echo "Not printed due to no input" >/dev/stderr
+      exitDo=true
+    elif [[ $printForce == "force:off" ]]; then
+      $verbose && echo "Not printed due to forced off" >/dev/stderr
+      exitDo=true; checkRes=false
+    fi
+  fi # }}}
+  if ! $check && ! $exitDo && $justNL && [[ -z $1 ]]; then # {{{
+    echo >$out
+    exitDo=true
+  fi # }}}
+  if $check || [[ ! -z $flags ]]; then # {{{
+    $checkRes || flags=
+    exitDo=true; shift $#
+    if $check; then
+      if $checkRes; then
+        [[ -z $levelCurrent ]] && echo 0 || echo 10
+        exitV=0
+      else
+        echo 1
+        exitV=1
+      fi
+    fi
+  fi # }}}
+  if $exitDo; then # {{{
+    if [[ ! -z $flags ]]; then set $flags
+    elif [[ ! -z $flagsOut ]]; then set -$flagsOut
+    fi
+    return $exitV
+  fi # }}}
+  local useColors=true
+  if false \
+     || ( [[ $out == /dev/stderr && ! -t 2 && $colorMode != 'force' ]] ) \
+     || ( [[ $out == /dev/stdout && ! -t 1 && $colorMode != 'force' ]] ) \
+     || [[ $colorMode == 'off' ]]; then # {{{
+    useColors=false
+  fi # }}}
+  local str=
+  $convertColors && str="$(printfc "$@")"
+  echo -e $echoParam "$($addHeader && __echor_util --get-header -c:$useColors -m:$module -l:${levelCurrent:-1}/$level)${str:-$@}" >$out
+  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+} # }}}
+echor() { # @@ # {{{
+  local flagsIn=$- flagsOut=
+  set +xv
+  [[ $flagsIn == *v* ]] && flagsOut+="v"
+  [[ $flagsIn == *x* ]] && flagsOut+="x"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -o | --out) # {{{
+      echo "/dev/stdout /dev/stderr";; # }}}
+    --msg) # {{{
+      echo "- -- TB] Msg";; # }}}
+    *)  echo "--stdout -1 -o --out - --colors=off --colors=force -C --msg --check -M -n -e -c -nh";;
+    esac
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return 0
+  fi # }}}
+  local colorMode='auto'
+  local str= out="/dev/stderr" exitDo=false exitV=0 addHeader=true convertColors=false
+  local paramsEcho= checkDo=false level=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -nh)           addHeader=false;;
+    --color=force) colorMode=force;;
+    --color=off)   colorMode=off;;
+    -C)            convertColors=true;;
+    -o | -out)     out="$2"; shift;;
+    --stdout | -1) out=/dev/stdout;;
+    -n | -e)       paramsEcho+=" $1";;
+    -c)            checkDo=true;;
+    --msg) # {{{
+      shift
+      export ECHOR_MSG="${1:-TB]}"
+      [[ $ECHOR_MSG == '-' ]] && ECHOR_MSG="TB]"
+      [[ $ECHOR_MSG == '--' ]] && ECHOR_MSG=
+      [[ -z $2 ]] && exitDo=true;; # }}}
+    --check | -M) # {{{
+      case $(echorm --check $2) in
+      0)  ;;
+      10) level=$2; shift;;
+      *)  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi; return 0;;
+      esac;; # }}}
+    -) shift; break;;
+    *) # {{{
+      if [[ ! -z $_echor_ref_l && $1 =~ ^-?[0-9]+$ ]]; then
+        if [[ $1 -gt $_echor_ref_l ]]; then
+          shift $# && exitDo=true
+        else
+          _echor_pre+="-${1#-}"
+          shift
+        fi
+      fi
+      break;; # }}}
+    esac
+    shift
+  done # }}}
+  if ! $exitDo; then # {{{
+    ${ECHOR_OFF:-false} && exitDo=true
+  fi # }}}
+  if $exitDo; then # {{{
+    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+    return $exitV
+  fi # }}}
+  if $checkDo; then # {{{
+    case $1 in
+    true  | 0)                str="$2";;
+    false | [1-9][0-9]* | '') str="$3";;
+    *)
+      if eval "$1" >/dev/null 2>&1; then
+        str="$2"
+      else
+        str="$3"
+      fi;;
+    esac
+    shift $#
+    if [[ -z "$str" ]]; then
+      if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      return 0
+    fi
+  fi # }}}
+  local useColors=true
+  if false \
+     || ( [[ $out == /dev/stderr && ! -t 2 && $colorMode != 'force' ]] ) \
+     || ( [[ $out == /dev/stdout && ! -t 1 && $colorMode != 'force' ]] ) \
+     || [[ $colorMode == 'off' ]]; then # {{{
+    useColors=false
+  fi # }}}
+  $convertColors && [[ -z $str ]] && str="$(printfc "$@")"
+  echo -e $paramsEcho "$($addHeader && __echor_util --get-header -c:$useColors -m:-cli -l:$level)${str:-$@}" >$out
+  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+} # }}}
+echorc() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echor $@
+    echor $@ '' -c
+    return 0
+  fi
+  echor -c "$@"
+} # }}}
+echorv() { # @@ # {{{
+  local evFIn=$- evFOut=
+  set +xv
+  [[ $evFIn == *v* ]] && evFOut+="v"
+  [[ $evFIn == *x* ]] && evFOut+="x"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -o | --out) # {{{
+      echo "/dev/stdout /dev/stderr";; # }}}
+    --msg) # {{{
+      echo "- -- TB] Msg";; # }}}
+    --val-sep) # {{{
+      echo ":";; # }}}
+    *) # {{{
+      echo "--stdout -1 -o --out - --colors=off --colors=force --msg --check -M -nl -nh --pair -Name@Variable --val-sep -e --export -xc"
+      compgen -v;; # }}}
+    esac
+    if [[ ! -z $ev_fOut ]]; then set -$ev_fOut; fi
+    return 0
+  fi # }}}
+  local evColorMode='auto'
+  local evStr= evOut="/dev/stderr" evExit=false evExitV=0 evSep=" " evAddHeader=true evLevel= evValSep= evExportMode=false evUseClip=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -nh)           evAddHeader=false;;
+    -e | --export) evExportMode=true; evSep="\n";;
+    -xc)           evUseClip=true;;
+    --val-sep)     evValSep="$2"; shift;;
+    --color=force) evColorMode=force;;
+    --color=off)   evColorMode=off;;
+    -o | --out)    evOut="$2"; shift;;
+    --stdout | -1) evOut=/dev/stdout;;
+    -nl)           evSep="\n";;
+    --msg) # {{{
+      shift
+      export ECHOR_MSG="${1:-TB]}"
+      [[ $ECHOR_MSG == '-' ]] && ECHOR_MSG="TB]"
+      [[ $ECHOR_MSG == '--' ]] && ECHOR_MSG="";; # }}}
+    --check | -M) # {{{
+      case $(echorm --check $2) in
+      0)  ;;
+      10) evLevel=$2; shift;;
+      *)  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi; return 0;;
+      esac;; # }}}
+    -) shift; break;;
+    *) # {{{
+      if [[ ! -z $_echor_ref_l && $1 =~ ^-?[0-9]+$ ]]; then
+        if [[ $1 -gt $_echor_ref_l ]]; then
+          shift $# && evExit=true
+        else
+          _echor_pre+="-${1#-}"
+          shift
+        fi
+      fi
+      break;; # }}}
+    esac
+    shift
+  done # }}}
+  if ! $evExit; then # {{{
+    if [[ -z $1 ]]; then evExit=true
+    elif ${ECHOR_OFF:-false}; then evExit=true
+    fi
+  fi # }}}
+  if $evExit; then # {{{
+    if [[ ! -z $evFOut ]]; then set -$evFOut; fi
+    return $evExitV
+  fi # }}}
+  ev_fGetValue() { # {{{
+    case $1 in
+    --is-array) # {{{
+      [[ $(declare -p $2 2>/dev/null) =~ ^"declare -a" || $(declare -p $2 2>/dev/null) =~ ^"declare -A" ]] 2>/dev/null
+      return $?;; # }}}
+    --get-array-value) # {{{
+      local _vv="$(declare -p $2 2>/dev/null)"
+      [[ $_vv == *=* ]] && echo "$_vv" | sed 's/[^=]*=//' || echo "()"
+      return 0;; # }}}
+    '') # {{{
+      return 0;; # }}}
+    *) # {{{
+      local _echor_n=$1 _echor_vn=$2
+      [[ $# == 1 ]] && _echor_vn=$1
+      local _echor_vv=
+      if ! $evExportMode; then
+        if ev_fGetValue --is-array $_echor_vn; then
+          _echor_vv="$(ev_fGetValue --get-array-value $_echor_vn)"
+        else
+          _echor_vv="${!_echor_vn}"
+          [[ ! -z $evValSep ]] && _echor_vv="$(echo "$_echor_vv" | tr "$evValSep" "\n")"
+        fi
+        echo "$evColorVar$_echor_n$evColorOffVar=[$_echor_vv$evColorOffVar]"
+      else
+        local _echor_decl="$(declare -p "$_echor_n" 2>/dev/null| sed 's/=.*//')"
+        case "$_echor_decl" in
+        'declare -Ax '* | 'declare -ax '*)
+          _echor_vv="$(ev_fGetValue --get-array-value $_echor_vn)"
+          echo "${_echor_decl/ $_echor_n/ $evColorVar$_echor_n$evColorOffVar}=$_echor_vv";;
+        'declare -A '*  | 'declare -a '* )
+          _echor_vv="$(ev_fGetValue --get-array-value $_echor_vn)"
+          _echor_decl="${_echor_decl/ $_echor_n/ $evColorVar$_echor_n$evColorOffVar}"
+          echo "${_echor_decl/declare/declare -x}=$_echor_vv";;
+        *)
+          _echor_vv="${!_echor_vn}"
+          [[ ! -z $evValSep ]] && _echor_vv="$(echo "$_echor_vv" | tr "$evValSep" "\n")"
+          echo "export $evColorVar$_echor_n$evColorOffVar=\"${_echor_vv}\"";;
+        esac
+      fi
+      return 0;; # }}}
+    esac
+  } # }}}
+  local useColors=true evColorVar=$(__echor_util --get-color var) evColorOffVar=$COff
+  if false \
+     || ( [[ $evOut == /dev/stderr && ! -t 2 && $colorMode != 'force' ]] ) \
+     || ( [[ $evOut == /dev/stdout && ! -t 1 && $colorMode != 'force' ]] ) \
+     || [[ $colorMode == 'off' ]]; then # {{{
+    useColors=false evColorVar= evColorOffVar=
+  fi # }}}
+  local evStrNoColor=
+  while [[ ! -z $1 ]]; do # {{{
+    local evValue=
+    case $1 in
+    --pair) # {{{
+      evValue="$(ev_fGetValue "$2" "$3")"; shift 2;; # }}}
+    -*@*) # {{{
+      local _echor_n=${1%%@*} _echor_v=${1#*@}
+      evValue="$(ev_fGetValue ${_echor_n#-} "${_echor_v}")";; # }}}
+    *) # {{{
+      evValue="$(ev_fGetValue $1)";; # }}}
+    esac; shift
+    [[ ! -z $evStr ]] && evStr+="$evSep"
+    evStr+="$evValue"
+    if $evUseClip; then # {{{
+      [[ ! -z $evColorVar ]] && evValue="${evValue/$evColorVar}" && evValue="${evValue/$evColorOffVar}"
+      [[ ! -z $evStrNoColor ]] && evStrNoColor+="\n"
+      evStrNoColor+="$evValue"
+    fi # }}}
+  done # }}}
+  unset ev_fGetValue
+  $evUseClip && [[ ! -z $evStrNoColor && -z $evValSep ]] && echo -e "$evStrNoColor" | xc
+  local header=$($evAddHeader && __echor_util --get-header -c:$useColors -m:-cli -l:$evLevel)
+  echo -e "$evStr" \
+  | if [[ ! -z $header ]]; then
+      sed 's/^/'"$header"'/'
+    else
+      cat -
+    fi >$evOut
+  if [[ ! -z $evFOut ]]; then set -$evFOut; fi
+} # }}}
+echore() { # {{{
+  if [[ $1 == '--check' || $1 == '-M' ]]; then # {{{
+    case $(echorm --check $2) in
+    0)  shift;;
+    10) shift 2;;
+    *)  return 0;;
+    esac
+  fi # }}}
+  echo "$@" >/dev/stderr
+} # }}}
+export -f echor echorv echorc echore echorm __echor_util
+export ECHOR_PATH="$BASH_ESSENTIALS_PATH/aliases.d"
+

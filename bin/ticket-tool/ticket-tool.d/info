@@ -8,6 +8,10 @@ l1="$(eval printf "─%.0s"  {1..$len})"
 l2="$(eval printf "═%.0s"  {1..$len})"
 multi=$((${#l1} / 4))
 multi="$(printf "\\\\0%.s" $(eval echo {1..$multi}))"
+if [[ $1 == '@@' ]]; then
+  echo -ne "$func" | sed -n -e '/^##\+ @ .*/s/##\+ @ \+\([^ ]*\)\( .*\)\?/\1/p'
+  exit 0
+fi
 [[ -t 1 ]] || unset $($BASH_PATH/colors --list)
 if [[ -z $1 ]]; then
   echo -ne "$func\n" | sed -e "s/^\(##\+ @\) .*}}[}]/\1/"

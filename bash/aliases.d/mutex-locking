@@ -20,14 +20,14 @@ mutex_init() { # @@ # {{{
     mutex_dbg "Locking (wait=$timeout)"
     if [[ -e $MUTEX_LOCK_FILE && $MUTEX_ACCESS_MIN_DELTA -gt 0 ]]; then
       local accessTime=$(stat -c %Y $MUTEX_LOCK_FILE)
-      local currentTime="$(date +"%s")"
+      local currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
       mutex_dbg "Mutex already exists, (at=$accessTime, ct=$currentTime, d=$MUTEX_ACCESS_MIN_DELTA)"
       if [[ $(($accessTime + $MUTEX_ACCESS_MIN_DELTA)) -lt $currentTime ]]; then
         mutex_dbg "Removing old mutex"
         rm -rf $MUTEX_LOCK_FILE
       fi
     fi
-    local time=$(( $(date +%s) + $timeout ))
+    local time=$(( ${EPOCHSECONDS:-$(epochSeconds)} + $timeout ))
     local ct=0
     while [[ $ct -lt $time ]]; do
       if command mkdir $MUTEX_LOCK_FILE 1>/dev/null 2>&1; then
@@ -36,7 +36,7 @@ mutex_init() { # @@ # {{{
         return 0
       fi
       sleep "$(echo $RANDOM | awk '{print 0.2 + ( $1 % 10 ) / 15}')"
-      ct=$(date +%s)
+      ct=${EPOCHSECONDS:-$(epochSeconds)}
     done
     mutex_dbg "Mutex not locked"
     return 1

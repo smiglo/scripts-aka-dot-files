@@ -1,13 +1,20 @@
 Session*.vim
 .DS_Store
+
+*.adoc.html
+*.bck
+*.dmp
+*.hist
 *.out
 *.pyc
 *.swo
 *.swp
 *~
-nohup.out
 
-*.adoc.html
+.rr
+rr-*
+
+.shr.cfg
 
 /build/
 tmp-tb

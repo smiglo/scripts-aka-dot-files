@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+__key_getter_verbose=false
 getKey() { # {{{
   local key= IFS=
   read -rsn${1:-1} ${@:2} key
-  echo -ne "$key" | xxd -g8 | cut -d\  -f2
+  local res="$(echo -ne "$key" | xxd -g8 | cut -d\  -f2)"
+  $__key_getter_verbose && echo "r:[$res]" >/dev/stderr
+  echo "$res"
 } # }}}
 readKey() { # {{{
+  [[ $1 == '-v' ]] && __key_getter_verbose=true && shift
   local key="$(getKey)"
   case $key in
   01) echo "c-a";;
@@ -55,10 +59,23 @@ readKey() { # {{{
       1b5b31 | 1b5b34 | \
       1b5b32 | 1b5b33 | \
       1b5b35 | 1b5b36)
-        key+="$(getKey)"; continue;;
+        key+="$(getKey 1 -t .1)"; continue;;
       1b5b3135 | 1b5b3137 | 1b5b3138 | 1b5b3139 | \
       1b5b3230 | 1b5b3231 | 1b5b3233 | 1b5b3234 )
         key+="$(getKey)"; continue;;
+      1b5b313b) key+="$(getKey 2 -t .1)"; continue;;
+      1b5b313b3241) echo "shift-up";;
+      1b5b313b3242) echo "shift-down";;
+      1b5b313b3243) echo "shift-right";;
+      1b5b313b3244) echo "shift-left";;
+      1b5b313b3341) echo "alt-up";;
+      1b5b313b3342) echo "alt-down";;
+      1b5b313b3343) echo "alt-right";;
+      1b5b313b3344) echo "alt-left";;
+      1b5b313b3541) echo "ctrl-up";;
+      1b5b313b3542) echo "ctrl-down";;
+      1b5b313b3543) echo "ctrl-right";;
+      1b5b313b3544) echo "ctrl-left";;
       1b5b317e) echo "home";;
       1b5b327e) echo "ins";;
       1b5b337e) echo "del";;
@@ -73,13 +90,17 @@ readKey() { # {{{
       1b5b32317e) echo "f10";;
       1b5b32337e) echo "f11";;
       1b5b32347e) echo "f12";;
-      *) echo "?$key";;
+      *) # {{{
+        key+="$(getKey 10 -t .1)"
+        local k=${key#1b}
+        [[ $(echo "$(( 0x$k ))") -ge 32 && $(echo "$(( 0x$k ))") -lt 127 ]] && echo -e "alt-\x$k"  || echo "?$key"
+        ;; # }}}
       esac
       break
-    done ;; # }}}
+    done;; # }}}
   *)  [[ $(echo "$(( 0x$key ))") -ge 32 ]] && echo -e "\x$key" || echo "?$key";;
   esac
 } # }}}
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && readKey
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && readKey "$@"
 

@@ -8,7 +8,7 @@ f() { # @@ # {{{
     return 0
   fi
   local use_tee=true use_fzf=true fallback=false params= query= force_find=false
-  ! which fd >/dev/null 2>&1 && force_find=true
+  ! which fdfind >/dev/null 2>&1 && force_find=true
   while [[ ! -z $1 ]]; do
     case $1 in
     +t | +tee)   use_tee=true;;
@@ -31,8 +31,7 @@ f() { # @@ # {{{
         local msg="Falling back to find command: 'find $params $@'"
         progress --msg "$msg" --dots --cnt 30 --no-err --out /dev/stderr || return 0
         if [[ ! -t 1 ]]; then
-          echo "find $params $@"
-          echo
+          echorm "find $params $@"
         fi
         fallback=true
       fi
@@ -43,11 +42,14 @@ f() { # @@ # {{{
   [[ ! -t 1 ]] && use_fzf=false
   if ! $fallback; then
     if ! $force_find; then
+      echorm "fd $1"
       output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'fd: $query> '" --no-err fd "$1"
     else
+      echorm "find . -name \"$1\""
       output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find . -name "$1"
     fi
   else
+    echorm "find $params \"$@\""
     output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find $params "$@"
   fi
   return $?

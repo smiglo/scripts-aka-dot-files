@@ -10,12 +10,15 @@ tm() { # @@ # {{{
     local sessions="$(tmux list-sessions -F '#S')"
     local ret=""
     if [[ $2 == 1 ]]; then
-      ret="-d -a --attach -p --path --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l --new --pane"
+      ret="-d -a --attach -p --path --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l --new --pane --env -e"
     else
       case $4 in
       -a|--attach) ret="$sessions";;
       -p|--path)   ret="@@-d";;
       --b-restore) ret="$(command cd $buffers_path; command ls -Ad *)";;
+      --env | -e) # {{{
+        ret=" -w -v"
+        ret+="$(tmux show-environment -g | awk -F'=' '/^[A-Z].*=/ && !/=\(\)/{print $1}')";; # }}}
       --pane) # {{{
         case $3 in
         \?\?)   ret="$(tmux list-panes -a -F '#T' | sed 's/ /@SP@/g')";;
@@ -67,6 +70,7 @@ tm() { # @@ # {{{
     -a | --attach  | \
     -p | --path    | \
     -b | --buffers | \
+    -e | --env     | \
     --b-dump       | \
     --b-restore    | \
     --install      | \
@@ -81,6 +85,7 @@ tm() { # @@ # {{{
           -a) utils='attach';;
           -p) utils='path';;
           -b) utils='buffers';;
+          -e) utils='env';;
           l)  utils='layout';;
           ld) utils='l-dump';;
           lr) utils='l-restore';;
@@ -96,6 +101,35 @@ tm() { # @@ # {{{
   [[ ! -z $utils ]] || return 1
   local var= i= buffer_fix='buffer'
   case $utils in # {{{
+  env) # {{{
+    local pGlob='-g' verbose=false
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -w) pGlob=;;
+      -v) verbose=true;;
+      *)  break;;
+      esac; shift
+    done # }}}
+    while [[ ! -z $1 ]]; do # {{{
+      local i=$1 v= p=$pGlob w= e=; shift
+      [[ $i == *=* ]] && v=${i#*=} && i=${i%%=*}
+      w="$(tmux show-environment $p $i 2>/dev/null)"; e=$?
+      if [[ $e != 0 ]]; then
+        p=
+        w="$(tmux show-environment $p $i 2>/dev/null)"; e=$?
+      fi
+      [[ $e == 0 ]] && $verbose && echor "Current value$([[ $p != '-g' ]] && echo " (-w)") : $w"
+      if [[ -z $v ]]; then # {{{
+        if [[ $1 == '-v' ]]; then
+          shift && v=$1 && shift
+        else
+          v=${!i}
+        fi
+      fi # }}}
+      tmux set-environment $p $i "$v"
+      $verbose && echor "New value$([[ $p != '-g' ]] && echo " (-w)")     : $(tmux show-environment $p $i 2>/dev/null)"
+    done # }}}
+    return 0;; # }}}
   layout) # {{{
     local toChange= layoutV="$(tmux show-window-options -v '@layout' 2>/dev/null)" swap=false
     while [[ ! -z $1 ]]; do # {{{
@@ -490,7 +524,7 @@ tm() { # @@ # {{{
   attach) # {{{
     var=${1^^}
     if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
-      [[ -e $TMP_PATH/.tmux_last_session ]] && var="$(cat $TMP_PATH/.tmux_last_session)"
+      [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && var="$(cat $TMP_PATH/.tmux_last_session.$USER)"
       if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
         var=${TMUX_DEFAULT_SESSION:-'MAIN'}
       fi
@@ -569,14 +603,14 @@ tm() { # @@ # {{{
     fi # }}}
     cmd+=" tmux $params \; set -t $title $params_set @tmux_path \"$PWD\""
     cmd+=" $fix_for_v16"
-    _aliases_dbg "$cmd"
+    echorm "$cmd"
     local pid=$$
     [[ $(ps | command grep $pid) == *aliases* ]] && pid=$PPID
     trap "kill -SIGHUP $pid" SIGHUP
     ( unset TMUX; eval $cmd; )
     if $switchTo; then # {{{
       cmd="tmux switch-client -t $title"
-      _aliases_dbg "$cmd"
+      echorm "$cmd"
       eval $cmd
     fi # }}}
     return 0
@@ -604,9 +638,13 @@ tm() { # @@ # {{{
   fi # }}}
 } # }}}
 tmux_progress() { # @@ # {{{
+  [[ ! -n $TMUX ]] && return
   $HOME/.tmux.bash progress_bar "$@"
 } # }}}
+tmux-lock-toggle() {
+  [[ ! -n $TMUX ]] && return
+  $HOME/.tmux.bash lock_toggle --ssh
+}
 
-export PHISTORY_IGNORED_COMMANDS+=":tm"
-export PHISTORY_IGNORED_COMMANDS+=":tmux_progress"
+export PHISTORY_IGNORED_COMMANDS+=":tm:tmux_progress:tmux-lock-toggle"
 

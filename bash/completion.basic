@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
+compl-add() { # {{{
+  local i=
+  for i; do
+    complete -r $i >/dev/null 2>&1
+    complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i
+  done
+}
+completion_add() {
+  compl-add "$@"
+}
+export -f compl-add completion_add # }}}
+_completion_generic() { # {{{
+  local cur= prev= opts= cmd= _alias= param= i=
+  cur=${COMP_WORDS[COMP_CWORD]}
+  _get_comp_words_by_ref -n : cur
+  prev=${COMP_WORDS[COMP_CWORD-1]}
+  cmd=${COMP_WORDS[0]}
+  param="@@"
+  if [[ $cmd == 'git' ]]; then
+    cmd="git-cmds.sh"
+    param+="${COMP_WORDS[1]}"
+  else
+    _alias=$(alias | command grep "alias $cmd=")
+    if [[ $? == 0 ]]; then
+      _alias=$(echo $_alias | sed "s/alias $cmd=//")
+      cmd=${_alias//\'} #' //Vim formatting fixing}
+      cmd=${cmd/*;}
+      cmd=${cmd/ *}
+    fi
+  fi
+  # echo "c=[$cmd $param]" >/dev/stderr
+  opts="$($cmd $param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})"
+  set -- $(echo -e "$opts")
+  opts=''
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    @@*) case ${1:2} in # {{{
+         -f) while read -r i; do # {{{
+               opts+=" ${i// /\\ }"
+               [[ -d $i ]] && opts+='/'
+             done < <(compgen -f -- "$cur");; # }}}
+         -d) while read -r i; do # {{{
+               opts+=" ${i// /\\ }/"
+             done < <(compgen -d -- "$cur");; # }}}
+         *)  while read -r i; do # {{{
+               opts+=" ${i// /\\ }"
+             done < <(compgen ${1:2} -- "$cur");; # }}}
+         esac;; # }}}
+    ---) opts="---"; break;;
+    *) opts+=" ${1//@SP@/\\ }";;
+    esac
+    shift
+  done # }}}
+  COMPREPLY=()
+  if [[ "$opts" != '---' ]]; then
+    i=0
+    while read -r opts; do # {{{
+      COMPREPLY[$i]="${opts// /\\ }"
+      i=$(($i+1))
+    done < <(compgen -W "${opts//\\/\\\\}" -- "$cur") # }}}
+  else
+    COMPREPLY[0]=""
+  fi
+  __ltrim_colon_completions "$cur"
+}
+export -f _completion_generic
+# }}}
+

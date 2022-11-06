@@ -16,12 +16,22 @@
 if [[ $1 == '--complete' ]]; then # {{{
   [[ "${BASH_SOURCE[0]}" == "${0}" ]] && echo "Must be sourced (source $0 --complete)" >/dev/stderr && exit 1
   __complete_keep_pass() { # {{{
-    local cur=${COMP_WORDS[COMP_CWORD]} opts= first="${COMP_WORDS[1]}"
+    local cur=${COMP_WORDS[COMP_CWORD]} opts= first="${COMP_WORDS[1]}" i=2
+    while true; do
+      case $first in
+      -v | -vv | -vvv | --journal) first="${COMP_WORDS[i]}"; i=$((i+1));;
+      *) break;;
+      esac
+    done
     [[ $COMP_CWORD == 1 ]] && first=
     case ${COMP_WORDS[COMP_CWORD-1]} in
     --cnt) # {{{
       opts+=" $(echo {1..10})";; # }}}
     --journal) # {{{
+      local journalFiles="$KEEP_PASS_JOURNALS"
+      [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+      [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
+      opts="$journalFiles"
       ;; # }}}
     --key | --save) # {{{
       local journalFiles="$KEEP_PASS_JOURNALS" f=
@@ -40,7 +50,7 @@ if [[ $1 == '--complete' ]]; then # {{{
     *) # {{{
       case $first in
       --gen) # {{{
-        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --key --update --padding --no-padding --plain --pwd-save --no-pwd-save"
+        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --key --update --padding --no-padding --plain --pass-save --no-pass-save"
         opts+=" --in --in= --seq --seq="
         opts+=" --pass --pass= --no-pass";; # }}}
       --get | '') # {{{
@@ -51,7 +61,7 @@ if [[ $1 == '--complete' ]]; then # {{{
         opts+=" -d -dd";; # }}}
       --set-master-key) # {{{
         opts+=" -t";; # }}}
-      '') # {{{
+      *) # {{{
         opts+=" -v -vv -vvv --journal"
         opts+=" --gen --get --key --save --has-key --list-keys --list-all-keys --set-master-key --help";; # }}}
       esac;; # }}}
@@ -65,14 +75,15 @@ if [[ $1 == '--complete' ]]; then # {{{
 fi # }}}
 
 dbg() { # {{{
-  local l=$1 p=; shift
-  [[ $l -gt $verbose ]] && return 0
+  local p= l=
   [[ $1 == '-e' || $1 == '-n' ]] && p=$1 && shift
-  [[ -z $1 ]] && echo >/dev/stderr || echo $p "DBG#$(printf '%02d' $l): $@" >/dev/stderr
+  l=$1; shift
+  [[ -z $1 ]] && return 0
+  echorm $p $l "DBG#$(printf '%02d' $l): $@"
   return 0
 } # }}}
 err() { # {{{
-  echo "ERR: $@" >/dev/stderr
+  echorm -F + "ERR: $@"
 } # }}}
 LC_ALL=C
 dictFile="${KEEP_PASS_DICT:-$(dirname "$(readlink -f "$0")")/keep-pass.dict}"
@@ -197,10 +208,10 @@ setMasterKey() { # {{{
   fi
   while [[ $tries -gt 0 ]]; do
     if [[ -z $mkey ]]; then
-      if read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p 'Enter master key: ' mkey >/dev/stderr; then
-        [[ -z $mkey ]] && echo >/dev/stderr && return 1
+      if read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p "${CYellow}Enter master key:${COff} " mkey >/dev/stderr; then
+        [[ -z $mkey ]] && echore && return 1
       fi
-      echo >/dev/stderr
+      echore
     fi
     if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
       dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
@@ -243,8 +254,8 @@ getMasterkey() { # {{{
   fi
   [[ ! -z $mkey ]] && echo "$mkey" && return 0
   $interactive || return 1
-  read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echo >/dev/stderr
-  echo >/dev/stderr
+  read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echor
+  echor
   [[ -z $mkey ]] && return 1
   if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
     dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
@@ -260,7 +271,7 @@ getMasterkey() { # {{{
   echo "$mkey"
 } # }}}
 encrypt() { # {{{
-  local src= ret= decrypt=false pass= params= interactive=
+  local src= ret= decrypt=false pass= params= interactive= err=0
   [[ $1 == '-d' ]] && decrypt=true && shift
   src="$1" pass="$2" interactive="${3:-true}"
   params="enc -aes-256-cbc -salt -a -A -md md5"
@@ -281,8 +292,13 @@ encrypt() { # {{{
     return 0
   fi
   $decrypt && params+=" -d" || params+=" -e"
-  ret="$(echo "$src" | eval openssl $params 2>/dev/null)" || return 1
-  echo "$ret"
+  if echo "$src" | eval openssl $params 2>/dev/null >"$TMP_MEM_PATH/kp.$$.pwd"; then
+    cat "$TMP_MEM_PATH/kp.$$.pwd"
+  else
+    err=1
+  fi
+  rm -f "$TMP_MEM_PATH/kp.$$.pwd"
+  return $err
 } # }}}
 getPass() { # {{{
   local i= w= oldIFS="$IFS" phrase= \
@@ -388,8 +404,8 @@ genPass() { # {{{
     --save)            save=true; info="$2"; use_pass=true; shift;;
     --no-padding)      add_padding=false;;
     --padding)         add_padding=true;;
-    --pwd-save)        save_pass=true;;
-    --no-pwd-save)     save_pass=false;;
+    --pass-save)       save_pass=true;;
+    --no-pass-save)    save_pass=false;;
     --plain)           do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
     *) # {{{
       if [[ $# == 2 ]]; then
@@ -502,7 +518,7 @@ genPass() { # {{{
       ${save_pass:-true} && [[ -z $pass ]] && save_pass=true
     fi # }}}
     while [[ -z $pass ]]; do # {{{
-      read -r -s -p "Enter pass: " pass >/dev/stderr && echo >/dev/stderr
+      read -r -s -p "Enter pass: " pass >/dev/stderr && echor
       [[ ! -z $pass ]] && break
       read -p 'No pass specified, proceed without encryption [y/n] ? ' >/dev/stderr
       case ${i,,} in
@@ -513,9 +529,23 @@ genPass() { # {{{
       if ${save_pass:-false} \
          && [[ ! -z "$KEEP_PASS_KEYS" ]] && [[ -e "$KEEP_PASS_KEYS" || ( "$KEEP_PASS_KEYS" == /* && "$KEEP_PASS_KEYS" != //* ) ]]; then # {{{
         local mkey="$(getMasterkey true)"
-        [[ -z $mkey ]] && err "Failed to save passphrase" && return 1
+        if [[ -z $mkey ]]; then
+          local answ=
+          while read -p "Do you want to store key in plain format [y/N]? " answ; do
+            case ${answ^^} in
+            Y) break;;
+            N | '') return 0;;
+            esac
+          done || return 1
+        fi
         if [[ ! -z $mkey ]]; then
+          if [[ -z $passV ]]; then
+            passV="KEEP_PASS_KEY_TMP_PASS_$((1+(RANDOM%1000)))"
+            dbg 2 "Pass-enc: $passV=\"@$(encrypt "$pass" "$mkey")\""
+          fi
           echo "export $passV=\"@$(encrypt "$pass" "$mkey")\"" >>"$KEEP_PASS_KEYS"
+        else
+          echo "export $passV=\"$pass\"" >>"$KEEP_PASS_KEYS"
         fi
       fi # }}}
       seq="*$(encrypt "$seq" "$pass")"
@@ -549,20 +579,24 @@ genPass() { # {{{
     entry+="\t"
     entry+="$seq"
     key="${entry%%:*}"
-    if $update; then
-      sed -i -e "/^${entry%%:*}\(:.*\)\{0,1\}:\s\+.*/ d" "$journalFile"
-    elif hasKey "$key"; then
-      dbg 0 "The key '$key' already exists"
-      sed -i '/'"${key//\//\\\/}"'/s/^/# /' "$journalFile"
+    if hasKey "$key"; then
+      if $update; then
+        sed -i '/^'"$key"':/s/^.*/'"${entry//\//\\\/}"'/' "$journalFile"
+      else
+        dbg 0 "The key '$key' already exists"
+        sed -i '/^'"$key"':/{s/^/# /;a'"$entry"'
+          ;}' "$journalFile"
+      fi
+    else
+      echo -e "$entry" >> "$journalFile"
     fi
-    echo -e "$entry" >> "$journalFile"
   fi # }}}
   return 0
 } # }}}
 hasKey() { # {{{
   local f=
   for f in $(getJournals); do
-    [[ -e $f ]] && command grep -q "^$1\(:.*\)\{0,1\}:\s\+" "$f" && return 0
+    [[ -e $f ]] && command grep -q "^$1:" "$f" && return 0
   done
   return 1
 } # }}}
@@ -612,12 +646,14 @@ while [[ ! -z $1 ]]; do # {{{
   esac
   shift
 done # }}}
+echorm -f $verbose
 case $1 in
 --help) # {{{
-  echo "Usage:"
-  echo "  $(basename "$0") --gen [--save] name:env-pwd phrase"
-  echo "  $(basename "$0") [--get] [--key] name"
-  # echo "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
+  echor "Usage:"
+  echor "  $(basename "$0") --gen [--save] name:env-pwd phrase"
+  echor "  $(basename "$0") --gen [--key name:env-pwd] phrase"
+  echor "  $(basename "$0") [--get] [--key] name"
+  # echor "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
   exit 0;; # }}}
 --get)             shift; getPass "$@";;
 --gen)             shift; genPass "$@";;

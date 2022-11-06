@@ -59,7 +59,7 @@ fzf_exe() { # @@ # {{{
   [[ -f $file || $cmd == 'prev' ]] || { echo "Canot open [$file]" >/dev/stderr; sleep 1; return 0; }
   case $cmd in # {{{
   less)       params="-N";;&
-  vim)        params="-c FastBuffer";;&
+  vim)        params="-cl -c FastVim -c FastClipboard";;&
   less | vim)
               [[ ! -z $line ]] && params+=" +$line"
               params+=" $file"
@@ -107,12 +107,12 @@ fzf_exe() { # @@ # {{{
 fzfwr() { # {{{
   local isInputRc=false
   [[ $1 == 'iRC' ]] && isInputRc=true && shift
-  local FZF_DEFAULT_COMMAND="fd -I"
-  if ! which fd >/dev/null 2>&1; then
+  local FZF_DEFAULT_COMMAND="fdfind" # -I"
+  if ! which ${FZF_DEFAULT_COMMAND% *} >/dev/null 2>&1; then
     FZF_DEFAULT_COMMAND="command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
   fi
   FZF_DEFAULT_COMMAND+=" | sort"
-  local selected="$(fzf --height 80% "$@")"
+  local selected="$(fzf --height 80% "$@" | sed 's/^\|$/"/g' | tr '\n' ' ' | sed 's/ \+/ /')"
   if $isInputRc; then
     READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
     READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
@@ -208,13 +208,32 @@ vims() { # @@ # {{{
     esac
     return 0
   fi # }}}
+  __vims__find_files() { # {{{
+    local l= path= d=
+    while read l; do
+      if [[ -e $l ]]; then
+        echo "$l"
+      elif [[ $l != /* && ( -z $path || -e $path/$l ) ]]; then
+        if [[ -z $path ]]; then # {{{
+          path=$PWD d=
+          while [[ $path != / ]]; do
+            path=$(command cd $path/.. && pwd)
+            d+="../"
+            [[ -e $path/$l ]] && break
+          done
+          [[ ! -e $path/$l ]] && path=
+        fi # }}}
+        [[ ! -z $path && -e $path/$l ]] && echo "${d%/}/$l"
+      fi
+    done
+  } # }}}
   local dst='.1' f= verb=false
   [[ $1 == '-v' ]] && verb=true && shift
   [[ $# -ge 2 ]] && dst="$1" && shift
   f="$@"
   [[ $dst =~ .*\..* ]] || dst+=".1"
   if [[ ! -t 0 ]]; then
-    f="$(cat - | fzf)"
+    f="$(cat - | xargs -n1 | __vims__find_files | fzf)"
   elif [[ -z $f ]]; then
     f="$(fzf -m -1 -0 --prompt='vim> ')"
   fi

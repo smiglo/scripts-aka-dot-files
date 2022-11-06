@@ -1,0 +1,4 @@
+# ## Header # {{{
+# vim: ft=sh fdm=marker fdl=0
+# j-info: ALWAYS-INCLUDE, -DONE, TITLE: Scripts
+# ## }}}

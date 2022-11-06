@@ -3,11 +3,18 @@
 
 encryptor() { # @@ # {{{
   local src= dst=
-  local cipher="aes-256-cbc" params= encode="-e" use_hash_pass=true pass= verbose=false edit=false persistent=false make_link=false
+  local cipher="aes-256-cbc" params= encode="-e" use_hash_pass=true pass= edit=false persistent=false make_link=false key=
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     --key)  which keep-pass.sh >/dev/null 2>&1 && keep-pass.sh --list-all-keys;;
-    *)      echo '--stdin --stdout --no-hash-pass -d --hash-pass --pass --key --edit --pers';;
+    *) # {{{
+      if [[ " $@ " == *\ -d\ * || " $@ " == *\ --edit\ * ]]; then
+        getFileList '*.enc' | sed -e 's|^|./|'
+      else
+        echo '--stdin --stdout --no-hash-pass -d --hash-pass --pass --key --edit --pers'
+        getFileList | sed -e '/\.dec$/d' -e 's|^|./|'
+      fi
+      ;; # }}}
     esac
     return 0
   fi # }}}
@@ -18,10 +25,10 @@ encryptor() { # @@ # {{{
     --hash-pass) use_hash_pass=true;;
     --no-hash-pass) use_hash_pass=false;;
     --pass) pass="$2"; shift;;
-    --key)  pass="$($BIN_PATH/misc/keep-pass.sh --key "$2")"; shift;;
+    --key)  pass="$($BIN_PATH/misc/keep-pass.sh --key "$2")"; key="$2"; shift;;
     --edit) edit=true; encode="-d";;
     --pers) persistent=true;;
-    -v) verbose=true;;
+    -v) echorm +;;
     -d) encode="-d";;
     -*) params+=" $1";;
     *)
@@ -49,34 +56,35 @@ encryptor() { # @@ # {{{
       fi
     fi
     if [[ -z $dst && -t 1 ]]; then
-      dst="$src"
+      dst="${src%.dec}"
       if [[ $encode == '-e' ]]; then
+        [[ ! -z $key ]] && dst="${dst/.k@*./.}.k@$key"
         dst+=".enc"
       else
         ! $persistent && dst="$TMP_MEM_PATH/${src##*/}" && make_link=true
-        dst+=".dec"
+        dst="${dst/.k@*./.}" && dst="${dst%.enc}.dec"
       fi
     elif [[ $dst == '--stdout' ]]; then
       dst=""
     fi
   fi # }}}
-  $edit && dst="$TMP_MEM_PATH/${src##*/}" && touch $dst
+  $edit && dst="$TMP_MEM_PATH/${src##*/}" && dst="${dst%.enc}" && touch $dst
   if $use_hash_pass; then # {{{
     if [[ -z $pass ]]; then # {{{
       if [[ $encode == '-e' ]]; then # {{{
         local p1= p2=
         while [[ -z $pass ]]; do
           read -s -p "Pass  : " p1 >/dev/stderr </dev/tty
-          _aliases_dbg --force
+          echo >/dev/stderr
           read -s -p "Retype: " p2 >/dev/stderr </dev/tty
-          _aliases_dbg --force
-          [[ $p1 == $p2 ]] && pass=$p1$p2 || _aliases_dbg "Do not match"
+          echo >/dev/stderr
+          [[ $p1 == $p2 ]] && pass=$p1$p2 || echorm "Do not match"
         done
         p1=
         p2=
       else
         read -s -p "Pass: " pass >/dev/stderr </dev/tty
-        _aliases_dbg --force
+        echo >/dev/stderr
         pass=$pass$pass
       fi # }}}
     else
@@ -84,7 +92,7 @@ encryptor() { # @@ # {{{
     fi # }}}
   fi # }}}
   local cmd="openssl enc -$cipher -md md5 -a $params" shaCmd="sha256sum" err=0
-  $verbose && _aliases_dbg $cmd $encode $([[ ! -z $src ]] && echo "-in $src") $([[ ! -z $dst ]] && echo "-out $dst")
+  echorm "$cmd $encode $([[ ! -z $src ]] && echo "-in $src") $([[ ! -z $dst ]] && echo "-out $dst")"
   $use_hash_pass && cmd+=" -pass file:<(echo $pass | $shaCmd | cut -c1-64)"
   if [[ ! -z $src && ! -e $src ]]; then # {{{
     if ! $edit; then
@@ -107,7 +115,7 @@ encryptor() { # @@ # {{{
       sed -i -e 's/.*/a/g' -e 's/\x0a/a/' "$dst"
       rm -rf "$dst"
     elif $make_link; then
-      ln -sf "$dst" "${src}.dec"
+      ln -sf "$dst" "${dst##*/}"
     fi
   fi
   pass="$(head -c 10 /dev/random | $shaCmd | cut -c1-40)"

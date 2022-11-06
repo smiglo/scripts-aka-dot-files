@@ -1,45 +1,79 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-browser="${TICKET_CONF_BROWSER#@}" params=
+getUrls() { # {{{
+  local cmd="$1"; shift
+  local func="$(getFunctionBodyRaw "$cmd")" urls=
+  [[ -z $func ]] && echo "Cannot get any URLs from [$cmd]" >/dev/stderr && return 1
+  if [[ $cmd == 'browser' ]]; then
+    urls="$(echo "$func")"
+  else
+    urls="$($cmd_tt $cmd $@)"
+  fi
+  urls="$(echo "$urls" | sed -n -e '/^#/d' -e '/https\?:\/\//p' | sed 's/https\?:\/\//\n&/g' | sed -n '/^https\?:\/\//s/\([^ ,]*\).*/\1/p' | sort -u)"
+  echo "$urls"
+} # }}}
+browser="${TICKET_CONF_BROWSER#@}"
+profile="${TICKET_CONF_BROWSER_CHROME_PROFILE:-${CHROME_MAIN_PROFILE:-Default}}"
 if [[ -z $browser ]]; then
-  $IS_MAC && browser="open" || browser="chromium"
+  $IS_MAC && browser="open" || browser="chrome"
 fi
-all=true
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -u) # {{{
+    cmd='browser'
+    ! $cmd_tt ? | command grep -q 'browser' && cmd='info'
+    for i; do
+      case "$i" in
+      @@);;
+      @ff | @chrome | @chromium | @brave);;
+      @*) cmd=${i#@};;
+      esac
+    done
+    getUrls $cmd;; # }}}
+  *) # {{{
+    echo "@browser @info"
+    echo "-1 --all -u";; # }}}
+  esac
+  exit 0
+fi # }}}
+method='fzf'
+cmd='browser'
+! $cmd_tt ? | command grep -q 'browser' && cmd='info'
+params=
 while [[ ! -z $1 ]]; do
   case $1 in
   @ff | @chrome | @chromium | @brave) browser="${1#@}";;
   @*) cmd="${1#@}"; shift; params="$@"; shift $#; break;;
-  -1) all=false;;
+  -1)    method='1';;
+  --all) method='all';;
+  -u) shift; break;;
   *)  break;;
   esac
   shift
 done
 urls="$@"
 if [[ -z $urls ]]; then
-  func="$(getFunctionBodyRaw "$cmd")"
-  [[ -z $func ]] && echo "Cannot get any URLs from [$cmd]" >/dev/stderr && exit 1
-  if [[ $cmd == 'browser' ]]; then
-    urls="$(echo "$func")"
-  else
-    urls="$($cmd_tt $cmd $params)"
-  fi
-  urls="$(echo "$urls" | sed -n -e '/^#/d' -e 's/URL:/\n\0/gp' | sed -n -e 's/URL:\s*\([^ ,]*\).*/\1/p')"
-  [[ -z $urls ]] && echo -e "No ULRs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
-  ! $all && urls="$(echo "$urls" | head -n1)"
+  urls="$(getUrls $cmd $params)"
+  [[ $? != 0 || -z $urls ]] && echo -e "No URLs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
+  case $method in
+  1)   urls="$(echo "$urls" | head -n1)";;
+  fzf) urls="$(echo "$urls" | fzf -1 +s -m)";;
+  all) ;;
+  esac
 fi
 for i in $urls; do
   case $browser in
-  ff)       firefox -new-tab -url $i;;
-  chrome)   /opt/google/chrome $i;;
+  ff)       firefox -new-tab -url $i 2>/dev/null;;
+  chrome)   /opt/google/chrome/chrome $i --profile-directory="$profile" 2>/dev/null;;
   chromium)
     browser='chromium'
     ! which $broswer >/dev/null 2>&1 && browse="chromium-browser"
-    $browser $i;;
+    $browser $i --profile-directory="$profile" 2>/dev/null;;
   brave)    browser="${TICKET_CONF_BROWSER_BRAVE_PATH:-/opt/brave.com/brave/brave}"
             [[ ! -f $browser ]] && echo "Brave not found at [$browser]" >/dev/stderr && exit 1
-            $browser $i;;
-  open)     open $i;;
+            $browser $i --profile-directory="$profile" 2>/dev/null;;
+  open)     open $i 2>/dev/null;;
   esac
 done
 

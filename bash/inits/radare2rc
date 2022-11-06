@@ -3,11 +3,15 @@ eco onedark
 
 # e asm.describe = true
 e asm.syntax = intel
+e asm.describe = true
+e bin.cache = true
 e cfg.fortunes.type = tips, fun, nsfw
 # e cmd.hexcursor = pf dbw word len msg
 e cmd.hexcursor = ? [$$]&1u32
+e dbg.bep = main # break on entry point -> main
 e dbg.funcarg = true
+e dbg.slow = true
 e hex.align = true
 e http.log = false
 e scr.utf8 = true
-
+e scr.utf8.curvy = true

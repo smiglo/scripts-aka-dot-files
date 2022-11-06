@@ -20,12 +20,14 @@ mapCommand() { # {{{
   [[ -z $ret && -z $cmd ]] && ret='info'
   echo "${ret:-$cmd}"
 } # }}}
+echorm --name tt
+[[ ! -z $verbose && $verbose -gt $(echorm -f??) ]] && echorm + $verbose
 case $1 in
--v)   verbose=1; shift;;
--vv)  verbose=2; shift;;
--vvv) verbose=3; shift;;
+-v)   echorm + 1; shift;;
+-vv)  echorm + 2; shift;;
+-vvv) echorm + 3; shift;;
 esac
-[[ $verbose -ge 3 ]] && set -xv
+echorm -xv
 # }}}
 # Pre-Setup # {{{
 [[ -z $TICKET_PATH ]] && "Env[TICKET_PATH] not defined (tt-t)" >/dev/stderr && exit 1
@@ -79,6 +81,13 @@ while read -r i; do
 done <<<"$(echo -e "$TICKET_CONF_WAIT_ON_PHRASES" | sed 's/\ /\@\@/g' | tr ' ' '\n')"
 [[ ! -z $TICKET_CONF_WAIT_ON_PHRASE_DEF ]] && TICKET_CONF_WAIT_ON_PHRASES_COMPL+=" @"
 unset values i
+[[ -z $TICKET_KB_NAME ]] && TICKET_KB_NAME="$(basename "${TICKET_PATH,,}")"
+export KB_DATA_FILE="$APPS_CFG_PATH/kb-${TICKET_KB_NAME}-data.sh"
+[[ -e "$KB_DATA_FILE" ]] && source "$KB_DATA_FILE"
+[[ -z "$TICKET_CONF_FILE" ]] && export TICKET_CONF_FILE="$path_issue/ticket.conf"
+[[ -e "$TICKET_CONF_FILE" ]] && source "$TICKET_CONF_FILE"
+[[ -z $TICKET_CONF_IN_LOOP ]] && export TICKET_CONF_IN_LOOP=false
+[[ -z $TICKET_CONF_DRY ]] && export TICKET_CONF_DRY=false
 getFunctionBodyRaw() { # {{{
   sed -n "/^# $1 -\{0,1\}\# {{[{]/,/^# }}[}]/p" "$(getIssueFile)"
 } # }}}
@@ -89,15 +98,54 @@ getFunctionBody() { # {{{
   return 0
 } # }}}
 getFunctions() { # {{{
-  sed -n '/^# [a-z][^ :]* # {{[{]/s/^# \(.*\) # {{[{].*/\1/p' $(getIssueFile) | tr '\n' ' ' # for vim: }} },}} }
+  sed -n '/^# [a-z][^ :]* # {{{/s/^# \(.*\) # {{{.*/\1/p' $(getIssueFile) | tr '\n' ' ' # for vim: }}},}}}
   echo
 } # }}}
-export -f getIssueFile getFunctionBodyRaw getFunctionBody getFunctions
+getCompletionList() { # {{{
+  [[ -z $1 ]] && return 0
+  local func="$1" excl="[@#?]"
+  shift
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    --excl) excl+="\|$2"; shift;;
+    *) break;;
+    esac
+    shift
+  done
+  local ret=
+  local hasOldCompl=false
+  echo "$func" | command grep -q "^@@ *\(|.*\)\?)" && hasOldCompl=true
+  local compl="$(echo "$func" | sed -n '/^case $1/,/^esac/p' | sed -n '/^[^ ]\+)/s/).*//p' | grep -v "^\($excl\)" | tr '\n' ' ')" fullCompl=
+  $hasOldCompl && fullCompl="$(bash -c "$func" - @@)"
+  if [[ -z $1 ]]; then
+    ret="$compl"
+    $hasOldCompl && ret+=" $fullCompl"
+  else
+    cmd="$1"
+    ret="$(echo "$func" | sed -n '/^'"$cmd"').*#.*@@:/s/.*@@: *\([^#{]*\) *#\? *\({{{\)\?/\1/p')" # }}}
+    [[ ! -z $ret ]] && ret="${ret//,/ }"
+    local commandPart="$(echo "$func" | sed -n '/^'"$cmd"')/,/^[^ ]/p')"
+    ret+=" $(echo "$commandPart" | sed '/# IGN/d' | sed -n '/  \+case $[0-9]/,/  \+esac/p' | sed -n -e '/^  \+[^ ]\+ *[)|]/s/ *[)|].*//p' | sed 's/\*//g' | tr '\n' ' ')"
+    ret+=" $(echo "$commandPart" | sed '/# IGN/d' | sed -n '/\[\[ $[0-9] == /s/.* \[\[ \$[0-9] == ["'"'"']\([a-zA-Z0-9=.-]*\)["'"'"'] \]\].*/\1/p')"
+    ret+=" $(echo "$commandPart" | sed '/# IGN/d' | sed -n '/\[\[ $[0-9] != /s/.* \[\[ \$[0-9] != ["'"'"']\([a-zA-Z0-9=.-]*\)["'"'"'] \]\].*/\1/p')"
+    ret="${ret//\'\'/}"; ret="${ret//\"\"/}"
+    if echo "$func" | sed -n '/^'"$cmd"')/,/^[^ ]/p' | command grep -q "#.*@@[^:]\|@@)\|== ['\"]\?@@['\"]\?"; then
+      shift
+      ret+=" $(bash -c "$func" - $cmd @@ "$@")"
+    elif $hasOldCompl; then
+      local additionalCompl="$(bash -c "$func" - @@ "$@")"
+      [[ "$additionalCompl" != "$fullCompl" ]] && ret+=" $additionalCompl"
+    fi
+  fi
+  ret="$(echo $ret)"
+  echo "${ret:----}"
+} # }}}
+export -f getIssueFile getFunctionBodyRaw getFunctionBody getFunctions getCompletionList
 # }}}
 handled=false
 case "$cmd" in
 @@)  # {{{
-  [[ $verbose -ge 2 ]] && set -xv
+  echorm -l2 -xv
   if [[ -z $1 || $1 == 1 ]]; then # {{{
     ret="? cd edit env info clean $(ls $(dirname $0)/ticket-tool.d/ 2>/dev/null)"
     if [[ $PWD == $TICKET_PATH* ]]; then
@@ -119,10 +167,14 @@ case "$cmd" in
       ;; # }}}
     edit) # {{{
       echo "-v";; # }}}
+    help) # {{{
+      $0 --issue $issue @@ $@;;# }}}
     \?) # {{{
       getFunctions;; # }}}
     *) # {{{
       ret=
+      func="$(getFunctionBodyRaw $cmd)"
+      export func
       if [[ ! -z $cmd && -e $(dirname $0)/ticket-tool.d/$cmd ]]; then # {{{
         ret="$($(dirname $0)/ticket-tool.d/$cmd @@ "$@")"
         echo "${ret:----}"
@@ -131,19 +183,18 @@ case "$cmd" in
       for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
         $ext @@ $cmd $@ && exit 0
       done # }}}
-      func="$(getFunctionBodyRaw $cmd)"
       if [[ ! -z $func ]]; then
         case $cmd in
         info*) # {{{
           ret=" $(echo "$func" | sed -n '/^##\+ @ [A-Za-z0-9].*/ { /}\{3\}/!s/.*@ \([A-Za-z0-9][^ ]*\).*/\L\1/p }')";; # }}}
         *) # {{{
-          echo "$func" | head -n1 | command grep -qa '@@' && ret=$(bash -c "$(echo "$func" | sed -e '/^# /d')" - @@ "$@") ;; # }}}
+          ret=$(getCompletionList "$func" "$@");; # }}}
         esac
       fi
       echo $ret;; # }}}
     esac
   fi # }}}
-  [[ $verbose -ge 2 ]] && set +xv
+  echorm -l2 +xv
   ;; # }}}
 \?) # {{{
   if [[ -z $1 ]]; then
@@ -160,9 +211,14 @@ case "$cmd" in
     while [[ ! -z $1 ]]; do
       cmd="$(mapCommand "$1")" && shift
       case $cmd in
-      info*) $add_prefix && $0 --issue $issue "$cmd" | sed "s/^/$cmd:/" || $0 --issue $issue "$cmd";;
-      *)     $add_prefix && getFunctionBody $cmd --plain | sed "s/^/$cmd:/" || getFunctionBody $cmd --plain;;
-      esac
+      info*) $0 --issue $issue "$cmd";;
+      *)     getFunctionBody $cmd --plain;;
+    esac \
+      | sed \
+          -e 's/\s*#\s*\({{{\|}}}\)\s*//' \
+          -e '/^\s*$/d' \
+          -e 's/\s\+\(;;\)$/\1/' \
+      | { $add_prefix && sed -e "s/^/$cmd:/" || cat -; }
     done
   fi
   ;; # }}}
@@ -202,15 +258,28 @@ edit) # {{{
   vim $f
   ;; # }}}
 env) # {{{
-  silent=false
-  [[ $1 == '--silent' ]] && shift && silent=true
-  for b in $(tmux list-buffers -F '#{buffer_name}' | command grep -a "^${issue}-" | sort); do
-    $silent || echo "# $b: $(tmux show-buffer -b $b)"
-    tmux delete-buffer -b $b
-  done
-  unset silent
-  func="$(getFunctionBody $cmd)"
-  [[ ! -z $func ]] && bash -c "$func" - "$@"
+  silent=false minimal=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --silent) silent=true;;
+    --min)    minimal=true;;
+    *)        break;;
+    esac; shift
+  done # }}}
+  while read l; do
+    echo "export ${l#export }"
+  done < <(sed -n '/^# j-info: ENV: \?.\+/s/^# j-info: ENV: *//p' $(getIssueFile))
+  if ! $minimal; then
+    for b in $(tmux list-buffers -F '#{buffer_name}' | command grep -a "^${issue}-" | sort); do
+      $silent || echo "# $b: $(tmux show-buffer -b $b)"
+      tmux delete-buffer -b $b
+    done
+    func="$(getFunctionBody $cmd)"
+    [[ ! -z $func ]] && bash -c "$func" - "$@"
+  fi
+  unset silent minimal;; # }}}
+help) # {{{
+  $0 --issue $issue @@ $@
   ;; # }}}
 info*) # {{{
   func="$(getFunctionBody $cmd)"

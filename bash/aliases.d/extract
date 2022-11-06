@@ -29,7 +29,7 @@ extract() { # @@ # {{{
     esac
     shift
   done
-  [[ ! -f $file ]] && _aliases_dbg "[$1] is not a valid file!" && return 1
+  [[ ! -f $file ]] && echorm 0 "[$1] is not a valid file!" && return 1
   if $use_dir; then
     local dir=${file/*\/}
     dir=${dir%.*}
@@ -50,7 +50,7 @@ extract() { # @@ # {{{
   *.rar)            cmd="unrar x";;
   *.Z)              cmd="uncompress";;
   *.7z)             cmd="7z x";;
-  *)                _aliases_dbg "[$file] cannot be extracted via >extract<"; return 1;;
+  *)                echorm 0 "[$file] cannot be extracted via >extract<"; return 1;;
   esac
   if $usePV; then
     cmd="pv -p $file | $cmd -"

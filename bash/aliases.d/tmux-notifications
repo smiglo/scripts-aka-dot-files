@@ -102,7 +102,7 @@ show_notifications() { # @@ # {{{
     source $BASH_PATH/colors
     local tmux_pane= prev_msgs= prev_show=false
     [[ -n $TMUX ]] && tmux_pane="$(tmux display-message -p -t $TMUX_PANE -F '#S:#I.#P')"
-    set_title --set-pane "Notifications"
+    set_title "Notifications"
     while true; do
       [[ ! -z $tmux_pane ]] && tmux clear-history -t "$tmux_pane"
       command clear
@@ -166,6 +166,5 @@ show_notifications() { # @@ # {{{
   fi # }}}
   return 0
 } # }}}
-
 alias snr='show_notifications -s'
 

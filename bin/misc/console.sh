@@ -3,10 +3,14 @@
 
 if [[ $1 == '@@' ]]; then # {{{
   ret="-l --log-path --file"
-  if $IS_MAC; then
-    ret+=" $($ALIASES getFileList '/dev/tty.usbserial*') $($BASH_PATH/aliases getFileList '/dev/tty.PL2303*')"
+  if [[ -z $DEV_USB_SERIAL ]]; then
+    if $IS_MAC; then
+      ret+=" $(getFileList '/dev/tty.usbserial*') $(getFileList '/dev/tty.PL2303*')"
+    else
+      ret+=" $(getFileList '/dev/ttyUSB*')"
+    fi
   else
-    ret+=" $($ALIASES getFileList '/dev/ttyUSB*')"
+      ret+=" $(getFileList "$DEV_USB_SERIAL")"
   fi
   echo "$ret"
   exit 0
@@ -28,6 +32,7 @@ genLogFilename() { #{{{
   echo "log-${DATE}${suffix}.log"
 } #}}}
 in_loop=false port= log_filename= log_path="$(getLogPath)" minirc=~/.minirc.dfl auto_filename=true
+[[ ! -z $DEV_USB_SERIAL ]] && port="$(getFileList -1 "$DEV_USB_SERIAL")"
 while [[ ! -z "$1" ]]; do # {{{
   case "$1" in
   -l)         in_loop=true;;
@@ -60,7 +65,7 @@ while true; do # {{{
     log_filename="$(genLogFilename)"
     log_filename="$log_path/$log_filename"
   fi # }}}
-  $ALIASES set_title --set-pane "L: ${log_filename##*/}"
+  $ALIASES set_title "L: ${log_filename##*/}"
   minicom -c on -C $log_filename
   $in_loop && continue || break
 done # }}}

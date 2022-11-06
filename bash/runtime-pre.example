@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-user_id="$(id -u)"
+user_id="$UID"
 if [[ -e "/run/user/$user_id" && ( ! -n $TMUX || $1 == '-f' ) ]]; then
   mount_p="bind"
   ! $IS_MAC && mount_p+=",x-gvfs-hide"

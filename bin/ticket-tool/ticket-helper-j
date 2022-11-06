@@ -20,16 +20,38 @@ if ! ${DEFINE_TICKET_TOOL_HELPER:-false} && [[ $PWD == $HOME* ]]; then # {{{
   unset p ticket_data
 fi # }}}
 if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
-  function j() {
+  if [[ -n $TMUX ]]; then # {{{
+    wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W' | sed 's/--.*//')"
+    wnd_name=${wnd_name,,}
+    path_issue="$($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$wnd_name" true)"
+    if [[ ! -z $path_issue && -e $path_issue ]]; then
+      eval "$($TICKET_TOOL_PATH/ticket-tool.sh --issue $wnd_name env --silent --min)"
+    fi
+    unset wnd_name path_issue
+  fi # }}}
+  function j() { # {{{
     case $1 in
-    --env)  shift && eval "$($TICKET_TOOL_PATH/j-cmd.sh "${@:-env --silent}")"
-            export jjp="$($TICKET_TOOL_PATH/j-cmd.sh cd -v 2>/dev/null)";;
-    @@)     [[ $2 == 1 ]] &&  echo '--env'
-            [[ $3 == '--env' && $4 == '--env' ]] && set -- '@@' 1
-            ;;&
-    *)      $TICKET_TOOL_PATH/j-cmd.sh "$@" ;;
+    --env | env) # {{{
+      local t='env' default='--silent'
+      [[ $1 == '--env' && ! -z $2 && $2 != -* ]] && t=$2 && default= && shift
+      shift
+      if [[ $1 == '--stdout' || ! -t 1 ]]; then
+        [[ $1 == '--stdout' ]] && shift
+        $TICKET_TOOL_PATH/j-cmd.sh $t "${@:-$default}"
+      else
+        eval "$($TICKET_TOOL_PATH/j-cmd.sh $t "${@:-$default}")"
+        export jjp="$($TICKET_TOOL_PATH/j-cmd.sh cd -v 2>/dev/null)"
+      fi
+      ;; # }}}
+    @@) # {{{
+      [[ $2 == 1 ]] && echo '--env env'
+      [[ ${4:-$3} == '--env' || ${4:-$3} == 'env' ]] && echo "--stdout" && set -- '@@' 1
+      [[ $3 == '--env' && $4 == '--env' ]] && set -- '@@' 1
+      ;;& # }}}
+    *) # {{{
+      $TICKET_TOOL_PATH/j-cmd.sh "$@" ;; # }}}
     esac
-  }
+  } # }}}
   complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic j
   export PHISTORY_IGNORED_COMMANDS+=":j"
   export jj=$TICKET_TOOL_PATH/j-cmd.sh

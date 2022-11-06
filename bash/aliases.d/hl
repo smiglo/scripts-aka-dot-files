@@ -8,8 +8,9 @@ hl() { # @@ # {{{
     return 0
   fi # }}}
   local cmd_root="$GREP_DEFAULT_PARAMS --text --line-buffered --color=yes"
-  local params=() cnt=0 lines=false add_lines=false lines_colors=($(echo "48;5;239 48;5;232")) c= add_default=false
+  local params=() cnt=0 lines=false add_lines=false lines_colors=($(echo "48;5;235 48;5;232")) c= add_default=false
   #  hl --lines "48;5;239  48;5;232"
+  [[ -z $1 ]] && set -- ++
   while true; do # {{{
     while [[ ! -z "$1" ]]; do # {{{
       case "$1" in # {{{
@@ -93,7 +94,7 @@ hl() { # @@ # {{{
     [[ ! -z $cmd ]] && cmd+=" | "
     cmd+=" hl --lines \"${lines_colors[*]}\""
   fi
-  # echo "[$cmd]" >/dev/stderr # DBG
+  echorv -M cmd
   eval $cmd
 } # }}}
 

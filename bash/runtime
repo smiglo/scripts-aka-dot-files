@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+# Workaround for older bash # {{{
+epochSeconds() { # {{{
+  command date +%s
+}
+export -f epochSeconds # }}}
+# }}}
 # Check for OS/X # {{{
 export IS_MAC=false
-[[ $(uname) == 'Darwin' ]] && IS_MAC=true
+[[ $(uname) == 'Darwin' ]] && IS_MAC=true && export UNAME="$(uname)" && export USERLAND="GNU"
 # }}}
 # Check for MC # {{{
 export IS_IN_MC=$( [[ "$(ps -o comm= -p $PPID)" == "mc" ]] && echo 'true' || echo 'false')
@@ -18,99 +24,22 @@ ${RCSTUFF_RUNTIME_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 export RCSTUFF_RUNTIME_INSTALLED=true
 [[ $1 == '--force' ]] && shift
 # }}}
-# Clear appended variables {{{
-export ALIASES_MAP=
-export BASH_EXTRA_FEATURES=
-export BASH_UPDATE_REPOS=
-export BASH_UPDATE_TIME=
-export COMPLETION_GENERIC_UTILS=
-export COMPLETION_GENERIC_FUNCTIONS=
-export CD_INTERACTIVE_PREDEFINED_LIST=
-export CD_INTERACTIVE_USER_LIST=
-export CD_LAST_DIRS_INTERACTIVE_IGNORE=
-export CD_LAST_DIRS_STORED=
-export CLANG_PARAMS_COMMON=
-export CLANG_PARAMS_W="-Wall -Wno-disabled-macro-expansion"
-export CLANG_PARAMS="-std=c99"
-export CLANGPP_PARAMS="-std=c++11"
-export GIT_LOG_ALL_PARAMS=
-export GIT_LOG_PARAMS=
-export GIT_PRE_COMMIT_DEBUGS=
-export GIT_PRE_COMMIT_IGNORE=
-export GIT_PRE_COMMIT_REPO_WHITELIST=
-export GIT_PRE_COMMIT_REPO_BLACKLIST=
-export GIT_REPOS=
-export GREP_EXCLUDES=
-export HISTIGNORE=
-export HISTIGNORE+=" *"
-export HISTIGNORE+=":ls:ll:pwd:pwd *:cd"
-export HISTIGNORE+=":fg:bg:jobs:ps"
-export HISTIGNORE+=":echo:reset:clear:exit*"
-export HISTIGNORE+=":keep-pass.sh*:./keep-pass.sh*"
-export HL_DEFAULTS=
-export INSTALL_FEATURES=
-export KB_PATHS=
-export KEEP_PASS_JOURNALS=
-export MANPATH=
-export PHISTORY_IGNORED_COMMANDS=
-export PHISTORY_IGNORED_COMMANDS+="exec"
-export PHISTORY_IGNORED_COMMANDS+=":ls:ll:cd"
-export PHISTORY_IGNORED_COMMANDS+=":@vi@:@vim@:vim-session"
-export PHISTORY_IGNORED_COMMANDS+=":$BIN_PATH/*:$BASH_PATH/*:./bash/aliases\ *:\$BIN_PATH/*:\$BASH_PATH/*"
-export PHISTORY_IGNORED_COMMANDS+=":sendMsg"
-export PS1_ENV_PWD=
-export SCRIPT_PATH=
-export SET_TITLE_GETTER_MAP=
-export SSH_KEYS=
-export TICKET_J_PREDEFINED=
-export TICKET_TOOL_POST_ENV=
-export TMUX_FINGERS_PREDEFINED=
-export TMUX_FINGERS_PREDEFINED+=" ([[:digit:]]{4,})"                                                                                  # Number
-export TMUX_FINGERS_PREDEFINED+=" 0x([0-9a-f]+)"                                                                                      # Hex
-export TMUX_FINGERS_PREDEFINED+=" ([0-9a-f]{7,40})"                                                                                   # SHA
-export TMUX_FINGERS_PREDEFINED+=" ((^|^\.|[[:space:]]|[[:space:]]\.|[[:space:]]\.\.|^\.\.)[[:alnum:]~_-]*/[][[:alnum:]_.#$%&+=/@-]+)" # Path
-export TMUX_FINGERS_PREDEFINED+=" ((https?://|git@|git://|ssh://|ftp://|file:///)[[:alnum:]?=%/_.:,;~@!#$&()*+-]*)"                   # URL
-export TMUX_FINGERS_REGEX=
-export TMUX_INIT_SESSIONS=
-export TMUX_REMOTE_PREFIXES=
-export TMUX_STATUS_LEFT_EXTRA_MAP=
-export TMUX_STATUS_RIGHT_EXTRA=
-export TMUX_SWITCH_CLIENT_MAP=
-export TO_INSTALL_BIN_MISC='BASIC'
-export TO_INSTALL_TOOLS=
-export TO_INSTALL_TOOLS_EXTRA=
-export VIM_CTRLP_IGNORE_DIRS="NOT_EXISTING_DIR_PATTERN_TO_IGNORE"
-export VIM_PRJ_EXCLUDE=
-export VIM_PRJ_PARAMS=
-# }}}
-# Profiles # {{{
-export PROFILES_PATH="$BASH_PATH/profiles"
-export BASH_PROFILES="$(command cd $PROFILES_PATH; echo *)"
-[[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
-export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
-# }}}
-# TMP Paths # {{{
-export TMP_PATH=$HOME/.tmp
-export TMP_MEM_PATH=$TMP_PATH/.mem
-export TMPDIR=$TMP_PATH/.tmp-dir
-[[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
-chmod 700 $TMPDIR
-[[ ! -d $TMP_MEM_PATH ]] && echo "Memory fs does not exist [$TMP_MEM_PATH]. It will be created" && command mkdir -p $TMP_MEM_PATH && chmod 700 $TMP_MEM_PATH
-[[ ! -e $TMP_MEM_PATH/.bashrc ]] && command mkdir $TMP_MEM_PATH/.bashrc
-# }}}
 # Unicode extra chars # {{{
 declare -A UNICODE_EXTRA_CHARS
 UNICODE_EXTRA_CHARS[battery]="🔋"
 UNICODE_EXTRA_CHARS[disk]="💾"
+UNICODE_EXTRA_CHARS[nested_bash]="❶"
 UNICODE_EXTRA_CHARS[envelope]="✉ "
 UNICODE_EXTRA_CHARS[exclamation]="❢"
 UNICODE_EXTRA_CHARS[extra_bar]="◼ "
 UNICODE_EXTRA_CHARS[high_cpu]="⚛ "
+UNICODE_EXTRA_CHARS[link]="🔗"
 UNICODE_EXTRA_CHARS[localhost]="🤠"
 UNICODE_EXTRA_CHARS[log_last_pause]="⏸ "
 UNICODE_EXTRA_CHARS[log_last_play]="⏺ "
 UNICODE_EXTRA_CHARS[mic]="🎤"
 UNICODE_EXTRA_CHARS[mute]="🔇"
+UNICODE_EXTRA_CHARS[padlock]="🔓"
 UNICODE_EXTRA_CHARS[power]="🔌"
 UNICODE_EXTRA_CHARS[progress_bar]="▁▃▄▅▆▇█▇▆▅▄▃"
 UNICODE_EXTRA_CHARS[progress_dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
@@ -138,96 +67,91 @@ fi
 export UNICODE_EXTRA_CHARS
 export UNICODE_EXTRA_CHARS_FILE="$TMP_MEM_PATH/.unicode-extra.conf"
 # }}}
-# Runtime Path - Setup # {{{
-export RUNTIME_PATH=$HOME/.runtime
-[[ ! -e $RUNTIME_PATH ]] && command mkdir $RUNTIME_PATH
-for i in $BASH_PROFILES; do
-  [[ -e $RUNTIME_PATH/runtime-pre.bash.$i ]] && source $RUNTIME_PATH/runtime-pre.bash.$i
-done
-[[ -e $RUNTIME_PATH/runtime-pre.bash ]] && source $RUNTIME_PATH/runtime-pre.bash
-[[ ! -e $RUNTIME_PATH/tmux-buffers ]] && command mkdir $RUNTIME_PATH/tmux-buffers
-export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
-export APPS_CFG_PATH=$RUNTIME_PATH/apps
-[[ ! -e $APPS_CFG_PATH ]] && command mkdir $APPS_CFG_PATH
-# }}}
 # Personalities # {{{
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
 [[ -e $RUNTIME_PATH/personalities ]] && source $RUNTIME_PATH/personalities
 # }}}
 # Path # {{{
 export PATH=@END@:$PATH
+if $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ ]]; then
+  PATH=/usr/local/opt/coreutils/libexec/gnubin/:$PATH
+fi
 export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$BIN_PATH/misc:$PATH
 [[ -e $HOME/.bin-tools/bin ]] && export PATH=$HOME/.bin-tools/bin:$PATH
 # }}}
 # Tmux - local # {{{
+if [[ ! -e $HOME/.bin/tmux-local-bin && -e $HOME/.config/tmux-local/.use-local && -e $HOME/.config/tmux-local/local/bin/tmux ]]; then
+  ln -sf $HOME/.config/tmux-local/local/bin $HOME/.bin/tmux-local-bin
+fi
 if [[ -e $HOME/.bin/tmux-local-bin ]]; then
   export PATH="$HOME/.bin/tmux-local-bin:$PATH"
   tmux -V 2>&1 | grep -q "no version information available" && export LD_LIBRARY_PATH="$HOME/.config/tmux-local/local/lib:$LD_LIBRARY_PATH"
   [[ -e $HOME/.config/tmux-local/local/share/terminfo ]] && export TERMINFO=$HOME/.config/tmux-local/local/share/terminfo
   [[ -e $HOME/.config/tmux-local/local/share/man/man1/tmux.1 ]] && export MANPATH="$HOME/.config/tmux-local/local/share/man:$MANPATH"
 fi # }}}
-# MY_PROJ_PATH setup{{{
-export MY_PROJ_PATH=$HOME/projects/my
-[[ ! -e $MY_PROJ_PATH ]] && export MY_PROJ_PATH=$HOME/projects
-if [[ -e $MY_PROJ_PATH ]]; then
-  export SCRIPT_PATH=$MY_PROJ_PATH/scripts
-  export BASH_UPDATE_REPOS="$MY_PROJ_PATH/scripts $MY_PROJ_PATH/vim"
-  export BASH_UPDATE_TIME="$((1*18*60*60))"
-  export GIT_REPOS+=" $MY_PROJ_PATH/scripts $MY_PROJ_PATH/info $MY_PROJ_PATH/vim"
-  export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
-  [[ -e $MY_PROJ_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$MY_PROJ_PATH/vim"
-  [[ -e $MY_PROJ_PATH/info ]] && export CD_LAST_DIRS_STORED+=":info@$MY_PROJ_PATH/info"
-  [[ -e $MY_PROJ_PATH/.ticket-data.sh ]] && KB_PATHS+=" env:$MY_PROJ_PATH"
-  [[ -e $MY_PROJ_PATH/sp/.ticket-data.sh ]] && KB_PATHS+=" sp:$MY_PROJ_PATH/sp"
-  if [[ -e $MY_PROJ_PATH/oth/.ticket-data.sh ]]; then # {{{
-    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/oth" ]]; then
-      KB_PATHS+=" oth-my:$MY_PROJ_PATH/oth"
-      KB_PATHS+=" oth:$HOME/projects/oth"
-    else
-      KB_PATHS+=" oth:$MY_PROJ_PATH/oth"
-    fi
-  elif [[ -e "$HOME/projects/oth" ]]; then
-    KB_PATHS+=" oth:$HOME/projects/oth"
-  fi # }}}
-  if [[ -e $MY_PROJ_PATH/tmp/.ticket-data.sh ]]; then # {{{
-    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/tmp" ]]; then
-      KB_PATHS+=" tmp-my:$MY_PROJ_PATH/tmp"
-      KB_PATHS+=" tmp:$HOME/projects/tmp"
-    else
-      KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
-    fi
-  elif [[ -e "$HOME/projects/tmp" ]]; then
-    KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
-  fi # }}}
-else
-  echo "Cannot find script path!"
-  export MY_PROJ_PATH=
-fi
-# }}}
 # Env - not grouped # {{{
 export PS1_SSH_CHANGE=true
 export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
 [[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
 export REMINDER_DIR="$APPS_CFG_PATH/reminders"
 export ALIASES="$BASH_PATH/aliases"
+export _RR_TRACE_DIR="./.rr"
+[[ -e "$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh" ]] && export TMUX_SB_WORKER="$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh"
+export TMUX_SB_INTERVAL=15
 # }}}
 # Sharable setup {{{
-if [[ -z $SHARABLE_PATH ]]; then
-  sPaths="$HOME/Documents/Dropbox $HOME/Documents/priv/Dropbox $HOME/Documents/GDrive $TMP_MEM_PATH/share"
-  while [[ ! -z sPaths && ! -e $SHARABLE_PATH && $SHARABLE_PATH != $sPaths ]]; do
-    SHARABLE_PATH="${sPaths%% *}"
-    sPaths="${sPaths#* }"
+if [[ -z $SHARABLE_PATH ]]; then # {{{
+  sPaths="$HOME/Documents/misc $HOME/Documents/priv/misc $TMP_MEM_PATH/share"
+  for SHARABLE_PATH in $sPaths; do
+    [[ -e $SHARABLE_PATH ]] && break
   done
-  unset sPaths p
-  [[ ! -e $SHARABLE_PATH ]] && command mkdir -p $SHARABLE_PATH
+  # echo "Sharable not found" >/dev/stderr
+  # [[ ! -e $SHARABLE_PATH ]] && command mkdir -p $SHARABLE_PATH
+  unset sPaths
+fi # }}}
+[[ -e $TMP_MEM_PATH/.net.no && $(stat -c %Y $TMP_MEM_PATH/.net.no) -lt $((${EPOCHSECONDS:-$(epochSeconds)} - 30*60)) ]] && rm -f $TMP_MEM_PATH/.net.no
+if [[ ! -e $TMP_MEM_PATH/.net.no ]] && ! ping -c1 -w1 8.8.8.8 >/dev/null 2>&1; then
+  touch $TMP_MEM_PATH/.net.no
+fi
+if ( [[ ! -n $TMUX  && ! -e $TMP_MEM_PATH/.net.no && -e $SHARABLE_PATH ]] ) || ( [[ $1 == '--mnt-sharable' ]] ); then # {{{
+  [[ $1 == '--mnt-sharable' ]] && shift && rm -f $TMP_MEM_PATH/.sharable.conf $TMP_MEM_PATH/.sharable-runtime.bash
+  [[ -e $TMP_MEM_PATH/.sharable.conf ]] && source $TMP_MEM_PATH/.sharable.conf
   export CD_LAST_DIRS_STORED+=":shr@$SHARABLE_PATH"
-fi
-if [[ ! -z $SHARABLE_PATH && -e $SHARABLE_PATH ]]; then
-  export CD_LAST_DIRS_STORED+=":Dr@$SHARABLE_PATH"
-  [[ -z $SHARED_BASH_PATH && -e $SHARABLE_PATH/sharable/bash-utils ]] && export SHARED_BASH_PATH="$SHARABLE_PATH/sharable/bash-utils"
-  [[ -e $SHARED_BASH_PATH/runtime.bash ]] && source $SHARED_BASH_PATH/runtime.bash
-fi
-export SHARABLE_PATH
+  if ${USE_FUSE:-true} && ! $IS_MAC && [[ ! -e $TMP_MEM_PATH/.sharable.conf ]]; then # {{{
+    if ${USE_FUSE_DIRECTLY:-false}; then
+      [[ -e $SHARABLE_PATH/.mounted ]] || google-drive-ocamlfuse -label $USE_FUSE_LABEL $SHARABLE_PATH
+    elif [[ -e $HOME/.config/systemd/user/sharable-gd.service ]]; then
+      [[ -e $SHARABLE_PATH/.mounted ]] || command systemctl --user start sharable-gd
+    fi
+    if [[ -e $SHARABLE_PATH/.mounted ]]; then
+      touch $TMP_MEM_PATH/.sharable.conf
+    else
+      echo "Sharable [$SHARABLE_PATH] not mounted" >/dev/stderr
+    fi
+    if [[ -e $HOME/.config/systemd/user/sharable-gd-tb.service ]]; then
+      mntDir="$(cat $HOME/.config/systemd/user/sharable-gd-tb.service | awk '/ExecStart=google-drive-ocamlfuse/{print $4}')"
+      if [[ -d $mntDir ]]; then
+        [[ -e $mntDir/.mounted ]] || command systemctl --user start sharable-gd-tb
+      fi
+    fi
+  fi # }}}
+  if [[ ! -e $TMP_MEM_PATH/.sharable-runtime.bash ]]; then # {{{
+    touch $TMP_MEM_PATH/.sharable-runtime.bash
+    if [[ -d $SHARABLE_PATH/sharable/bash-utils ]]; then
+      export SHARED_BASH_PATH=$SHARABLE_PATH/sharable/bash-utils
+      echo "SHARED_BASH_PATH=$SHARED_BASH_PATH" >>$TMP_MEM_PATH/.sharable.conf
+    fi
+    if [[ ! -z $SHARED_BASH_PATH ]]; then
+      if [[ -e $SHARED_BASH_PATH/runtime.bash ]]; then
+        cp $SHARED_BASH_PATH/runtime.bash $TMP_MEM_PATH/.sharable-runtime.bash
+      fi
+    fi
+  fi # }}}
+  source $TMP_MEM_PATH/.sharable-runtime.bash
+else
+  [[ -e $TMP_MEM_PATH/.sharable.conf ]] && source $TMP_MEM_PATH/.sharable.conf
+fi # }}}
+export SHARABLE_PATH SHARED_BASH_PATH
 # }}}
 # TMP setup {{{
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
@@ -236,15 +160,17 @@ export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
 # TMP Subentries {{{
 export TMUX_TMPDIR=$TMP_MEM_PATH/.tmux
 [[ ! -d $TMUX_TMPDIR ]] && command mkdir -p $TMUX_TMPDIR && chmod 700 $TMUX_TMPDIR
-export GREP_LAST_PATH=$TMP_PATH/.grep-last
-export VIM_UTILS_PATH="$TMP_PATH/.vim"
+export UTILS_PATH=$TMP_PATH
+export GREP_LAST_PATH=$UTILS_PATH/.grep-last
+export VIM_UTILS_PATH="$UTILS_PATH/.vim"
 if [[ -n $TMUX ]]; then
   export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
   export TMUX_SESSION_PATH="$APPS_CFG_PATH/tmux/sessions/$TMUX_SESSION"
   [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
-  export GREP_LAST_PATH="$TMUX_SESSION_PATH/grep-last"
-  export VIM_UTILS_PATH="$TMUX_SESSION_PATH/vim"
-  export TMUX_RUNTIME="$TMUX_SESSION_PATH/runtime"
+  export UTILS_PATH=$TMUX_SESSION_PATH
+  export GREP_LAST_PATH="$UTILS_PATH/grep-last"
+  export VIM_UTILS_PATH="$UTILS_PATH/vim"
+  export TMUX_RUNTIME="$UTILS_PATH/runtime"
   [[ ! -e $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION ]] && command mkdir -p $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION
   [[ ! -e $TMUX_RUNTIME ]] && ln -sf $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION $TMUX_RUNTIME
 else
@@ -259,18 +185,26 @@ export VIM_UNDOES_PATH="$VIM_UTILS_PATH/undoes"
 [[ ! -e $VIM_SESSIONS_PATH ]] && command mkdir -p $VIM_SESSIONS_PATH
 # }}}
 # Clean TMP # {{{
-if [[ $(id -u) != 0 ]]; then # {{{
-  now=$(command date +"%s")
+if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* ) ]]; then # {{{
+  now=${EPOCHSECONDS:-$(epochSeconds)}
   check_file=$TMP_MEM_PATH/.tmp-last-check
   do_clean=false
-  [[ "$1" == '--clean-tmp' ]] && do_clean=true && shift
-  [[ "$1" == '--clean-tmp-silent' ]] && do_clean='silent' && shift
-  if [[ -z $TMP_PATH_LAST_CHECK && ! -e $check_file ]]; then # {{{
-    sleep .$((1+($RANDOM%5)))
-    [[ ! -e $check_file ]] && echo "$now" >$check_file && do_clean=true
-  fi # }}}
+  case $1 in # {{{
+  --clean-tmp)            do_clean=true; shift;;
+  --clean-tmp-silent)     do_clean='silent'; shift;;
+  --clean-tmp-no-silent)  do_clean='no-silent'; shift;;
+  esac # }}}
+  if [[ ! -e $check_file ]]; then
+    echo "$now" >$check_file
+    if [[ $do_clean != *'silent' ]]; then
+      [[ -n $TMUX ]] && do_clean='silent' || do_clean='no-silent'
+    fi
+  fi
   [[ ${TMP_PATH_LAST_CHECK:-0} -lt $(($now - 1 * 18 * 60 * 60)) ]] && export TMP_PATH_LAST_CHECK=$(cat $check_file)
   if [[ $TMP_PATH_LAST_CHECK -lt $(($now - 1 * 18 * 60 * 60)) || $do_clean != 'false' ]]; then # {{{
+    if [[ $do_clean == 'true' ]]; then
+      [[ -n $TMUX ]] && do_clean='silent' || do_clean='no-silent'
+    fi
     export TMP_PATH_LAST_CHECK=$now
     echo $TMP_PATH_LAST_CHECK >$check_file
     (
@@ -286,7 +220,7 @@ if [[ $(id -u) != 0 ]]; then # {{{
       paths+=" p=\"$TMP_PATH/.grep-last\";silent=true;size=15"
       paths+=" p=\"$TMP_PATH/.vim/undoes\";silent=true;size=20"
       paths+=" p=\"$TMP_PATH/.vim/sessions\";silent=true;threshold=42"
-      for p in $TMP_PATH/.tmux/sessions/*; do # {{{
+      for p in $APPS_CFG_PATH/tmux/sessions/*; do # {{{
         [[ $p == */ROOT ]] && continue
         paths+=" p=\"$p/grep-last\";size=15"
         paths+=" p=\"$p/vim/undoes\";size=20"
@@ -295,48 +229,57 @@ if [[ $(id -u) != 0 ]]; then # {{{
       marker="$TMP_MEM_PATH/.marker.$$"
       # }}}
       for p in $paths; do # {{{
-        threshold=21 size= silent=false keep='-----'
-        [[ $do_clean == 'silent' ]] && silent=true
+        threshold=21 size= silent=true keep='-----'
         eval "$p"
+        case $do_clean in # {{{
+        silent)    silent=true;;
+        no-silent) silent=false;;
+        esac # }}}
         export keep
         touch -t "$(command date +"%Y%m%d%H%M.%S" -d "$threshold days ago")" $marker
         msg="${CBlue}Cleaning tmp"
         [[ $p == $TMP_MEM_PATH ]] && msg+="-mem"
         msg+=" [${p/$TMP_PATH\/}]"
-        $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1
+        msg+="${COff}"
+        $silent \
+          && echo -e "$msg" >/dev/stderr \
+          || $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
         # Old files # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
           -exec \
-            /bin/bash -c 'f() { [[ ! -z "'$keep'" ]] && echo "${1/$2\/}" | command grep -qe "'$keep'" && return 0; ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
+            $SHELL -c 'f() { [[ ! -z "'$keep'" ]] && echo "${1/$2\/}" | command grep -qe "'$keep'" && return 0; ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         # Dead links # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -type l \
           -exec \
-            /bin/bash -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo -en "\nRemoving deadlink ['${CCyan}'${1/$2\/}'${COff}']"; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
+            $SHELL -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo -en "\nRemoving deadlink ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
           2>/dev/null # }}}
         # Empty Dirs # {{{
         find $p \
           -mindepth 1 -not -path $p/'.*' -a -type d -a -not -newer $marker -a -empty \
           -exec \
-            /bin/bash -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']"; rm -rf "$1"; }; f "{}" '\"$p\"';' \; \
+            $SHELL -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -rf "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         rm -f $marker
-        [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && echo -en "\nSize greater than [${CCyan}${size}${COff}]"
-        $ALIASES progress --unmark
+        [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && ! $silent && echo -en "\nSize greater than [${CCyan}${size}${COff}]" >/dev/stderr
+        $silent || $ALIASES progress --unmark
       done # }}}
       if which tac >/dev/null 2>&1 && [[ ! -n $TMUX || $do_clean != 'false' ]]; then
-        $ALIASES progress --mark --dots --msg "${CBlue}Cleaning bash histories" --color ${CCyan} --delay 0.1
+        msg="${CBlue}Cleaning bash histories${COff}"
+        $silent \
+          && echo -e "$msg" >/dev/stderr \
+          || $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
         find -L $TMP_PATH/.tmux -maxdepth 3 -name bash_history \
           -exec \
-            /bin/bash -c 'f() { \
+            $SHELL -c 'f() { \
               sed -i -e "/^#/d" -e "s/\s\+$//" "$1" \
               && tac "$1" | awk '"'"'!seen[$0] {print} {++seen[$0]}'"'"' | tac >"$1.bck" \
               && mv "$1.bck" "$1"; \
             }; f "{}"' \; \
           2>/dev/null
-        $ALIASES progress --unmark
+        $silent || $ALIASES progress --unmark
       fi
     )
   fi # }}}

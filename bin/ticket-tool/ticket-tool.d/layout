@@ -2,6 +2,10 @@
 # vim: fdl=0
 
 f="$(getIssueFile)" quiet=false use_stdin=false use_stdout=false todo= entry="${TICKET_CONF_LAYOUT_ENTRY:-LAYOUT}"
+if [[ $1 == @@ ]]; then
+  echo "save restore -q --stdin --stdout -e"
+  exit 0
+fi
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   save | restore) todo="$1";;

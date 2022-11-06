@@ -42,7 +42,7 @@ PS1_covertMode() { # {{{
   very_short)    mode+=' ';;
   *)             mode+=" $(eval printf "\$PS1_MODE_${1^^}")";;
   esac
-  mode+=' err'
+  mode+=' prompt'
   [[ $TERM_ORIG != 'linux' ]] && mode+=' cursor'
   [[ "$PS1_ENV_MODE" != 'false' ]] && mode+=" ${PS1_ENV_MODE:-env-no-rec}"
   echo "$mode"
@@ -70,9 +70,44 @@ PS1_adjustPath() { #{{{
   printf "$res"
   return 0
 } # }}}
+PS1_colorFormat() { # {{{
+  [[ ! -z $2 ]] && PS1+="$(PS1_getColor "$1")$2$cOff"
+  [[ ! -z $3 ]] && PS1+="$3"
+  true
+} # }}}
 PS1_setter() { # {{{
-  BASH_LAST_ERR=$?
+  declare BASH_LAST_CMD=$_ BASH_LAST_ERR=$?
   set +xv
+  if [[ -e "$PWD" ]]; then
+    local ino="$(command ls -id "$PWD" 2>/dev/null)"
+    if [[ "$PWD" == "$PS1_LAST_PWD" ]]; then
+      if [[ -z "$ino" || "$ino" != "$PS1_LAST_PWD_INO" ]]; then
+        local oPWD=$OLDPWD
+        command cd "$PWD"
+        OLDPWD="$oPWD"
+        export PS1_LAST_PWD_INO="$(command ls -id "$PWD" 2>/dev/null)"
+        echorm -f?- || echor "Directory has changed"
+      fi
+    else
+      export PS1_LAST_PWD="$PWD"
+      export PS1_LAST_PWD_INO="$ino"
+    fi
+  else
+    unset PS1_LAST_PWD PS1_LAST_PWD_INO
+  fi
+  if ${PS1_RESET_ERROR:-false}; then # {{{
+    if [[ "$BASH_LAST_CMD" == "$BASH_LAST_LAST_CMD" ]]; then
+      if [[ "$BASH_LAST_ERR" == "$BASH_LAST_LAST_ERR" ]]; then
+        BASH_LAST_ERR=0 BASH_LAST_ERR_CLEARED=true
+      elif ${BASH_LAST_ERR_CLEARED:-false}; then
+        BASH_LAST_ERR=0
+      fi
+    else
+      BASH_LAST_ERR_CLEARED=false
+      BASH_LAST_LAST_CMD="$BASH_LAST_CMD"
+    fi
+    BASH_LAST_LAST_ERR="$BASH_LAST_ERR"
+  fi # }}}
   local cOff="$(PS1_getColor 'off')"
   PS1=
   # ps $PPID | command grep mc >/dev/null 2>&1 && PS1="mc|"
@@ -85,67 +120,110 @@ PS1_setter() { # {{{
     user) # {{{
       PS1+="\u@";; # }}}
     host) # {{{
-      PS1+="$(PS1_getColor 'host')"
       local name=$HOSTNAME p=
       for p in $TMUX_REMOTE_PREFIXES; do
         name="${name/$p}"
       done
-      PS1+="${name^^}"
-      PS1+="$cOff:";; # }}}
+      PS1_colorFormat 'host' "${name^^}" ':';; # }}}
     pwd) # {{{
-      PS1+="$(PS1_getColor 'pwd')$(PS1_adjustPath "$PWD")$cOff";; # }}}
+      PS1_colorFormat 'pwd' "$(PS1_adjustPath "$PWD")";; # }}}
     pwd_tmux) # {{{
-      PS1+="$(PS1_getColor 'pwd')"
+      local p=
       if [[ -n $TMUX ]]; then
         case $PWD in
-        $HOME) PS1='~';;
-        /)     PS1='/';;
+        $HOME) p='~';;
+        /)     p='/';;
         *)     local tmp="$PWD"
-                local ps1_ignored=$PS1_IGNORED
-                if [[ -z $ps1_ignored ]]; then
-                  ps1_ignored="$(tmux show-options -v @tmux_path 2>/dev/null)"
-                  [[ $ps1_ignored == $HOME || $ps1_ignored == '/' ]] && ps1_ignored=
-                fi
-                if [[ ! -z $ps1_ignored && $tmp == $ps1_ignored* ]]; then
-                  tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
-                  [[ $ps1_ignored == $HOME* ]] && tmp="~/$tmp"
-                fi
-                PS1+="$(PS1_adjustPath "$tmp")"
-                ;;
+               local ps1_ignored=$PS1_IGNORED
+               if [[ -z $ps1_ignored ]]; then
+                 ps1_ignored="$(tmux show-options -v @tmux_path 2>/dev/null)"
+                 [[ $ps1_ignored == $HOME || $ps1_ignored == '/' ]] && ps1_ignored=
+               fi
+               if [[ ! -z $ps1_ignored && $tmp == $ps1_ignored* ]]; then
+                 tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
+                 [[ $ps1_ignored == $HOME* ]] && tmp="~/$tmp"
+               fi
+               p="$(PS1_adjustPath "$tmp")";;
         esac
       else
-        PS1+=$(PS1_adjustPath "$PWD")
+        p=$(PS1_adjustPath "$PWD")
       fi
-      PS1+="$cOff";; # }}}
+      PS1_colorFormat 'pwd' "$p";; # }}}
     pwd_short) # {{{
-      PS1+="$(PS1_getColor 'pwd')"
+      local p=
       case $PWD in
-      $HOME) PS1+='~';;
-      /)     PS1+='/';;
-      *)     PS1+="${PWD/*\/}";;
+      $HOME) p='~';;
+      /)     p='/';;
+      *)     p="${PWD/*\/}";;
       esac
-      PS1+="$cOff";; # }}}
+      PS1_colorFormat 'pwd' "$p";; # }}}
     jobs) # {{{
       if [[ ! -z $(jobs -p) ]]; then
-        sleep 0.1
+        sleep 0.05
         local jobs_r=$(jobs -rp)
         local jobs_s=$(jobs -sp)
         if [[ ! -z $jobs_r || ! -z $jobs_s ]]; then
-          PS1+="$(PS1_getColor 'jobs')[$cOff"
+          PS1_colorFormat 'jobs' "["
           if [[ ! -z $jobs_r ]]; then
-            PS1+="$(PS1_getColor 'j-r')$(echo "$jobs_r" | wc -l | xargs)$cOff"
+            PS1_colorFormat 'j-r' "$(echo "$jobs_r" | wc -l | xargs)"
           fi
           if [[ ! -z $jobs_s ]]; then
-            [[ ! -z $jobs_r ]] && PS1+="$(PS1_getColor 'jobs')/$cOff"
-            PS1+="$(PS1_getColor 'j-s')$(echo "$jobs_s" | wc -l | xargs)$cOff"
+            [[ ! -z $jobs_r ]] && PS1_colorFormat 'jobs' "/"
+            PS1_colorFormat 'j-s' "$(echo "$jobs_s" | wc -l | xargs)"
           fi
-          PS1+="$(PS1_getColor 'jobs')]$cOff"
+          PS1_colorFormat 'jobs' "]"
         fi
       fi;; # }}}
     git) # {{{
-      PS1+="$(PS1_getColor 'git')$(__git_ps1 "(%s)")$cOff";; # }}}
-    err) # {{{
-      PS1+="$(PS1_getColor "err-$BASH_LAST_ERR")\\\$$cOff ";; # }}}
+      local l="$(__git_ps1 "%s")"
+      if [[ ! -z "$l" ]]; then
+        l=${l#(} && l=${l%)}
+        l="(${l#remotes/})"
+        PS1_colorFormat 'git' "$l"
+      fi;; # }}}
+    prompt) # {{{
+      local sign='\$'
+      ${PS1_DEBUG:-false} && set -xv
+      if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then
+        export PS1_PSTREE_INSTALLED=true
+        which pstree >/dev/null 2>&1 || PS1_PSTREE_INSTALLED=false
+      fi
+      if $PS1_PSTREE_INSTALLED && [[ ( ! -n $TMUX && $SHLVL -gt 1 ) || $SHLVL -gt 3 ]]; then
+        local vv="PS1_SIGN_${$}"
+        local v=${!vv}
+        if [[ -z $v ]]; then
+          local param="-a -s"
+          $IS_MAC && param=
+          local cmd="pstree $param -p $$ | sed -n --silent '1,/'$$'$/p'"
+          if $IS_MAC; then
+            cmd+=" | sed -n '/= \([0-9]\+\) .*bash$/s/.*= \([0-9]\+\) .*bash/\1/p'"
+          else
+            cmd+=" | sed -n '/bash,[0-9]\+$/s/.*,//p'"
+          fi
+          cmd+=" | xargs ps -f -p | grep -c -e 'bash'"
+          if ${PS1_DEBUG:-false} || ${PS1_DEBUG2:-false}; then
+            echo "$cmd" >/dev/stderr
+          fi
+          local bashCnt="$(eval $cmd)"
+          if [[ $bashCnt -gt 1 ]]; then
+            v='@'
+            if ${BASH_USE_UNICODE_FOR_NESTED_BASH:-true}; then
+              v="${UNICODE_EXTRA_CHARS[nested_bash]}" a=$((bashCnt-1))
+              [[ $a -gt 20 ]] && a=20
+              v="$(printf "%d" "'$v")"
+              v="$(printf "\U$(printf '%08x' "$((v+a-1))")")"
+            else
+              [[ $((bashCnt-1)) -gt 1 ]] && v+=$((bashCnt-1))
+            fi
+            sign="$v"
+          fi
+          eval export PS1_SIGN_${$}=$sign
+        else
+          sign=$v
+        fi
+      fi
+      ${PS1_DEBUG:-false} && set +xv
+      PS1_colorFormat "err-$BASH_LAST_ERR" "$sign" " ";; # }}}
     cursor) # {{{
       PS1+="$(PS1_getColor 'cursor')";; # }}}
     env) # {{{
@@ -250,7 +328,7 @@ ps1_toggle() { # @@ # {{{
         break
       fi
     done
-    _aliases_dbg -e "Changing PS1 to $next\n"
+    echorm -C 0 "Changing PS1 to %yellow:{$next}"
   fi # }}}
   export PS1_STATUS="$next:$current"
   IFS=$oldIFS

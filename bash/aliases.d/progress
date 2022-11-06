@@ -3,7 +3,10 @@
 
 progress() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
-    local retVal='--cmd --delay --msg --cnt --key --get-key --keys --every-step --out --color --pv --dots --spin --err --no-err --dbg --dbg2 --end-msg --steps --tmux --tmux-only --mark --unmark --wait --wait-pv --clean'
+    local retVal='--cmd --delay --msg --cnt --key --get-key --keys --every-step --out --color --pv --dots --spin --err --no-err --dbg --dbg2 --end-msg --steps --tmux --tmux-only --mark --unmark --wait --wait-pv --clean --err-on-timeout'
+    if [[ $2 == --shorts ]]; then
+      return 0
+    fi
     echo "$retVal"
     return 0
   fi # }}}
@@ -11,11 +14,11 @@ progress() { # @@ # {{{
   [[ -z $COff ]] && source $BASH_PATH/colors
   local cmd= delay= msg= cnt=0 every=false steps= dbg= endTime=
   local use_pv=false use_dots=false use_spin=false
-  local out="/dev/stdout" color="${CHLSearch}" end_message="DONE:BREAK"
+  local out= color="${CHLSearch}" end_message="DONE:BREAK"
   local key=false get_key=false pressed_key= extra_keys=
   local mark_file="$TMP_MEM_PATH/progress-$PPID.tmp" do_mark=false
   local tmux_progress=false tmux_entry="PR#$PPID" tmux_text="P[%s]" tmux_progress_only=false
-  local report_error=true retVal=0
+  local report_error=true report_error_timeout=false retVal=0
   if [[ -z $PROGRESS_DOTS_SUPPORTED ]]; then # {{{
     PROGRESS_DOTS_SUPPORTED=true
     if [[ ! -z $LC_CTYPE ]] && ! echo "$LC_CTYPE" | command grep -q "UTF-8"; then
@@ -38,6 +41,7 @@ progress() { # @@ # {{{
     --steps)      shift; steps=$1;;
     --no-err)     report_error=false;;
     --err)        report_error=true;;
+    --err-on-timeout) report_error=false; report_error_timeout=true;;
     --key)        key=true; report_error=false;;
     --keys)       shift; extra_keys=$1;&
     --get-key)    get_key=true;;
@@ -64,8 +68,8 @@ progress() { # @@ # {{{
     --unmark)     shift; local delay= err=0
                   while [[ ! -z $1 ]]; do # {{{
                     case $1 in
-                    --err*) err=$1; err=${err#--err-}; err=${err#--err};;
-                    *)      mark_file="$TMP_MEM_PATH/progress-$1.tmp" && tmux_entry="PR#$1";;
+                    --err=*) err=${1#--err=}; if [[ $err == 'true' ]]; then err=0; elif [[ $err == 'false' ]]; then err=1; fi;;
+                    *)       mark_file="$TMP_MEM_PATH/progress-$1.tmp" && tmux_entry="PR#$1";;
                     esac
                     shift
                   done # }}}
@@ -105,7 +109,13 @@ progress() { # @@ # {{{
     esac
     shift
   done # }}}
-  $get_key && [[ $out == '/dev/stdout' ]] && out='/dev/stderr'
+  if [[ -z $out ]]; then # {{{
+    if $get_key || [[ ! -t 1 ]]; then
+      out='/dev/stderr'
+    else
+      out='/dev/stdout'
+    fi
+  fi # }}}
   if ! $use_spin && ! $use_dots && ! $use_pv; then # {{{
     if $every || [[ $(echo $delay | awk '{print $1 * 100}') -le 25 ]]; then
       use_dots=${PROGRESS_DOTS_SUPPORTED:-true}
@@ -137,7 +147,7 @@ progress() { # @@ # {{{
     [[ ! -z $msg ]] && echo "$msg " >>$out
     echo -n "${color}" >>$out
     if [[ ! -z $endTime ]]; then
-      cnt="$(echo "$((endTime-$(command date +'%s'))) $delay" | awk '{print $1/$2}')"
+      cnt="$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{print $1/$2}')"
       writes="$cnt"
     fi
     for ((; cnt>=0; --cnt)); do
@@ -175,7 +185,8 @@ progress() { # @@ # {{{
     [[ -e "$fName" ]] && { read retVal pressed_key <<< $(cat "$fName"); rm -f "$fName"; }
     if ! $report_error; then # {{{
       case $retVal in
-      0|10|11|12) retVal=0;;
+      11) $report_error_timeout || retVal=0;;
+      0|10|12) retVal=0;;
       esac
     fi # }}}
     $get_key && echo "$pressed_key"
@@ -246,7 +257,7 @@ progress() { # @@ # {{{
           eval $cmd >/dev/null 2>&1 && break
         fi
       fi
-      if [[ ! -z $endTime && $(command date +'%s') -gt $endTime ]]; then
+      if [[ ! -z $endTime && ${EPOCHSECONDS:-$(epochSeconds)} -gt $endTime ]]; then
         [[ $cmd == 'false' ]] && retVal=$((10+1)) || retVal=1
         break
       fi
@@ -307,10 +318,72 @@ progress() { # @@ # {{{
   $get_key && echo "$pressed_key"
   if ! $report_error; then # {{{
     case $retVal in
-    0|10|11|12) retVal=0;;
+    11) $report_error_timeout || retVal=0;;
+    0|10|12) retVal=0;;
     esac
   fi # }}}
   $tmux_progress && $ALIASES tmux_progress $tmux_entry end $retVal
   return $retVal
+} # }}}
+progress-dot() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -s) echo 5 10 20 100;;
+    -p) echo 10 20;;
+    -r) echo 3 5 10;;
+    *)
+      case ${4:-$3} in
+      --init) echo "-s -p -r --ts";;
+      *)      echo "--init --end";;
+      esac;;
+    esac
+    return 0
+  fi # }}}
+  local pre="__progress_dot"
+  local -n i=${pre}_i step=${pre}_step inPacket=${pre}_packet inRow=${pre}_row ts=${pre}_ts out=${pre}_out
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --init) # {{{
+      shift; step=1 inPacket=10 inRow=3 out='/dev/stdout' i= ts=
+      while [[ ! -z $1 ]]; do
+        case $1 in
+        [0-9]*) step=$1;;
+        -s)     step=$2; shift;;
+        -p)     inPacket=$2; shift;;
+        -r)     inRow=$2; shift;;
+        -o)     out=$2; shift;;
+        --ts)   ts=$(time2s now);;
+        esac; shift
+      done
+      return 0;; # }}}
+    --end) # {{{
+      if [[ ! -z $i ]]; then
+        if [[ $((i % (step * inPacket * inRow))) != 0 ]]; then
+          echo -e -n "\n$(time2s --to-HMS $(time2s --diff $ts)): " >$out
+        fi
+        echo "End ($(time2s now))" >$out
+      fi
+      eval unset \${!${pre}*}
+      return 0;; # }}}
+    esac; shift
+  done # }}}
+  if [[ -z $i ]]; then # {{{
+    i=0
+    [[ -z $step     ]] && step=1
+    [[ -z $inPacket ]] && inPacket=10
+    [[ -z $inRow    ]] && inRow=3
+    [[ -z $out      ]] && out='/dev/stdout'
+    [[ -z $ts       ]] && ts="$(time2s now)"
+    echo -n "$ts: " >$out
+  fi # }}}
+  if [[ $((i % step)) == 0 ]]; then
+    echo -n "." >$out
+  fi
+  if [[ $(((i+1) % (step * inPacket * inRow))) == 0 ]]; then
+    echo -e -n "\n$(time2s --diff-HMS $ts): " >$out
+  elif [[ $(((i+1) % (step * inPacket))) == 0 ]]; then
+    echo -n " " >$out
+  fi
+  i=$((i+1))
 } # }}}
 

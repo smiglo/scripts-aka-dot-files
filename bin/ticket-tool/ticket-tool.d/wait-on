@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-f="${TICKET_CONF_WAIT_ON_FILE:-/dev/stdin}" phrase=() action=() dbg=0 delay=9999 loop=false showTmuxProgress=false tmuxText="${TICKET_CONF_WAIT_ON_TMUX_TEXT:-Wait[%s]}"
+f="${TICKET_CONF_WAIT_ON_FILE:-/dev/stdin}" phrase=() action=() dbg=0 delay=9999 loop=false showTmuxProgress=false tmuxText="${TICKET_CONF_WAIT_ON_TMUX_TEXT:-Wait[%s]}" silent=false
 if [[ $1 == '@@' ]]; then # {{{
-  echo "-f --file -l --loop -d --delay -v -vv" -p{,=} --progress{,=}
+  echo "-f --file -l --loop -d --delay -v -vv -s" -p{,=} --progress{,=}
   echo "$TICKET_CONF_WAIT_ON_PHRASES_COMPL"
   exit 0
 fi # }}}
@@ -16,6 +16,7 @@ while [[ ! -z $1 ]]; do # {{{
   --progress=*)     tmuxText="${1#--progress=}";;&
   -p=* | --progress=* |\
   -p | --progress ) showTmuxProgress=true;;
+  -s)    silent=true;;
   -v)    dbg=1;;
   -vv)   dbg=2;;
   *)     break;;
@@ -46,7 +47,7 @@ done # }}}
 [[ ! -e $f ]] && echo "Source file '$f' does not exist" >/dev/stderr && exit 1
 phrases="${phrase[*]}" && phrases="${phrases//\\}"
 while true; do
-  eval $ALIASES progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots --out /dev/stderr
+  $silent || eval $ALIASES progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots --out /dev/stderr
   pid=$$
   trap '$ALIASES progress --unmark $pid; echo; exit;' INT TERM EXIT
   ( sleep $delay ) &
@@ -85,7 +86,7 @@ while true; do
       esac
     fi
   done
-  $ALIASES progress --unmark $pid
+  $silent || $ALIASES progress --unmark $pid
   trap - INT TERM EXIT
   ! $loop && break
 done

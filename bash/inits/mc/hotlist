@@ -5,7 +5,7 @@ GROUP "Misc"
   ENTRY "TOM-WORK" URL "/media/$USER/TOM-data"
 ENDGROUP
 GROUP "My"
-  ENTRY "Documents" URL "/$HOME/Documents/priv"
+  ENTRY "Documents" URL "/$HOME/Documents"
   ENTRY "Scripts" URL "/$MY_PROJ_PATH/scripts"
   ENTRY "Vim" URL "/$MY_PROJ_PATH/vim"
 ENDGROUP

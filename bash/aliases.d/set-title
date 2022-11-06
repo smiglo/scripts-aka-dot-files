@@ -2,93 +2,94 @@
 # vim: fdl=0
 
 set_title() { # @@ # {{{
-  set_title_getter_check_map() { # {{{
-    local ret= i=
-    for i in $SET_TITLE_GETTER_MAP; do
-      [[ $PWD == ${i/:*}* ]] && ret=${i/*:} && break
-    done
-    echo "$ret"
+  if [[ $1 == @@ ]]; then # {{{
+    local ret="--set-all --set-none --set-terminal --set-pane --set-window --lock --lock-force --unlock --unlock-force --tmux-session -wl -wlf -l -lf --from-tmux --batch --pwd= --pwd-pane="
+    [[ $2 == 1 ]] && ret+=" --dbg"
+    echo $ret
     return 0
-  } # }}}
+  fi # }}}
+  [[ $- == *x* ]] && return 0
   set_title_getter_default() { # {{{
     local ret=
     case $PWD in # {{{
-    $HOME/*/Dropbox*) ret='dropbox';;
-    $HOME/Desktop*)   ret='desktop';;
-    $HOME/Documents*) ret='docs';;
-    $HOME/Downloads*) ret='downloads';;
-    $HOME/.tmp*)      ret='tmp';;
-    /etc*)            ret='/etc';;
+    $SHARABLE_PATH/* | $HOME/*/Dropbox*) ret='sharable';;
+    $RUNTIME_PATH/*)     ret='runtime';;
+    $HOME/Desktop*)      ret='desktop';;
+    $HOME/Documents*)    ret='docs';;
+    $HOME/Downloads*)    ret='downloads';;
+    $TMP_MEM_PATH/*)     ret='tmp-mem';;
+    $TMP_PATH/*)         ret='tmp';;
+    /etc*)               ret='/etc';;
     esac # }}}
-    if [[ -z $ret ]]; then # {{{
-      local i=
-      for i in $SET_TITLE_GETTER_MAP_POST; do
-        [[ $PWD == ${i/:*}* ]] && ret=${i/*:} && break
-      done
-    fi # }}}
     echo "$ret"
     return 0
   } # }}}
   convertPwd() { # {{{
-    local pwdGetters="$1"
-    local pwdGetter=
-    local lengthOfLast=${SET_TITLE_LENGTH_OF_LAST:-15}
-    local ret=$PWD
+    local pwdGetters="$1" pwdGetter= lengthOfLast=${SET_TITLE_LENGTH_OF_LAST:-15} i= ret= path=$PWD env=
     if $isTMUX; then # {{{
       local prefix="$(tmux show-options -v @tmux_path 2>/dev/null)"
-      [[ ! -z $prefix && $prefix != $HOME ]] && ret="${ret/#$prefix/./${prefix/*\/}}"
+      prefix="${prefix%/}"
+      if [[ ! -z $prefix && $prefix != $HOME ]]; then
+        case $path in
+        $prefix/*) path="./${path#$prefix/}";;
+        $prefix)   path=".";;
+        esac
+      fi
     fi # }}}
-    ret=${ret/#$HOME/'~'}
     for pwdGetter in $pwdGetters; do # {{{
       case $pwdGetter in # {{{
       full) # {{{
-        ;; # }}}
+        ret="$path";; # }}}
       last|last2) # {{{
+        [[ -z $ret ]] && ret="$path"
         ret="${ret/*\/}";;& # }}}
       shorten|shorten2) # {{{
-        local beginning="${ret%\/*}"
-        local last="${ret/*\/}"
+        local beginning="${path%\/*}"
+        local last="${path/*\/}"
         [[ $beginning == $last ]] && last=
         ret="$(echo $beginning | sed -e "s;\(/.\)[^/]*;\1;g")"
         [[ ! -z $last ]] && ret="$ret/$last"
         [[ $ret = ./* ]] && ret=${ret:2}
         if echo $ret | command grep -q ".*/./././.*"; then
           ret="$(echo "$ret" | sed -e 's|\([^/]*\)/.*/\([^/]*\)|\1/.../\2|')"
-        fi
-        ;;& # }}}
+        fi;;& # }}}
       last2|shorten2) # {{{
-        local last="${ret/*\/}"
-        ret="${ret/$last}"
+        local last="${path/*\/}"
+        ret="${path/$last}"
         if [[ ${#last} -ge $(($lengthOfLast + 3)) ]]; then
           last="${last:0:$lengthOfLast}..."
         fi
-        ret+="$last"
-        ;; # }}}
+        ret+="$last";; # }}}
+      set_title_getter_PROFILES) # {{{
+        if [[ -z $ret ]]; then
+          local retInternal=
+          for i in $BASH_PROFILES_FULL; do
+            [[ -e "$i/aliases" ]] && retInternal="$($i/aliases __util_set_title)"
+            [[ ! -z $retInternal ]] && break
+          done
+          if [[ ! -z $retInternal ]]; then
+            env="$(echo "$retInternal" | sed -n '/^# *env:/s/^# *env: *//p')"
+            ret="$(echo "$retInternal" | sed '/^# *env:/d')"
+            break
+          fi
+        fi;; # }}}
       set_title_getter_*) # {{{
-        local retInternal=
-        declare -F $pwdGetter >/dev/null 2>&1 && retInternal="$($pwdGetter)"
-        [[ -z $retInternal ]] && continue
-        ret="$retInternal"
-        ;; # }}}
+        if [[ -z $ret ]]; then
+          local retInternal=
+          declare -F $pwdGetter >/dev/null 2>&1 && retInternal="$($pwdGetter)"
+          [[ ! -z $retInternal ]] && ret="$retInternal"
+        fi;; # }}}
       esac # }}}
-      break
     done # }}}
+    ret=${ret/$HOME/\~}
     echo "$ret"
+    if [[ ! -z "$env" ]]; then
+      echo "$env"
+    fi
   } # }}}
-  if [[ $1 == @@ ]]; then # {{{
-    local ret="--set-all --set-none --set-terminal --set-pane --set-window --lock --lock-force --unlock --unlock-force --tmux-session -wl -wlf -l -lf --from-tmux --batch --pwd= --pwd-pane="
-    [[ $2 == 1 ]] && ret+=" --dbg"
-    unset convertPwd set_title_getter_check_map set_title_getter_default
-    echo $ret
-    return 0
-  fi # }}}
-  local title=
+  local title= convertPwd_out=
   local pwdGetter=${SET_TITLE_PWD_GETTER:-"shorten2"}
-  local pwdPaneGetter="set_title_getter_check_map" i=
-  for i in $BASH_PROFILES; do
-    pwdPaneGetter+=" set_title_getter_${i}"
-  done
-  pwdPaneGetter+=" set_title_getter_default last"
+  local pwdPaneGetter="set_title_getter_PROFILES set_title_getter_default last"
   local setTerminalTitle= setPaneTitle= setWindowTitle=
   local isTMUX=false
   local title_pane= lock_title=
@@ -143,15 +144,26 @@ set_title() { # @@ # {{{
       if [[ ! -z $title_pane ]]; then
         [[ $lock_title == true* && $title_pane != @* ]] && title_pane="@$title_pane"
       else
-        title_pane=$(convertPwd "$pwdPaneGetter")
+        convertPwd_out="$(convertPwd "$pwdPaneGetter")"
+        title_pane="$(echo "$convertPwd_out" | sed -n '1p')"
+        eval "$(echo "$convertPwd_out" | sed -n '2,$p')"
       fi
     fi
   fi # }}}
   [[ -z $title ]] && title="$SET_TITLE_FORCED_TITLE"
-  [[ -z $title ]] && title="$(convertPwd "$pwdGetter")"
+  if [[ -z $title ]]; then
+    convertPwd_out="$(convertPwd "$pwdGetter")"
+    title="$(echo "$convertPwd_out" | sed -n '1p')"
+    eval "$(echo "$convertPwd_out" | sed -n '2,$p')"
+  fi
   title="$(echo "$title" | sed -e 's/  \+/ /g' -e 's/\(\w\) \(\w\)/\1-\2/g' -e 's/ //g')"
   $setTerminalTitle && printf ']1;%s'   "$title" >/dev/stderr
-  $setPaneTitle && printf ']2;%s\\' "${title_pane//\\/}" >/dev/stderr
+  local suffix=$SET_TITLE_SUFFIX
+  if [[ ! -z $title_pane ]]; then
+    suffix="${suffix/$title_pane\/}"
+    suffix="${suffix/$title_pane}"
+  fi
+  $setPaneTitle && printf ']2;%s%s\\' "${title_pane//\\/}" "${suffix}" >/dev/stderr
   if $isTMUX || $batch; then # {{{
     local TMUX_LOCKED_TITLE='@locked_title' locked_pane=
     if $isTMUX; then # {{{

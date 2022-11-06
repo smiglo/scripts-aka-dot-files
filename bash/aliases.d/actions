@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+is-found() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    local i=0 no=$2 cmd=$3 ret="---"
+    shift 3
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -1 | -2) i=$((i+1));;
+      *) break;;
+      esac; shift
+    done # }}}
+    no=$((no-i))
+    case $no in
+    0 | 1) # {{{
+      ret="-1 -2 Phrase";; # }}}
+    2) # {{{
+      ret="in in-file";; # }}}
+    3) # {{{
+      [[ "$cmd" == 'in' || "$cmd" == 'in' ]] && ret="Command"
+      [[ "$cmd" == 'in-file' || "$cmd" == 'in-file' ]] && ret="@@-f";; # }}}
+    esac
+    echo "$ret"
+    return 0
+  fi # }}}
+  local dbg=${ACTIONS_DBG:-false} mod=-
+  if $dbg; then
+    echorm -M -?
+    eval $(echorm -f?var dbg mod)
+  fi
+  local oOut=/dev/null oErr=/dev/null grepP="-q" inCmdOutput=true
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -1) grepP=; oOut=/dev/stdout;;
+    -2) grepP=; oOut=/dev/stderr; oErr=/dev/stderr;;
+    *) break;;
+    esac; shift
+  done # }}}
+  local phrase="$1" mode=$2 cmd="$3"
+  shift $#
+  $dbg && echorv -M phrase mode cmd
+  case $mode in
+  in) ;;
+  in-file) inCmdOutput=false;;
+  *) echor "unsupported mode [$mode]"; return 1;;
+  esac
+  [[ -z $phrase || -z $cmd ]] && echor "wrong args [$phrase] [$cmd]" && return 1
+  if ! $inCmdOutput; then
+    [[ ! -e $cmd ]] && echor "file not exist [$cmd]" && return 1
+    cmd="cat $cmd"
+  fi
+  $dbg && echorv -M cmd inCmdOutput
+  eval "$cmd" | command grep $grepP "$phrase" >$oOut 2>$oErr
+} # }}}
+do-action() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    local i=0 no=$2 last=$3 action= ret="---"
+    shift 3
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -1 | -2) i=$((i+1));;
+      *) action="$1"; break;;
+      esac; shift
+    done # }}}
+    no=$((no-i))
+    case $no in
+    0 | 1) # {{{
+      ret="-1 -2 tf Action";; # }}}
+    2) # {{{
+      ret="if if-not if-found if-not-found";; # }}}
+    3) # {{{
+      case $last in
+      if | if-not)             ret="Condition";;
+      if-found | if-not-found) ret="Phrase";;
+      esac;; # }}}
+    4) # {{{
+      if [[ " $@ " == *" if-found "* || " $@ " == *" if-not-found "* ]]; then
+        ret="in in-file"
+      elif [[ " $@ " == *" if "* || " $@ " == *" if-not "* ]]; then
+        [[ "$action" != "tf" ]] && ret="else"
+      fi;; # }}}
+    5) # {{{
+      [[ "$last" == 'in' ]] && ret="Command"
+      [[ "$last" == 'in-file' ]] && ret="@@-f"
+      [[ $action != "tf" ]] && [[ " $@ " == *" if "* || " $@ " == *" if-not "* ]] && ret="Action-On-Else";; # }}}
+    6) # {{{
+      [[ $action != "tf" ]] && [[ " $@ " == *" if-found "* || " $@ " == *" if-not-found "* ]] && ret="else";; # }}}
+    7) # {{{
+      [[ $action != "tf" ]] && [[ " $@ " == *" if-found "* || " $@ " == *" if-not-found "* ]] && ret="Action-On-Else";; # }}}
+    esac
+    echo "$ret"
+    return 0
+  fi # }}}
+  local dbg=${ACTIONS_DBG:-false} mod=-
+  if $dbg; then
+    echorm -M -?
+    eval $(echorm -f?var dbg mod)
+  fi
+  local neg=false cmd= ret= oOut=/dev/null oErr=/dev/null isFoundP=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -1) oOut=/dev/stdout; isFoundP+="-1 ";;
+    -2) oErr=/dev/stderr; isFoundP+="-2 ";;
+    *) break;;
+    esac; shift
+  done # }}}
+  local action="$1" mode="$2" actionElse=; shift 2
+  case $mode in # {{{
+  if)            mode=if;;
+  if-not)        mode=if; neg=true;;
+  if-found)      mode=find;;
+  if-not-found)  mode=find; neg=true;;
+  *)             echor "unsupported mode [$mode]"; return 1;;
+  esac # }}}
+  $dbg && echorv -M action mode
+  case $mode in
+  find) # {{{
+    local phrase="$1" isFoundMode="$2" cmd="$3"; shift 3
+    case $isFoundMode in
+    in | in-file) ;;
+    *) echor "unsupported mode [$isFoundMode]"; return 1;;
+    esac
+    [[ -z $phrase || -z $cmd ]] && echor "wrong args [$phrase] [$cmd]" && return 1
+    $dbg && echorv -M phrase isFoundMode cmd
+    is-found $isFoundP "$phrase" $isFoundMode "$cmd"
+    ret=$?;; # }}}
+  if) # {{{
+    cmd="$1"; shift
+    [[ -z $cmd ]] && echor "missing cmd" && return 1
+    $dbg && echorv -M cmd
+    eval "$cmd" >$oOut 2>$oErr </dev/tty
+    ret=$?;; # }}}
+  esac
+  case $1 in # {{{
+  else) # {{{
+    shift
+    actionElse="$1"
+    $dbg && echorv -M actionElse
+    ;; # }}}
+  '') ;;
+  *) echor "unsupported arg [$1]"; return 1;;
+  esac # }}}
+  $dbg && echorv -M ret neg
+  case $action in # {{{
+  tf) # {{{
+    action="echo 'true'";
+    actionElse="echo 'false'";; # }}}
+  esac # }}}
+  case $ret-$neg in # {{{
+  0-false | [1-9]*-true) eval "${action:-true}"; true;;
+  *) eval "${actionElse:-false}"; false;;
+  esac # }}}
+} # }}}
+doa() { # @@ # {{{
+  do-action "$@"
+} # }}}
+tf() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    local a2=$2 a3=$3
+    shift 3
+    do-action '@@' $((a2+1)) $a3 tf $@
+    return 0
+  fi # }}}
+  do-action tf "$@"
+} # }}}
+export -f is-found do-action doa tf
+

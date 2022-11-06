@@ -1,11 +1,13 @@
-#/bin/bash
+#!/usr/bin/env bash
 # vim: fdl=0
 
 # Initial checks & set up # {{{
 [[ -z $TICKET_PATH ]] && "Env[TICKET_PATH] not defined (tt-s)" >/dev/stderr && exit 1
 [[ -z $TICKET_TOOL_PATH ]] && "Env[TICKET_TOOL_PATH] not defined (tt-s)" >/dev/stderr && exit 1
 getPath() { # {{{
-  local path_issue= ext= issue="$1" must_exisit="${2:-false}"
+  local issue="$1" must_exisit="${2:-false}" ext=
+  local path_issue="$TICKET_PATH/$issue"
+  [[ -e "$path_issue/${issue}-data.txt" || -e "$path_issue/.${issue}-data.txt" ]] && echo "$path_issue" && return 0
   for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
     path_issue=$($ext --ticket-path $issue)
     if $must_exisit; then
@@ -15,7 +17,7 @@ getPath() { # {{{
     fi
   done # }}}
   if $must_exisit; then
-    [[ ! -e "$path_issue/${issue}-data.txt" && ! -e "$path_issue/.${issue}-data.txt" ]] && path_issue="$TICKET_PATH/$issue"
+    [[ ! -e "$path_issue/${issue}-data.txt" && ! -e "$path_issue/.${issue}-data.txt" ]] && path_issue=
   else
     [[ -z $path_issue ]] && path_issue="$TICKET_PATH/$issue"
   fi
@@ -28,7 +30,7 @@ while [[ ! -z $1 ]]; do # {{{
   case $1 in
   --no-eval)   do_eval=false;;
   --open)      do_open=true;;
-  --layout)    do_layout=true;;
+  --layout)    do_layout=true; do_eval=false;;
   --get-path)  getPath "$2" "$3"; exit 0;;
   --always)    always=true;;
   --no-always) always=false;;
@@ -69,6 +71,9 @@ fi # }}}
 # }}}
 # Path to issue # {{{
 export path_issue="$(getPath "$issue")"
+if [[ -z $path_issue ]]; then
+  [[ $0 == ${BASH_SOURCE[0]} ]] && exit 0 || return 0
+fi
 # }}}
 fname="$path_issue/${issue}-data.txt"
 fnameH="$path_issue/.${issue}-data.txt"
@@ -98,6 +103,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 		# vim: ft=sh fdm=marker fdl=0
 		# j-info: -ALWAYS-INCLUDE, -DONE
 		# j-info: -LAYOUT:
+		# j-info: -ENV:
 		@@ j-info: @@
 		# ## }}}
 	EOF
@@ -114,14 +120,10 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			# echo "export var=val"
 			@@ ENV @@
 			# }}}
-			# -setup -# {{{ @@
+			# -setup -# {{{
+			echorm --name tt:setup +
 			case $1 in
-			# alias)   commands;;
-			@@) # {{{
-			  case $2 in
-			  # alias) echo "";;
-			  *) echo "";;
-			  esac;; # }}}
+			# alias)   commands;; # @@: compl
 			@travelsal) # {{{
 			  case $2 in
 			  # -INIT-) echo "alias";;
@@ -134,6 +136,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			esac
 			# }}}
 			# -info # {{{
+			echorm --name tt:info
 			# For separators use: ---, ===; for sections: ## @, or [## @ ... # {{{] + [## @ }}}]
 			@@ ## @ Description @@
 			@@ DESCRIPTION @@
@@ -148,6 +151,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     cat >>"$fname" <<-"EOF"
 			# -others-tbd # {{{
 			# -browser -# {{{
+			echorm --name tt:browser
 			@@ BROWSER @@
 			# }}}
 		EOF
@@ -165,15 +169,18 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     if ! $tmux_template_added; then # {{{
       cat >>"$fname" <<-"EOF"
 				# -tmux-init -# {{{
+				echorm --name tt:tmux
 				tmux split-window -t $w.2 -d -c $pl_abs -h -p50
 				# }}}
 				# -tmux-splits -# {{{
+				echorm --name tt:tmux
 				tmux \
 				  new-window   -a -n $title -c $pl_abs  \; \
 				  set-option   -w @locked_title 1          \; \
 				  split-window -t .1 -d -c $pl_abs -v -p30
 				# }}}
 				# -tmux-cmds -# {{{
+				echorm --name tt:tmux
 				# }}}
 			EOF
     fi # }}}
@@ -234,7 +241,7 @@ if $do_open; then # {{{
 fi # }}}
 if $do_eval; then # {{{
   if [[ -n $TMUX ]]; then
-    if [[ $(tmux display-message -t $TMUX_PANE -pF '#W') == "${issue^^}"* ]]; then
+    if [[ -z $TICKET_CONF_ENV_LAST || $((${EPOCHSECONDS:-$(epochSeconds)} - TICKET_CONF_ENV_LAST)) -gt 10 ]] && [[ $(tmux display-message -t $TMUX_PANE -pF '#W') == "${issue^^}"* ]]; then
       eval "$($TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent)"
       if [[ ! -z $TICKET_TOOL_POST_ENV ]]; then # {{{
         while read post_env; do
@@ -244,7 +251,8 @@ if $do_eval; then # {{{
     else
       $TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent >/dev/null
     fi
+    TICKET_CONF_ENV_LAST="${EPOCHSECONDS:-$(epochSeconds)}"
   fi
 fi # }}}
-unset path_issue issue do_eval do_open do_layout fname fnameH post_env getPath
+unset path_issue issue do_eval do_open do_layout fname fnameH post_env getPath always
 

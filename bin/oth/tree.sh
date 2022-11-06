@@ -1,4 +1,4 @@
-#!/usr/bin/env bash -e
+#!/usr/bin/env bash
 
 print_entry() {
     echo "$2$1"
@@ -13,7 +13,7 @@ print_tree() {
     print_entry "$i" "$tabs"
     if [[ -d "$i" ]]; then
       cd "$i"
-      generic "$tabs$TABS"
+      print_tree "$tabs$TABS"
       cd ..
     fi
   done

@@ -5,15 +5,18 @@
 # It's assumed that wget and a C/C++ compiler are installed.
 
 # Initialize # {{{
-TMUX_INSTALL_VERSION=${TMUX_INSTALL_VERSION:-'local:2.5'}
+TMUX_INSTALL_VERSION=${TMUX_INSTALL_VERSION:-'local:2.8'}
 if [[ $TMUX_INSTALL_VERSION == local:* ]]; then
   TMUX_INSTALL_VERSION=${TMUX_INSTALL_VERSION/'local:'}
   LOCAL_TARBALL=$MY_PROJ_PATH/scripts/bash/inits/tmux/src/tmux-src-${TMUX_INSTALL_VERSION}.tar.gz
 fi
-LIBEVENT_VERSION=${LIBEVENT_VERSION:-'2.0.22-stable'}
-NCURSES_VERSION=${NCURSES_VERSION:-'6.0'}
+TAKE_CARE_OF_LIBS=false
 ROOT=$HOME/.config/tmux-local
 CLEAN_AFTER=false
+if $TAKE_CARE_OF_LIBS; then # {{{
+  LIBEVENT_VERSION=${LIBEVENT_VERSION:-'2.0.22-stable'}
+  NCURSES_VERSION=${NCURSES_VERSION:-'6.0'}
+fi # }}}
 # Handle arguments # {{{
 while [[ ! -z $1 ]]; do
   case $1 in
@@ -23,6 +26,7 @@ while [[ ! -z $1 ]]; do
   --local)      [[ $LOCAL_TARBALL != /* ]] && LOCAL_TARBALL="$PWD/$LOCAL_TARBALL"; TMUX_INSTALL_VERSION=$(echo "$LOCAL_TARBALL" | sed -e 's/.*tmux-//' -e 's/\.tar\.gz//');;
   --local-repo) TMUX_INSTALL_VERSION='repo';;
   --root)       shift; ROOT=$1;;
+  --libs)       TAKE_CARE_OF_LIBS=true;;
   --clean)      CLEAN_AFTER=true;;
   esac
   shift
@@ -45,37 +49,46 @@ else
   cp -a ${LOCAL_TARBALL%/} ./
   [[ $TMUX_INSTALL_VERSION == 'repo' ]] && mv ${LOCAL_TARBALL%/} tmux-${TMUX_INSTALL_VERSION}
 fi
-[[ ! -e release-${LIBEVENT_VERSION}.tar.gz ]] && wget https://github.com/libevent/libevent/archive/release-${LIBEVENT_VERSION}.tar.gz
-[[ ! -e ncurses-${NCURSES_VERSION}.tar.gz  ]] && wget ftp://ftp.gnu.org/gnu/ncurses/ncurses-${NCURSES_VERSION}.tar.gz
+if $TAKE_CARE_OF_LIBS; then # {{{
+  [[ ! -e release-${LIBEVENT_VERSION}.tar.gz ]] && wget https://github.com/libevent/libevent/archive/release-${LIBEVENT_VERSION}.tar.gz
+  [[ ! -e ncurses-${NCURSES_VERSION}.tar.gz  ]] && wget ftp://ftp.gnu.org/gnu/ncurses/ncurses-${NCURSES_VERSION}.tar.gz
+fi # }}}
 # }}}
 # }}}
 # }}}
 # Extract files, configure, and compile # {{{
-# LibEvent # {{{
-[[ ! -e libevent-release-${LIBEVENT_VERSION} ]] && tar xvzf release-${LIBEVENT_VERSION}.tar.gz
-cd libevent-release-${LIBEVENT_VERSION}
-./autogen.sh
-./configure --prefix=$DST --disable-shared
-make
-make install
-cd ..
-# }}}
-# NCureses # {{{
-[[ ! -e ncurses-${NCURSES_VERSION} ]] && tar xvzf ncurses-${NCURSES_VERSION}.tar.gz
-cd ncurses-${NCURSES_VERSION}
-export CPPFLAGS="-P"
-./configure --prefix=$DST
-make
-make install
-export CPPFLAGS=
-cd ..
-# }}}
+if $TAKE_CARE_OF_LIBS; then # {{{
+  # LibEvent # {{{
+  [[ ! -e libevent-release-${LIBEVENT_VERSION} ]] && tar xvzf release-${LIBEVENT_VERSION}.tar.gz
+  cd libevent-release-${LIBEVENT_VERSION}
+  ./autogen.sh
+  ./configure --prefix=$DST --disable-shared
+  make
+  make install
+  cd ..
+  # }}}
+  # NCureses # {{{
+  [[ ! -e ncurses-${NCURSES_VERSION} ]] && tar xvzf ncurses-${NCURSES_VERSION}.tar.gz
+  cd ncurses-${NCURSES_VERSION}
+  export CPPFLAGS="-P"
+  ./configure --prefix=$DST
+  make
+  make install
+  export CPPFLAGS=
+  cd ..
+  # }}}
+fi # }}}
 # TMUX # {{{
 [[ ! -e tmux-${TMUX_INSTALL_VERSION} ]] && tar xvzf tmux-${TMUX_INSTALL_VERSION}.tar.gz
 cd tmux-${TMUX_INSTALL_VERSION}
 [[ -e autogen.sh ]] && sh autogen.sh
-./configure CFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-L$DST/lib -L$DST/include/ncurses -L$DST/include"
-CPPFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-static -L$DST/include -L$DST/include/ncurses -L$DST/lib" make
+if $TAKE_CARE_OF_LIBS; then # {{{
+  ./configure CFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-L$DST/lib -L$DST/include/ncurses -L$DST/include"
+  CPPFLAGS="-I$DST/include -I$DST/include/ncurses" LDFLAGS="-static -L$DST/include -L$DST/include/ncurses -L$DST/lib" make # }}}
+else # {{{
+  ./configure
+  make
+fi # }}}
 cp tmux $DST/bin
 if [[ -e 'tmux.1' ]]; then
   [[ ! -e "$DST/share/man/man1" ]] && command mkdir -p "$DST/share/man/man1"

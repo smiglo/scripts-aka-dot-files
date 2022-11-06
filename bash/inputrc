@@ -1,3 +1,5 @@
+$include /etc/inputrc
+
 set bell-style none
 set colored-stats on
 set completion-ignore-case on
@@ -13,10 +15,10 @@ set show-all-if-unmodified on
 set skip-completed-text on
 
 set show-mode-in-prompt on
-# In Bash >= 4.4
-set vi-ins-mode-string "+"
-set vi-cmd-mode-string ":"
-set emacs-mode-string "@"
+# In Bash >= 4.4  # this is also good:  ▸
+set vi-ins-mode-string "\1\e[0;33m\2☯ \1\e[0m\2"
+set vi-cmd-mode-string "\1\e[0;34m\2☯ \1\e[0m\2"
+set emacs-mode-string  "\1\e[0;31m\2☯ \1\e[0m\2"
 set colored-completion-prefix on
 # ---
 
@@ -29,8 +31,8 @@ set keymap vi-command
 "\M-j":     history-search-forward
 "\e[Z":     complete
 "\C-k":     complete
-"	":        menu-complete
-"\C-b":     menu-complete-backward
+"\C-i":     menu-complete
+"\C-n":     menu-complete-backward
 "\C-h":     dynamic-complete-history
 "\M-.":     yank-last-arg
 "\C-s":     forward-search-history
@@ -89,6 +91,7 @@ set keymap vi-insert
 "\C-k/":    edit-and-execute-command
 "\C-kE":    emacs-editing-mode
 "JJ":       vi-movement-mode
+"KK":       vi-movement-mode
 "\e[1;5C":  vi-next-word
 "\e[1;5D":  vi-prev-word
 

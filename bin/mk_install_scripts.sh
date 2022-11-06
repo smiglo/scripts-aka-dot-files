@@ -1,16 +1,18 @@
-#!/usr/bin/env bash -e
+#!/usr/bin/env bash
 # vim: fdl=0
+
+set -e
 
 if [[ $1 == @@ ]]; then # {{{
   case $3 in
   -i) # {{{
     {
       sed -n '/if\s\+install/s/.*install\s\+'"'"'\([^'"'"']*\)'"'"'.*/\1/p' $0
-      for i in $bin_path/bash/profiles/*; do
+      for i in $PROFILES_PATH/*; do
         [[ -e $i/mk_install_scripts.sh ]] && sed -n '/if\s\+install/s/.*install\s\+'"'"'\([^'"'"']*\)'"'"'.*/\1/p' $i/mk_install_scripts.sh
       done
     } | sort;; # }}}
-  *) echo -i --all-{yes,no} --selent --no-exit ?;;
+  *) echo -i --all-{yes,no} --selent --no-exit ? --{no-}sudo;;
   esac
   exit 0
 fi # }}}
@@ -31,10 +33,8 @@ cleanUp() { # {{{
 } # }}}
 get_app_name() { # {{{
   local IFS=':'
-  read name inst prg ppa <<<"$1"
-  [[ -z $inst ]] && inst=$name
-  [[ -z $prg ]] && prg=$inst
-  [[ $prg = '-' ]] && prg=$name
+  read prg inst ppa <<<"$1"
+  [[ -z $inst ]] && inst=$prg
   return 0
 } # }}}
 install() { # {{{
@@ -62,17 +62,17 @@ install_ext() { # {{{
   return 1
 } # }}}
 do_install() { # {{{
-  $INSTALL_NO && dbg "[SKIPPED]" && return 0
-  if $INSTALL_YES; then
+  [[ $AUTO_INSTALL_TOOLS == false ]] && dbg "[SKIPPED]" && return 0
+  if [[ $AUTO_INSTALL_TOOLS == true ]]; then
     dbg "[AUTO-INSTALL]"
   else
     dbg "[NOT INSTALLED]"
     while true; do
-      read -p "Install $name [Y/y/N/n] ? " key
+      read -p "Install $prg:$inst [Y/y/N/n] ? " key
       case $key in
       ""|y) break;;
-      Y) INSTALL_YES=true; break;;
-      N) INSTALL_NO=true; return 0;;
+      Y) AUTO_INSTALL_TOOLS=true; break;;
+      N) AUTO_INSTALL_TOOLS=false; return 0;;
       n) return 0;;
       esac
     done
@@ -80,12 +80,19 @@ do_install() { # {{{
   if $IS_MAC; then
     brew install $inst || INSTALL_FAILED+="$inst "
   elif type apt-get >/dev/null 2>&1; then
-    [[ ! -z $ppa ]] && sudo add-apt-repository ppa:$ppa && sudo apt update
-    sudo apt-get -y install $inst || INSTALL_FAILED+="$inst "
+    if $INSTALL_SUDO_ALLOWED; then
+      if [[ ! -z $ppa ]] && ! sudo add-apt-repository -y ppa:$ppa; then
+        INSTALL_FAILED+="$inst "
+      else
+        sudo apt-get -y install $inst || INSTALL_FAILED+="$inst "
+      fi
+    else
+      echo "Installation of '$inst' skipped due to disallowed sudo" >/dev/stderr
+    fi
   elif type yum >/dev/null 2>&1; then
     sudo yum install -y $inst || INSTALL_FAILED+="$inst "
   else
-    dbg "apt-get/yum not available, install ($name) manually."
+    dbg "apt-get/yum not available, install ($prg) manually."
   fi
 } # }}}
 do_dconf() { #{{{
@@ -97,7 +104,8 @@ do_dconf() { #{{{
   local dconf_file_templ="$script_path/bash/inits/dconf/dconf.dump"
   local dconf_file_local="$dconf_file_templ.$HOSTNAME"
   local ver_current="$(git log -1 -- $dconf_file_templ | cut -d' ' -f1)"
-  local ver_last="$(command grep $HOSTNAME ${dconf_file_templ%/*}/status.txt | cut -d' ' -f1 || 0)"
+  local ver_last=
+  [[ -e ${dconf_file_templ%/*}/status.txt ]] && ver_last="$(command grep $HOSTNAME ${dconf_file_templ%/*}/status.txt | cut -d' ' -f1 || 0)"
   if [[ $ver_current == $ver_last ]]; then
     dbg "[UP-TO-DATE]"
     return 0
@@ -146,24 +154,38 @@ APPS_CFG_PATH=${APPS_CFG_PATH:-$RUNTIME_PATH/apps}
 [[ ! -e $APPS_CFG_PATH ]] && command mkdir -p $APPS_CFG_PATH
 
 SETUP_PROFILES=$MK_INSTALL_SETUP_PROFILES
-INSTALL_YES=${MK_INSTALL_INSTALL_YES:-false}
-INSTALL_NO=false
+AUTO_INSTALL_TOOLS=${MK_INSTALL_AUTO_INSTALL_TOOLS}
 INSTALL_FAILED=
 IS_SILENT=false
 DO_EXEC=true
-INSTALL_FEATURES_BASIC='bashrc bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf fonts colors'
-INSTALL_FEATURES_EXT='grc atom ap-calc tig install-tools ack ssh-config gitsh gdb'
+INSTALL_FEATURES_BASIC='bashrc bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf fonts colors rlwrap quilt my-proj-path-as-kb'
+INSTALL_FEATURES_EXT='grc atom ap-calc tig install-tools ack ssh-config gitsh gdb gdb-multiarch speedtest-net'
 INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse less-highlight'
 INSTALL_FEATURES_EXT_MAC='mac-tools mac-grep'
+TO_INSTALL_TOOLS_BASIC="git tig pv at tmux w3m cmatrix mc cscope grc vlock jq expect colordiff column htop curl \
+    cowsay figlet lolcat fortune:fortune-mod"
+TO_INSTALL_TOOLS_UBU="calc:apcalc vim.gtk3:vim-gtk xclip ack-grep:ack cryptsetup ctags:exuberant-ctags clang valgrind openvpn unclutter dconf-cli \
+    vipe:moreutils gnuplot-x11 pstree ag:silversearcher-ag \
+    libnotify-bin notify-osd \
+    ccsm:compizconfig-settings-manager unity-tweak-tool gnome-tweak-tool \
+    ifconfig:net-tools synaptic dconf-editor gawk gparted fdfind:fd-find \
+    bfs gucharmap git-lfs psmisc kcharselect build-essential psmisc rr cpufrequtils \
+    "
+TO_INSTALL_TOOLS_MAC="calc ack pbcopy:tmux-pasteboard ctags ag:the_silver_searcher \
+    bfs:tavianator/tap/bfs fd pidof pstree \
+    "
 INSTALL_BIN_MISC_BASIC='cht.sh keep-pass.sh'
 INSTALL_FROM_ARGS=
+INSTALL_SUDO_ALLOWED=${INSTALL_SUDO_ALLOWED:-true}
 # Other features: dconf
 # }}}
 # Check parameters {{{
 while [[ ! -z $1 ]]; do
   case $1 in
-    --all-yes) INSTALL_YES=true;;
-    --all-no)  INSTALL_NO=true;;
+    --no-sudo) INSTALL_SUDO_ALLOWED=false;;
+    --sudo)    INSTALL_SUDO_ALLOWED=true;;
+    --all-yes) AUTO_INSTALL_TOOLS=true;;
+    --all-no)  AUTO_INSTALL_TOOLS=false;;
     --silent)  IS_SILENT=true;;
     --no-exec) DO_EXEC=false;;
     -i)        DO_EXEC=false; shift; INSTALL_YES=true
@@ -198,18 +220,14 @@ PROFILES_FILE=$APPS_CFG_PATH/setup_profiles
 # Load configuration {{{
 dbg -n "Loading cfg file... "
 set +e
-[[ -e $script_path/bash/runtime ]] && source $script_path/bash/runtime >/dev/null 2>&1
-if [[ -e $PROFILES_PATH/$i ]]; then
-  for p in $SETUP_PROFILES; do
-    [[ -e $script_path/bash/profiles/$p/runtime ]] && source $script_path/bash/profiles/$p/runtime >/dev/null 2>&1
-  done
-fi
-[[ -e $script_path/bash/cfg ]] && source $script_path/bash/cfg >/dev/null 2>&1
-if [[ -e $PROFILES_PATH/$i ]]; then
-  for p in $SETUP_PROFILES; do
-    [[ -e $script_path/bash/profiles/$p/cfg ]] && source $script_path/bash/profiles/$p/cfg >/dev/null 2>&1
-  done
-fi
+[[ -e $script_path/bash/runtime ]] && dbg "  Loading $script_path/bash/runtime" && source $script_path/bash/runtime >/dev/null
+for p in $SETUP_PROFILES; do
+  [[ -e $script_path/bash/profiles/$p/runtime ]] && dbg "  Loading $script_path/bash/profiles/$p/runtime" && source $script_path/bash/profiles/$p/runtime >/dev/null
+done
+[[ -e $script_path/bash/cfg ]] && dbg "  Loading $script_path/bash/cfg" && source $script_path/bash/cfg >/dev/null
+for p in $SETUP_PROFILES; do
+  [[ -e $script_path/bash/profiles/$p/cfg ]] && dbg "  Loading $script_path/bash/profiles/$p/cfg" && source $script_path/bash/profiles/$p/cfg >/dev/null
+done
 set -e
 dbg "[DONE]"
 # }}}
@@ -261,7 +279,8 @@ TO_INSTALL="@ $TO_INSTALL @"
 # }}}
 # }}}
 # Installation {{{
-if type lsb_release >/dev/null 2>&1 && lsb_release -a 2>/dev/null | command grep -q 'Description.*Ubuntu'; then # {{{
+# Configurations, etc. {{{
+if type lsb_release >/dev/null 2>&1 && lsb_release -a 2>/dev/null | command grep -q 'Description.*Ubuntu' && $INSTALL_SUDO_ALLOWED; then # {{{
   dbg "Configuring (apt repositories)... "
   sudo add-apt-repository main
   sudo add-apt-repository universe
@@ -324,14 +343,25 @@ if install 'bash-path'; then # {{{
   ln -s $script_path/bash/personalities $bin_path/bash/
   command mkdir $bin_path/bash/profiles
   for i in $SETUP_PROFILES; do
-    ln -s $script_path/bash/profiles/$i $bin_path/bash/profiles/$i
+    [[ ! -e $bin_path/bash/profiles/$i ]] && ln -s $script_path/bash/profiles/$i $bin_path/bash/profiles/$i
   done
   for i in $bin_path/bash/profiles/*/bin/*; do
     [[ -f $i ]] && ln -s $i $bin_path/
   done
   dbg "[DONE]"
 fi # }}}
-if install 'fonts' && [[ -e $SHARABLE_PATH ]]; then # {{{
+if install 'my-proj-path-as-kb'; then # {{{
+  ln -sf $bin_path/ticket-tool/ticket-data.sh $MY_PROJ_PATH/.ticket-data.sh
+  if [[ ! -e $MY_PROJ_PATH/.env ]]; then
+    cat >$MY_PROJ_PATH/.env <<-'EOF'
+			#!/bin/bash
+			if [[ -n $TICKET_TOOL_PATH && -e $TICKET_TOOL_PATH/session-init.sh ]]; then
+			  source $TICKET_TOOL_PATH/session-init.sh "$MY_PROJ_PATH" "ENV"
+			fi
+		EOF
+  fi
+fi # }}}
+if install 'fonts' && [[ -e $SHARABLE_PATH && -e $HOME/.local/share/fonts ]]; then # {{{
   dbg -n "Configuring (fonts)... "
   fonts="FiraMono Inconsolata" dst="$HOME/.local/share/fonts"
   $IS_MAC && dst="$HOME/Library/Fonts"
@@ -493,7 +523,7 @@ if install 'atom'; then # {{{
   done
   dbg "[DONE]"
 fi # }}}
-if install 'less-highlight'; then # {{{
+if install 'less-highlight' && $INSTALL_SUDO_ALLOWED; then # {{{
   if which dpkg >/dev/null 2>&1 && ! dpkg -L libsource-highlight-common >/dev/null 2>&1; then
     dbg "Configuring (less-highlight)... "
     sudo apt install libsource-highlight-common source-highlight
@@ -527,12 +557,12 @@ if install 'autostart'; then # {{{
   done
   dbg "[DONE]"
 fi # }}}
-if install 'notify-log'; then # {{{
+if install 'notify-log' && $INSTALL_SUDO_ALLOWED; then # {{{
   dbg -n "Configuring (notify-log)... "
   [[ ! -e /etc/profile.d/notify_log.sh ]] && sudo ln -s $script_path/bash/inits/profile.d/notify_log.sh /etc/profile.d/notify_log.sh
   dbg "[DONE]"
 fi # }}}
-if install 'marblemouse' && ! $INSTALL_NO; then # {{{
+if install 'marblemouse' && [[ $AUTO_INSTALL_TOOLS != false ]] && $INSTALL_SUDO_ALLOWED; then # {{{
   dbg -n "Configuring (X11 Marble Mouse)... "
   if [[ ! -e /usr/share/X11/xorg.conf.d/50-marblemouse.conf ]]; then
     f=
@@ -561,7 +591,7 @@ if install 'pulse-audio'; then # {{{
   ln -sf $script_path/bash/inits/pulse-audio/default.pa ~/.config/pulse/
   dbg "[DONE]"
 fi # }}}
-if install 'x-opengl'; then # {{{
+if install 'x-opengl' && $INSTALL_SUDO_ALLOWED; then # {{{
   dbg -n "Configuring (support for OpenGL in X)... "
   if ! command grep -q "^export MOZ_USE_OMTC=1" /etc/X11/Xsession.d/90environment; then
     sudo bash -c "echo export MOZ_USE_OMTC=1 >> /etc/X11/Xsession.d/90environment"
@@ -662,7 +692,11 @@ if install 'radare2'; then # {{{
     pushd $MY_PROJ_PATH/oth >/dev/null 2>&1
     [[ ! -e radare2 ]] && git clone https://github.com/radare/radare2
     cd radare2
-    sudo sys/install.sh
+    if $INSTALL_SUDO_ALLOWED; then
+      sudo sys/install.sh
+    else
+      sys/install.sh
+    fi
     ln -sf $script_path/bash/inits/radare2rc $HOME/.radare2rc
     popd >/dev/null 2>&1
     dbg "[DONE]"
@@ -701,6 +735,20 @@ if install 'gitsh'; then # {{{
   # make
   # sudo make install
 fi # }}}
+if install 'speedtest-net' && $INSTALL_SUDO_ALLOWED; then # {{{
+  dbg "Configuring (speedtest-net)... "
+  if ! $IS_MAC; then
+    sudo apt-get install curl
+    curl -s https://install.speedtest.net/app/cli/install.deb.sh | sudo bash
+    sudo apt-get install speedtest
+  else
+    brew tap teamookla/speedtest
+    brew update
+    brew install speedtest --force
+  fi
+  dbg "[DONE]"
+fi # }}}
+# }}}
 # Install tools {{{
 if install 'install-tools'; then
   tools="$TO_INSTALL_TOOLS"
@@ -708,30 +756,26 @@ if install 'install-tools'; then
   for i in $tools; do
     [[ $i == -* ]] && to_remove+=" $i"
   done
-  tools="$(echo " $tools" | sed -e 's/ -[^ ]*//g')"
+  tools="$(echo " $tools " | sed -e 's/ -[^ ]*//g')"
   tools="$(echo $tools)"
   if [[ -z $tools ]]; then
-    tools="git tig pv at tmux w3m cmatrix mc cscope grc vlock jq expect colordiff column htop curl"
+    tools="$TO_INSTALL_TOOLS_BASIC"
     if ! $IS_MAC; then
-      tools+=" apcalc:calc vim:vim-gtk:vim.gtk xclip ack:ack-grep cryptsetup ctags:exuberant-ctags:- clang valgrind openvpn unclutter dconf-cli \
-        vipe:moreutils:- gnuplot5-x11 pstree ag:silversearcher-ag:- \
-        notify-send:notify-osd:-:leolik/leolik notifyosdconf:notifyosdconfig:-:nilarimogard/webupd8 \
-        compiz:compizconfig-settings-manager:ccsm unity-tweak-tool gnome-tweak-tool \
-        "
+      tools+=" $TO_INSTALL_TOOLS_UBU"
     else
-      tools+=" calc ack pbcopy:tmux-pasteboard:pbcopy ctags ag:the_silver_searcher"
+      tools+=" $TO_INSTALL_TOOLS_MAC"
     fi
     install_full=true
   fi
-  ! $IS_MAC && type apt-get >/dev/null 2>&1 && sudo apt-get update
+  ! $IS_MAC && type apt-get >/dev/null 2>&1 && $INSTALL_SUDO_ALLOWED && sudo apt-get update || true
   tools+=" $TO_INSTALL_TOOLS_EXTRA $to_remove"
   dbg "Tools: To install: [$tools]"
   for i in $tools; do
     [[ $i == -* ]] && continue
     echo " $to_remove " | command grep -q " -${i} " && continue
-    name= inst= prg= ppa=
+    inst= prg= ppa=
     get_app_name $i
-    dbg -n "Checking [$name]... "
+    dbg -n "Checking [$prg:$inst$([[ ! -z $ppa ]] && echo " from $ppa")]... "
     if ! which $prg >/dev/null 2>&1; then
       do_install
     else
@@ -743,8 +787,8 @@ if install 'install-tools'; then
     tools="autofs nfs-kernel-server"
     for i in $tools; do
       get_app_name $i
-      dbg -n "Checking [$name]... "
-      if ! ls /etc/init.d | command grep $name 1>/dev/null; then
+      dbg -n "Checking [$prg]... "
+      if ! ls /etc/init.d | command grep $prg 1>/dev/null; then
         do_install
       else
         dbg "[DONE]"

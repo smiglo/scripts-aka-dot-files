@@ -18,6 +18,7 @@ aawk() { # @@ # {{{
     esac
     shift
   done # }}}
+  echorm "awk $params '$pre{print \"${print#,}\"}'"
   eval awk $params "'$pre{print "${print#,}"}'"
 } # }}}
 

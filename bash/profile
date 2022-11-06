@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-if [ -f "$HOME/.bashrc" ]; then
-  source $HOME/.bashrc --do-min
+if [ "$TERM" != 'dumb' ]; then
+  if [ -f "$HOME/.bashrc" ]; then
+   source $HOME/.bashrc --do-min
+  fi
 fi
 
 export PATH="$HOME/.cargo/bin:$PATH"

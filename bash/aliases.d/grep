@@ -66,10 +66,9 @@ grep_wrapper() { # @@ # {{{
   export GREP_COLORS
   $IS_MAC && ! $gnuGrep && export GREP_COLOR=${GREP_COLORS/mt=}
   local exclude=
-  [[ $cmd != z* ]] && exclude=" --exclude-dir .git --exclude-dir .hg --exclude=tags --exclude 'cscope*' $GREP_EXCLUDES"
+  [[ -t 0 && $cmd != z* ]] && exclude=" --exclude-dir .git --exclude-dir .hg --exclude=tags --exclude 'cscope*' $GREP_EXCLUDES"
   if [[ -t 0 ]]; then # {{{
-    params+=" -n"
-    [[ $args != *-h* ]] && params+="H"
+    [[ $args != *-h* ]] && params+=" -Hn"
   fi # }}}
   if [[ -z $use_tee ]]; then # {{{
     [[ -t 0 ]] && use_tee=true || use_tee=false

@@ -240,10 +240,10 @@ rem() { # @@ # {{{
     fi
     # }}}
   else # {{{
-    local u="$(eval echo \$$var_use_file)"
+    local u="${!var_use_file}"
     if [[ $u == "false" || $u == "true" ]]; then
       do_use_file="$u"
-      $do_use_file && file="$(eval echo \$$var_file)"
+      $do_use_file && file="${!var_file}"
     fi
   fi # }}}
   $do_append && do_use_file=true
@@ -373,8 +373,8 @@ rem() { # @@ # {{{
     fi # }}}
     unset getItem last_working_path
     if $do_use_file; then # {{{
-      $do_append && [[ -e $file ]] && eval $var="\"$(cat $file) $(eval echo \$$var)\""
-      eval echo "\$$var" | tr ' ' '\n' | sed '/^\s*$/ d' >$file
+      $do_append && [[ -e $file ]] && eval $var="\"$(cat $file) ${!var}\""
+      echo "${!var}" | tr ' ' '\n' | sed '/^\s*$/ d' >$file
       [[ ! -e $file ]] && touch $file
       cat -n $file | sort -k2,2 -u | sort -k1,1 | awk '{print $2}' >$file.tmp
       mv $file.tmp $file
@@ -397,12 +397,12 @@ rem() { # @@ # {{{
       eval $var=
       [[ -e $file ]] && eval $var="\"$(cat $file | tr '\n' ' ')\""
     fi # }}}
-    if [[ -z $(eval echo \$$var) ]]; then # {{{
+    if [[ -z ${!var} ]]; then # {{{
       ( $do_reset || $do_use_file ) && return 0
       $do_quiet || echo "No files remembered" >/dev/stderr
       return 1
     fi # }}}
-    set -- $(echo $(eval echo \$$var))
+    set -- ${!var}
     [[ -z $fzf_prompt ]] && fzf_prompt="To recall> "
     for i; do # {{{
       p="${i//%20/ }" && p="${p/$tild/$HOME}"
@@ -439,7 +439,7 @@ rem() { # @@ # {{{
 } # }}}
 
 alias r="rem"     # @@
-alias rr="rem -r" # @@
-export HISTIGNORE+=":rr"
+alias rR="rem -r"
+export HISTIGNORE+=":rR"
 export PHISTORY_IGNORED_COMMANDS+=":r:rem"
 

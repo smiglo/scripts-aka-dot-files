@@ -2,6 +2,7 @@
 # vim: fdl=0
 
 func="$(getFunctionBody 'setup')"
+export func
 while [[ $1 == -* || $1 == @ ]]; do # {{{
   case $1 in
   @)    p='@';  shift  ;;&
@@ -45,7 +46,7 @@ case $1 in
       ret+=" $($ext $cmd "get-ext-commands" $1)"
       ret+=" $($ext $cmd "get-ext-switches")"
     done # }}}
-    [[ ! -z "$func"  ]] && ret+=" $(bash -c "$func" - @@ "$@")"
+    ret+=" $(getCompletionList "$func" --excl "travelsal")"
     # }}}
   else # {{{
     ret=
@@ -53,7 +54,7 @@ case $1 in
       ret="$($ext $cmd @@ "$@")"
       [[ -z $ret ]] || break
     done # }}}
-    [[ -z $ret && ! -z "$func" ]] && ret+=" $(bash -c "$func" - @@ "$@")"
+    [[ -z $ret ]] && ret+=" $(getCompletionList "$func" "$@")"
   fi # }}}
   echo "$ret"
   ;; # }}}
@@ -83,14 +84,14 @@ case $1 in
   esac
   ;; # }}}
 --loop | '') # {{{
-  $ALIASES set_title --set-pane "$issue: setup"
+  $ALIASES set_title "$issue: setup"
   source $BASH_PATH/colors
   utils_cmd="#reload\n#show-all\n#travelsal\n"
   reload_cmds=true use_travelsal=
   while $reload_cmds; do # {{{
     l= op= use_travelsal=${use_travelsal:-true} reload_cmds=false hidden="!^@"
     if [[ ! -z "$func" ]]; then # {{{
-      l="$(bash -c "${func#source*; }" - '@@')"
+      l="$(getCompletionList "${func#source*; }")"
       l="$(echo "${l//  / }" | tr ' ' '\n' | sed '/^\s*$/ d' | sort)"
       [[ ! -z "$l" ]] && l+="\n"
     fi # }}}
