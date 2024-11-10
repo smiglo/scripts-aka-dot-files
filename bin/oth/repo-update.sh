@@ -20,6 +20,7 @@ verbose=false
 dump=false
 tag=false
 wtdSet=false
+head=HEAD
 
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -27,6 +28,7 @@ while [[ ! -z $1 ]]; do # {{{
   -v)          verbose=true;;
   --verify)    verify=true; wtdSet=true;;
   --diff)      showDiff=true; wtdSet=true;;
+  --diff-to)   showDiff=true; wtdSet=true; head=$2; shift;;
   --checkout+) verifyAfter=true;&
   --checkout)  checkout=true; verify=true; wtdSet=true; dump=true;;
   --dump)      dump=true; wtdSet=true;;
@@ -52,7 +54,7 @@ while [[ ! -z $1 ]]; do # {{{
     listRevRepo=$( # {{{
       for d in $list; do
         pushd $d >&/dev/null
-        rHead="$(git rev-parse HEAD)"
+        rHead="$(git rev-parse $head)"
         popd >&/dev/null
         if [[ -z $listRev ]] || echo "$listRev" | command grep -q "$d"; then
           echo "<project path=\"$d\" revision=\"$rHead\"\\>"
@@ -100,10 +102,10 @@ while read l; do
   r=${BASH_REMATCH[2]}
   $verbose && echo "$d $r"
   pushd $d >&/dev/null
-  rHead="$(git rev-parse HEAD)"
+  rHead="$(git rev-parse $head)"
   if $checkout; then # {{{
     if [[ $r != $rHead ]]; then
-      echo "$d: Checking out $rHead --> $r"
+      echo "$d: Checking out ${rHead:0:7} --> ${r:0:7}"
       if ! git checkout $r 2>/dev/null; then
         git fetch origin
         cleanRepo=$(git status --short)
@@ -133,23 +135,27 @@ while read l; do
   fi # }}}
   if $verify; then # {{{
     if [[ $r != $rHead ]]; then
-      echo "$d: Log"
-      git ld $r..HEAD | cat -
+      echo "$d: Log: ${r:0:7}..${rHead:0:7} ($head)"
+      git ld $r..$rHead | cat -
       differs=true
+    else
+      echo "$d: Log: ${r:0:7}..${rHead:0:7} ($head) : the same"
     fi
   fi # }}}
   if $showDiff; then # {{{
     if [[ $r != $rHead ]]; then
-      echo "$d: Diff: $r..$rHead"
-      git diff $r..HEAD | cat -
+      echo "$d: Diff: ${r:0:7}..${rHead:0:7} ($head)"
+      git diff $r..$rHead | cat -
+    else
+      echo "$d: Diff: ${r:0:7}..${rHead:0:7} ($head) : the same"
     fi
   fi # }}}
   rm -f manifest-orig.xml
   popd >&/dev/null
   ts="$(command date +$DATE_FMT)"
   $dump \
-    && echo "<project path=\"$d\" revision=\"$rHead\"\\>" >>tmp/manifest-$ts-prev.xml \
-    && echo "<project path=\"$d\" revision=\"$r\"\\>" >>tmp/manifest-$ts-new.xml
+    && echo "<project path=\"$d\" revision=\"$rHead\"\\>" >>manifest-$ts-prev.xml \
+    && echo "<project path=\"$d\" revision=\"$r\"\\>" >>manifest-$ts-new.xml
 done < <(echo "$list")
 
 if $differs; then # {{{

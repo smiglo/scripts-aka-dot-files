@@ -1,0 +1,454 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+file-eval() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -f) # {{{
+      getFileList '*.log'; getFileList '*.txt' ;; # }}}
+    --prefix) # {{{
+      echo "##\\ TB]\\ II";; # }}}
+    *) # {{{
+      echo "-f --prefix --stop-on-fail";; # }}}
+    esac
+    return 0
+  fi # }}}
+  local f= l= prefix= stopOnFail=false ev= evR=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f)             f="$2"; shift;;
+    --prefix)       prefix="${2% } "; shift;;
+    --stop-on-fail) stopOnFail=true;;
+    esac; shift
+  done # }}}
+  [[ -z $f && ! -t 0 ]] && f="-"
+  [[ -z $f ]] && return 1
+  [[ ! -e $f && $f != '-' ]] && return 1
+  cat "$f" | \
+  while read l; do
+    if [[ $l =~ ' ## eval '(.*) ]]; then
+      ev="${BASH_REMATCH[1]}"
+      evR="$(eval "$ev")"
+      if [[ $? == 0 ]]; then
+        l="${l%% ## eval *} $prefix$evR"
+      else
+        echorm 0 "e: [$ev]"
+        $stopOnFail && break
+      fi
+    fi
+    echo "$l"
+  done
+  return 0
+} # }}}
+file-part() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -f) # {{{
+      getFileList '*.log'; getFileList '*.txt';; # }}}
+    -r) # {{{
+      if [[ $@ =~ \ ?-f\ +([^\ ]+) ]]; then
+        local f=${BASH_REMATCH[1]} # vim: {
+        sed -n -e '/^#.* }\{3\}/d' -e 's/^#\+ \+\([^ ]\+\) # {\{3\}/\1/p' -e 's/^#\+ \+\([^ ]\+\)$/\1/p' "$f" # vim: }
+      else
+        echo "---"
+      fi;; # }}}
+    *) # {{{
+      echo "-f -r -rS -rE -R --smart"
+      echo --{,no-}keep
+      ;; # }}}
+    esac
+    return 0
+  fi # }}}
+  local region= regionS= regionE= f= keep_first_last=false isStdin=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f)     f="$2"; shift;;
+    -r)     region="$2"; shift;;
+    -R) # {{{
+      regionS="$(echo "$2" | sed -n '1 s/[~: ].*//p')"
+      regionE="$(echo "$2" | sed -n '2 s/[~: ].*//p')"
+      [[ -z $regionS || -z $regionE ]] && return 1
+      keep_first_last=true
+      shift;; # }}}
+    -rS)       regionS="$2"; shift;;
+    -rE)       regionE="$2"; shift;;
+    --keep)    keep_first_last=true;;
+    --no-keep) keep_first_last=false;;
+    --smart) # {{{
+      shift && matching-section "$@"
+      return;; # }}}
+    *) # {{{
+      if [[ ! -t 0 ]]; then
+        region="$1"
+      elif [[ -z $f && -e $1 ]]; then
+        f="$1"
+      else
+        region="$1"
+      fi;; # }}}
+    esac; shift
+  done # }}}
+  if [[ -z $f && ! -t 0 ]]; then # {{{
+    f="$TMP_PATH/file-part.$$"
+    cat - >"$f"
+    isStdin=true
+  fi # }}}
+  if [[ -z $regionS ]]; then # {{{
+    [[ -z $region ]] && echorm 0 "No region provided" && return 1
+    local foldet=true isStdin=false
+    regionS="^# \(.* \)\?$region\( .*\)\? # {\{3\}" # vim: }
+    if ! command grep -q "$regionS" "$f"; then # {{{
+      regionS="^# \(.* \)\?$region\( .*\)\?$"
+      ! command grep -q "$regionS" "$f" && echorm 0 "Start region [$region] not found" && return 1
+      foldet=false
+    fi # }}}
+    if $foldet; then # {{{ # vim: {
+      regionE="^# \(.* \)\?$region\( .*\)\? # \?}\{3\}" # vim: {
+      ! command grep -q "$regionE" "$f" && regionE="^# }\{3\}"
+      ! command grep -q "$regionE" "$f" && echorm 0 "End region [$region] not found" && return 1 # }}}
+    else # {{{
+      regionE="^$"
+    fi # }}}
+    # }}}
+  else # {{{
+    [[ -z $regionE ]] && regionE="^$"
+  fi # }}}
+  echorm 2 regionS regionE foldet
+  cat "$f" | sed -n '/'"$regionS"'/,/'"$regionE"'/p' | { $keep_first_last && cat - || sed -e '1d' -e '$d'; }
+  if $isStdin; then # {{{
+    rm -f "$f"
+  fi # }}}
+  return 0
+} # }}}
+matching-section() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -f | --f) echo "@@-f";;
+    -p | --prefix) echo "---";;
+    *) echo "-f --file -p --prefix -m{ -m\\( -m \\< -m\\[ vim-fold";;
+    esac
+    return 0
+  fi # }}}
+  local file= prefix= method='vim-fold'
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f | --file)   file="$2"; shift;;
+    -p | --prefix) prefix="$2"; shift;;
+    --vim-fold)    method='vim-fold';;
+    { | \( | \< | \[ | \
+    -m{ | -m\( | -m\< | -m\[)
+      method="${1#-m}";;
+    *) break;;
+    esac; shift
+  done # }}}
+  [[ -z $prefix ]] && return 1
+  [[ ! -t 1 && -z $file ]] && file='-'
+  [[ -e $file || $file == '-' ]] || return 1
+  __pcregrep() { # {{{
+    if isInstalled pcregrep; then
+      pcregrep -aMo "$@"
+    else
+      command grep -azPo "$@"
+    fi
+  } # }}}
+  local err=
+  cat $file | \
+    case $method in # {{{
+    vim-fold) __pcregrep "$prefix"' *# \{\{(\{([^{}]++|(?1))*(# )?\})\}\}' ;;
+    '{')      __pcregrep "$prefix"' *(\{([^{}]++|(?1))*\})';;
+    '(')      __pcregrep "$prefix"' *(\(([^()]++|(?1))*\))';;
+    '<')      __pcregrep "$prefix"' *(<([^<>]++|(?1))*>)';;
+    '[')      __pcregrep "$prefix"' *(\[([^\[\]]++|(?1))*\])';;
+    esac # }}}
+  err=$?
+  unset -f __pcregrep
+  return $?
+} # }}}
+update-file() { # @@ # {{{
+  local wtd="update-line"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -wtd | --what-to-do) echo "update-var add-to-var update-line remove-line insert-before insert-after comment-line";;
+    *)
+      echo "-wtd --what-to-do"
+      echo "--update-var --add-to-var --update-line --remove-line --insert-before --insert-after --comment-line"
+      echo "-a --add --ins -rl -ul --line -uv --var -cl --comment";;
+    esac
+    return 0
+  fi # }}}
+  local file=
+  [[ -t 0 ]] && file="$1" && shift
+  if [[ -t 0 && "$file" != '-' ]]; then
+    [[ ! -e "$file" ]] && touch "$file"
+  else
+    file="$TMP_MEM_PATH/update-file-$$.stdin"
+    cat - >"$file"
+  fi
+  local fileOut="$TMP_MEM_PATH/update-file-$$.tmp"
+  cp "$file" "$fileOut"
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in # {{{
+    -wtd | --what-to-do) wtd="$2"; shift;;
+    --update-var | --add-to-var | --update-line | --remove-line | --insert-before | --insert-after | --comment-line) wtd="${1#--}";;
+    -a | --add )  wtd="add-to-var";;
+    --ins)        wtd="insert-after";;
+    -rl)          wtd="remove-line";;
+    -ul | --line) wtd="update-line";;
+    -uv | --var)  wtd="update-var";;
+    -cl | --comment) wtd="comment-line";;
+    *) break;;
+    esac; shift # }}}
+    local match= newVal= update=false
+    match="$1" && shift
+    [[ -z $match ]] && echo "Match pattern not provided" >/dev/stderr && return 1
+    case $wtd in # {{{
+    update-var | add-to-var | update-line | insert-before | insert-after)
+      newVal="$1" && shift
+      [[ -z $newVal ]] && echo "New value not provided [$match]" >/dev/stderr && return 1;;
+    esac # }}}
+    case $wtd in # {{{
+    update-var | add-to-var) command grep -q "^[^#]*$match=" "$fileOut" && update=true;;
+    *)                       command grep -q "$match"        "$fileOut" && update=true;;
+    esac # }}}
+    case $wtd in # {{{
+    update-var) # {{{
+      if $update; then
+        sed -i \
+          -e '/^[^#]*'"$match"='/s/\(.*'"$match"'\)=.*/\1="'"$newVal"'"/' \
+          -e '/^[^#]*'"$match"'+=/d' \
+          "$fileOut"
+      else
+        echo "export $match=\"$newVal\"" >>"$fileOut"
+      fi;; # }}}
+    add-to-var) # {{{
+      if $update; then
+        tac "$fileOut" \
+          | awk -v m="$match" -v v="$newVal" '/^[^#]*'"$match"'\+?=/ && !x {printf "export %s+=\"%s\"\n", m, v; x=1} 1' \
+          | tac >"$fileOut.$$"
+        mv "$fileOut.$$" "$fileOut"
+      else
+        echo "export $match=\"$newVal\"" >>"$fileOut"
+      fi;; # }}}
+    update-line) # {{{
+      if $update; then
+        sed -i '/'"$match"'/s/.*/'"${newVal//\//\\/}"'/' "$fileOut"
+      else
+        echo "$newVal" >>"$fileOut"
+      fi;; # }}}
+    comment-line) # {{{
+      if $update; then
+        sed -i '/'"$match"'/s/.*/# \0/' "$fileOut"
+        sed -i '/# # .*'"$match"'/s/# \(.*\)/\1/' "$fileOut"
+      fi;; # }}}
+    remove-line) # {{{
+      sed -i '/'"$match"'/d' "$fileOut" ;; # }}}
+    insert-before) # {{{
+      if $update; then
+        sed -i -e "$(command grep -n "$match" "$fileOut" | head -1 | cut -f1 -d':')i $newVal" "$fileOut"
+      else
+        echo "$newVal" >>"$fileOut"
+      fi;; # }}}
+    insert-after) # {{{
+      if $update; then
+        sed -i -e "$(command grep -n "$match" "$fileOut" | tail -1 | cut -f1 -d':')a $newVal" "$fileOut"
+      else
+        echo "$newVal" >>"$fileOut"
+      fi;; # }}}
+    *) # {{{
+      echo "Invalid WhatToDo [$1]" >/dev/stderr && return 1;; # }}}
+    esac # }}}
+  done # }}}
+  if [[ -t 0 && -t 1 ]]; then # {{{
+    mv "$fileOut" "$file" # }}}
+  else # {{{
+    cat "$fileOut"
+    rm "$fileOut"
+    if [[ ! -t 0 || "$file" == *-$$.stdin  ]]; then
+      rm "$file"
+    fi
+  fi # }}}
+}
+export PHISTORY_IGNORED_COMMANDS+=":update-file" # }}}
+stat() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "A C M size @@-f"
+    return 0
+  fi # }}}
+  local params=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    A)    params="-c %X";;
+    C)    params="-c %W";;
+    M)    params="-c %Y";;
+    size) params="-c %s";;
+    *)    break;;
+    esac; shift
+  done # }}}
+  command stat $params "$@"
+} # }}}
+file-stat() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -m | --mode)   echo "c create m modif a access size";;
+    -f | --format) echo "$DATE_FMT $DATE2_FMT $TIME_FMT relative raw";;
+    *)
+      echo "-m --mode -f --format -r --relative -p --pretty -c @@-f A C M a c m size %s"
+      echo "--relative-to="{${EPOCHSECONDS:-$(epochSeconds)},7:00};;
+    esac
+    return 0
+  fi # }}}
+  local mode="modif" files= f= fOrig= value= format= pretty=false colorsOn= now=${EPOCHSECONDS:-$(epochSeconds)} err=0 verbose=true
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -c)              colorsOn=true;;
+    -f | --format)   format="$2"; shift;;
+    -m | --mode)     mode="$2"; shift;;
+    A | C | M | \
+    a | c | m | \
+    size)            mode="${1,,}";;
+    -p | --pretty)   pretty=true;;
+    -r | --relative) format="relative";;
+    --relative-to=*) format="relative"; now="$(time2s -o abs-s "${1#--relative-to=}")";;
+    -s)              verbose=false;;
+    size)            mode="size";;
+    %*)              mode="$1";;
+    *)               files+="$1 ";;
+    esac; shift
+  done # }}}
+  if [[ -z "$files" ]]; then
+    [[ ! -t 0 ]] && files="$(cat -)"
+    [[ -z "$files" ]] && return 1
+  fi
+  [[ ! -t 1 && -z $colorsOn ]] && colorsOn=false
+  for f in $files; do
+    fOrig="$f"
+    [[ -h "$f" ]] && f="$(readlink -f "$f")"
+    [[ ! -e "$f" ]] && echor -c $verbose "File [$f] not exists" && err=1 && continue
+    case $mode in # {{{
+    a | access)  value=$(command stat -c %X "$f");;
+    c | create)  value=$(command stat -c %W "$f");;
+    m | modif)   value=$(command stat -c %Y "$f");;
+    size)        value=$(command stat -c %s "$f");    [[ -z $format ]] && format="raw";;
+    %*)          value=$(command stat -c $mode "$f"); [[ -z $format ]] && format="raw";;
+    esac # }}}
+    [[ -z $value ]] && echor -c $verbose "No value for [$f]" && err=1 && continue
+    $pretty && echo -n "$(cl file "$fOrig" - " : ")"
+    case $format in # {{{
+    relative | '') # {{{
+      [[ $format == 'relative' ]] && value="$(time2s --to-hms $(time2s --diff $now @$value))"
+      cl ts "$value";; # }}}
+    raw) # {{{
+      cl info "$value";; # }}}
+    *) # {{{
+      command date +"$format" -d "@$value";; # }}}
+    esac # }}}
+  done
+  return $err
+} # }}}
+getFileList() { # @@ # {{{
+  local cmd="ls -d" pwd="." files="*" narrow= verbosity=0 monitor=false monitorSha=false regEx= reverse=false accessMode=false
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    --pwd) echo "@@-d";;
+    -n)    echo "1 2 3 5 10";;
+    *)     echo "-v -vv --cmd --pwd -1 -n -a -t --mon --mon-sha -r -R -l";;
+    esac
+    return 0
+  fi # }}}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --)    shift; break;;
+    --cmd) cmd="$2"; shift;;
+    --pwd) pwd="$2"; shift;;
+    --mon) monitor=true;;
+    --mon-sha) monitor=true; monitorSha=true;;
+    -a)    accessMode=true;;
+    -r)    regEx="$2"; shift;;
+    -R)    reverse=true;;
+    -1)    narrow=1;;
+    -l)    narrow=1; reverse=true;;
+    -n)    narrow="$2"; shift;;
+    -v)    verbosity=1;;
+    -vv)   verbosity=2;;
+    -*)    cmd+=" $1";;
+    *)     files="$@"; break;;
+    esac
+    shift
+  done # }}}
+  [[ ! -e $pwd ]] && echo "Path [$pwd] does not exist" >/dev/stderr && return 1
+  [[ $pwd != '.' ]] && command cd "$pwd"
+  if $monitor; then # {{{
+    cmd="ls -t $files 2>/dev/null | head -n1"
+    local listLast= list= shaLast= sha=
+    while true; do # {{{
+      list="$(eval $cmd 2>/dev/null)"
+      [[ ! -z $list ]] && sha="$(sha1sum $list 2>/dev/null)" || sha=
+      if ( $monitorSha && [[ "$shaLast" != "$sha" ]] ) || [[ "$listLast" != "$list" ]]; then
+        shaLast="$sha"
+        listLast="$list"
+        [[ ! -z "$list" ]] && echo "$list"
+      fi
+      sleep 5
+    done # }}}
+    [[ $pwd != '.' ]] && command cd - >/dev/null 2>&1
+    return 0
+  fi # }}}
+  if [[ -z $regEx ]]; then
+    if [[ "$(eval echo "$files")" == "$files" && ! -e "$files" ]]; then
+      [[ $pwd != '.' ]] && command cd - >/dev/null 2>&1
+      return 1
+    fi
+    cmd="$cmd $files"
+  else
+    local findParams='-maxdepth 1' findPre="./"
+    [[ $regEx == */* ]] && findParams= && findPre=
+    cmd="find . $findParams -regex '$findPre$regEx' -exec $cmd {} \; | sed 's|^\./||'"
+  fi
+  $accessMode && cmd+=" | file-stat --mode a --pretty 2>/dev/null | sort -k3,3n | awk '{print \$1}'"
+  $reverse && cmd+=" | tac"
+  [[ ! -z $narrow ]] && cmd+=" | head -n $narrow"
+  if [[ $verbosity -ge 1 ]]; then
+    echo "$(eval $cmd)" >/dev/stderr
+    if [[ $verbosity -ge 2 ]]; then
+      eval "$cmd"
+    else
+      eval "$cmd" 2>/dev/null
+    fi
+  else
+    eval "$cmd" 2>/dev/null
+  fi
+  [[ $pwd != '.' ]] && command cd - >/dev/null 2>&1
+  return 0
+} # }}}
+bck() { # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -s | --suffix) echo "~ _ __";;
+    *) echo "-f -s --suffix"
+    esac
+    return 0
+  fi # }}}
+  local src= dst= suffix='~' force=false f= err=0
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f) force=true;;
+    -s | --suffix) suffix="$2"; shift;;
+    *) f="$1"; break
+    esac; shift
+  done # }}}
+  [[ ! -z $1 ]] || eval $(die "file missing")
+  for f; do
+    if [[ "$f" == *"$suffix" ]]; then
+      src="$f"; dst="${f%$suffix}"
+    elif [[ -e "$f$suffix" && ! -e "$f" ]]; then
+      src="$f$suffix"; dst="$f"
+    else
+      src="$f"; dst="$f$suffix"
+    fi
+    $force && echo rm -f "$dst"
+    [[ ! -e "$dst" ]] || { err=1; eval $(die -c "dst exists [$dst]"); }
+    [[   -e "$src" ]] || { err=1; eval $(die -c "src not exists [$src]"); }
+    mv "$src" "$dst" || err=2
+  done
+  return $err
+} # }}}
+

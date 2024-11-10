@@ -47,15 +47,14 @@ done # }}}
 [[ ! -e $f ]] && echo "Source file '$f' does not exist" >/dev/stderr && exit 1
 phrases="${phrase[*]}" && phrases="${phrases//\\}"
 while true; do
-  $silent || eval $ALIASES progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots --out /dev/stderr
-  pid=$$
-  trap '$ALIASES progress --unmark $pid; echo; exit;' INT TERM EXIT
+  $silent || { eval progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots --out /dev/stderr; pid=$PPID; }
+  trap '$silent || { progress --unmark $pid; echo; }; exit;' INT TERM EXIT
   ( sleep $delay ) &
   tailPid=$!
   tail -F "$f" -s 1 -n1 --pid $tailPid | while read l; do
     for ii in ${!phrase[*]}; do
       if echo "$l" | command grep -q "${phrase[ii]}"; then # {{{
-        $ALIASES progress --unmark $pid
+        $silent || progress --unmark $pid
         [[ $dbg -gt 0 ]] && echo "WaitOn: Matched [${phrase[ii]}]:[${action[ii]}]$([[ $dbg -gt 1 ]] && echo " [$l]")" >/dev/stderr
         a="${action[ii]}"
         case $a in # {{{
@@ -86,7 +85,7 @@ while true; do
       esac
     fi
   done
-  $silent || $ALIASES progress --unmark $pid
+  $silent || progress --unmark $pid
   trap - INT TERM EXIT
   ! $loop && break
 done

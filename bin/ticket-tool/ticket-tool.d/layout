@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-f="$(getIssueFile)" quiet=false use_stdin=false use_stdout=false todo= entry="${TICKET_CONF_LAYOUT_ENTRY:-LAYOUT}"
+f="$issue_file" quiet=false use_stdin=false use_stdout=false todo= entry="${TICKET_CONF_LAYOUT_ENTRY:-LAYOUT}"
 if [[ $1 == @@ ]]; then
   echo "save restore -q --stdin --stdout -e"
   exit 0
@@ -17,7 +17,7 @@ while [[ ! -z $1 ]]; do # {{{
   esac
   shift
 done # }}}
-layoutSaved="$(sed -n "s|^# j-info: $entry: \(.*\)$|\1|p" "$f")"
+layoutSaved="$(sed -n "s|^# j-info: $entry: *\(.*\)$|\1|p" "$f")"
 layout="$(tmux display-message -t $TMUX_PANE -pF '#{window_layout}')"
 if [[ -z $todo ]]; then
   todo='save'
@@ -53,7 +53,7 @@ restore) # {{{
   [[ -z "$layout" ]] && exit 1
   if [[ "$layout" != "$layout_old" ]]; then
     $quiet || echo "layout=\"$layout_old\""
-    tmux select-layout -t $TMUX_PANE "$layout" >/dev/null 2>&1
+    echo "$layout" | tm --l-restore
     exit $?
   fi
   exit 0

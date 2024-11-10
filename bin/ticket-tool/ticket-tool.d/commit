@@ -16,10 +16,10 @@ if git diff --cached --quiet; then
   git diff --quiet && git ls-files -o --directory --exclude-standard | sed q1 >/dev/null 2>&1 && exit 0
   git add .
 fi
-if [[ $(git log -1 --format="%s") == *\[i\]\ $issue* ]]; then
+if [[ $(git log -1 --format="%s") == *\[$issue\]* ]]; then
   git commit --amend --no-verify --reuse-message=HEAD
 else
-  git commit -m"[i] $issue: Update" --no-verify
+  git commit -m"[$issue] Update" --no-verify
 fi
 if $do_push_all; then
   git backup

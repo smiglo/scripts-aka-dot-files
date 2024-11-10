@@ -87,15 +87,6 @@ getIssueID() { # {{{
     issue="$(getIssue "$(tmux display-message -p -F '#W' -t :$wNr 2>/dev/null)" true)"
     # }}}
   else # {{{
-    # Get issue from current dir # {{{
-    if [[ -z $issue ]]; then
-      local p="$PWD" f=
-      while [[ $p == $TICKET_PATH* ]]; do
-        f="${p##*/}"
-        [[ -e "$p/${f}-data.txt" ]] && issue="$f" && break
-        p="$(command cd "$p/.."; pwd)"
-      done
-    fi # }}}
     # Get issue from window name # {{{
     if [[ -z $issue ]]; then
       wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
@@ -106,6 +97,15 @@ getIssueID() { # {{{
       fi
     fi
     # }}}
+    # Get issue from current dir # {{{
+    if [[ -z $issue ]]; then
+      local p="$PWD" f=
+      while [[ $p == $TICKET_PATH* ]]; do
+        f="${p##*/}"
+        [[ -e "$p/${f}-data.txt" ]] && issue="$f" && break
+        p="$(command cd "$p/.."; pwd)"
+      done
+    fi # }}}
     # Get issue from fallback issue # {{{
     if [[ -z $issue ]]; then
       [[ ! -z $ISSUE_FALLBACK ]] && issue="$(getIssue "$ISSUE_FALLBACK" true)"
@@ -159,13 +159,13 @@ fzf_wrapper() { # {{{
     [[ ! -z $i ]] && i+=".*"
     if [[ ! -z $qi && $qi != !* ]]; then
       echo -e "\t---  $t : ${i} $qi ---" && echo
-      $ALIASES fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
+      fzf_exe -f "$f" "$@" | hl +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
     else
       echo -e "\t---  $t : ${i} ---" && echo
-      $ALIASES fzf_exe -f "$f" "$@" | $BASH_PATH/aliases hl +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
+      fzf_exe -f "$f" "$@" | hl +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
     fi
   else
-    $ALIASES fzf_exe -f "$f" "$@"
+    fzf_exe -f "$f" "$@"
   fi
 }
 export -f fzf_wrapper findDataFile findDataFiles
@@ -179,15 +179,19 @@ readConfiguration() { # {{{
   TICKET_PATH="$TICKET_PATH_SAVE"
 } # }}}
 saveConfiguration() { # {{{
-  local confFile="$TMP_MEM_PATH/kb-data-j.conf" tp="${TICKET_PATH_ORIG:-$TICKET_PATH}"
-  [[ -e $confFile ]] && sed -i "/^# ${tp//\//\\\/} #/,/^# ${tp//\//\\\/} #/ d" $confFile
-  (
+  local confFile="$TMP_MEM_PATH/kb-data-j.conf" tp="${TICKET_PATH_ORIG:-$TICKET_PATH}" current=
+  [[ -e $confFile ]] && current="$(sed -n "/^# ${tp//\//\\\/} #/,/^# ${tp//\//\\\/} #/ p" $confFile)"
+  local new="$(
     echo "# $tp #"
     echo "export ISSUE_FALLBACK=\"$ISSUE_FALLBACK\""
     echo "export TICKET_PATH_SAVE=\"${TICKET_PATH_SAVE:-$TICKET_PATH}\""
     echo "export TICKET_PATH_ORIG=\"$tp\""
     echo "# $tp #"
-  ) >> $confFile
+  )"
+  if [[ "$new" != "$current" ]]; then
+    [[ -e $confFile ]] && sed -i "/^# ${tp//\//\\\/} #/,/^# ${tp//\//\\\/} #/ d" $confFile
+    echo "$new" >>$confFile
+  fi
 } # }}}
 saveInHistory() { # {{{
   [[ -z "$TICKET_CONF_HISTFILE" ]] && return 0
@@ -204,8 +208,7 @@ saveInHistory() { # {{{
 echorm --name tt:j
 verbose=$(echorm -f??) issue= wNr= i= do_grep=false do_history=false reset_only=false do_wait=
 loop=false loopTimeout= loopBreakOnTimeout=false loopBreakOnErr=false loopMax=
-TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false subcmd= addToHistory=true
-# subcmd="$TICKET_J_DEFAULT_SUBCMD"
+TICKET_PATH_ORIG= TICKET_PATH_SAVE= updateTP=false addToHistory=true
 if [[ $1 == --test ]]; then # {{{
   shift && ( set -xv; "$@"; )
   exit $?
@@ -359,7 +362,6 @@ while [[ ! -z $1 ]]; do # {{{
     break ;; # }}}
   --no-hist) # {{{
     addToHistory=false;; # }}}
-  -) subcmd='';;
   --get-current-issue) # {{{
     getIssueID
     exit 0;; # }}}
@@ -367,6 +369,7 @@ while [[ ! -z $1 ]]; do # {{{
   esac
   shift
 done # }}}
+eval $(echorm -f?var dbg_j)
 if [[ "$TICKET_PATH_SAVE" != "$TICKET_PATH_ORIG" && "$1" != '@@' ]]; then # {{{
   echore "Using KB from $TICKET_PATH"
   echore
@@ -385,27 +388,36 @@ if $do_grep; then # {{{
   fi
   [[ -z $files ]] && echore "No files were found" && exit 0
   [[ -t 1 ]] && tmux delete-buffer -b 'ticket-data' 2>/dev/null
-  kb_file="$APPS_CFG_PATH/kb-data--${TICKET_PATH##*/}-info.db" updated=false kb_mod="0"
+  kb_file="$APPS_CFG_PATH/kb-data--${TICKET_PATH##*/}-info.db" kb_mod="0"
   [[ ! -e "$kb_file" ]] && touch -d '2000-01-01' "$kb_file"
   kb_mod="$(stat -c %Y "$kb_file")"
-  $ALIASES progress --mark --dots --out /dev/stderr --msg "Updating DB"
   tmpFile="$TMP_MEM_PATH/t-info.tmp"
+  export colorsOn=false
+  issues_newer=
   for file in $files; do # {{{
-    issue="$(echo "$file"| sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
     [[ $(stat -c %Y "$file") -le $kb_mod ]] && break
+    issue=${file##*/} && issue=${issue#.} && issue=${issue%-data.txt}
     sed -i "/^$issue:/ d" "$kb_file"
-    $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue \
-      ? $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue ? | tr ' ' '\n' | sort -u | tr '\n' ' ') \
-      | sed -e "s/^/$issue:/" >"$tmpFile"
+    issues_newer+="$issue\n"
+  done # }}}
+  if [[ ! -z $issues_newer ]]; then
+    f_dot=$TMP_MEM_PATH/j-grep.$$
+    exec 3<> $f_dot
+    progress-dot --init
+    ( tail --pid=$$ -q -F $f_dot | while read l; do progress-dot; done; rm -f $f_dot ) &
+    s="$TICKET_TOOL_PATH/ticket-tool.sh --issue \$issue"
+    echo -e "$issues_newer" | work-parallel.sh --lines-max 6 \
+      "cat - | while read issue; do [[ -z \$issue ]] && continue; echo '.' >&3; $s ? \$($s ? | tr ' ' '\n' | sort -u | tr '\n' ' ') | sed -e '/^[^:]*:#/d' -e '/# IGN$/d' -e '/:echorm/d' | eval sed -e 's/^/\$issue:/'; done" \
+    >"$tmpFile"
     [[ -e $kb_file ]] && cat "$kb_file" >> "$tmpFile"
     mv "$tmpFile" "$kb_file"
-    updated=true
-  done # }}}
-  $ALIASES progress --unmark
+    progress-dot --end
+    exec 3>&-
+  fi
   if [[ -t 1 ]]; then # {{{
     tmpFile="$TMP_MEM_PATH/kb-grep.txt"
     { [[ -z "$list" ]] && cat "$kb_file" || command grep "^\($list\):" "$kb_file"; } | \
-      fzf -i --exit-0 --no-sort --multi --height 100% --prompt='Tickets> ' \
+      fzf -i --exit-0 --no-sort --multi --ansi --height 100% --prompt='Tickets> ' \
         --preview "fzf_wrapper {} {q} -c prev --prev 20" \
         --preview-window 'hidden' \
         --bind "f1:execute(fzf_wrapper {1} -c less >/dev/tty)" \
@@ -438,6 +450,15 @@ else # {{{
   [[ ! -f $issue ]] && issue="$(getIssue "$issue")"
 fi # }}}
 export verbose
+source $TICKET_TOOL_PATH/common
+if [[ -z $TICKET_CONF_HISTFILE ]]; then
+  [[ ! -z $TICKET_TMUX_SESSION ]] && export TICKET_CONF_HISTFILE="$APPS_CFG_PATH/kb-${TICKET_TMUX_SESSION,,}.hist"
+elif [[ $TICKET_CONF_HISTFILE == '-' ]]; then
+  TICKET_CONF_HISTFILE=
+fi
+[[ -z $path_issue ]] && path_issue="$($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$issue" true)"
+[[ -z $issue_file ]] && issue_file=$(getIssueFile 2>/dev/null)
+export path_issue issue_file
 if [[ $1 == '@@' ]]; then # {{{
   ret= param="$3"
   if [[ -z $4 || "$(echo "${@:4}" | sed -e 's/ = /=/g' | tr ' ' '\n' | grep -v '^-' | wc -l)" == 0 ]]; then # {{{
@@ -454,10 +475,6 @@ if [[ $1 == '@@' ]]; then # {{{
         i=$(($i+1))
       done
     fi
-    while read v; do
-      [[ -z $v ]] && continue
-      ret+=" @${v%%:*}"
-    done < <(echo -e "$TICKET_J_PREDEFINED")
   fi # }}}
   kb="$(echo " $@ " | sed -n -e 's/.* --kb \+\([^ ]\+\).*/\1/Ip')"
   kb="$(echo " $KB_PATHS " | sed -ne "s/.* $kb:\([^ ]*\) .*/\1/p")"
@@ -474,27 +491,30 @@ if [[ $1 == '@@' ]]; then # {{{
     done < <(echo -e "$TICKET_J_PREDEFINED") ;; # }}}
   --kb | --KB) # {{{
     ret="$( echo " $KB_PATHS " | sed 's/:[^ ]* / /g')" ;; # }}}
-  --setup) # {{{
-    ret+=" - --title --recreate"
-    ${TICKET_SETUP_ALWAYS:-false}  && ret+=" --no-always" || ret+=" --always"
-    ${TICKET_SETUP_DONE:-false}    && ret+=" --no-done"   || ret+=" --done"
-    ${TICKET_SETUP_HIDDEN:-false}  && ret+=" --no-hide"   || ret+=" --hide"
-    ${TICKET_SETUP_MINIMAL:-false} && ret+=" --no-min"    || ret+=" --min"
-    ;;& # }}}
+  -jj | -JJ | -Jj | --setup | --init | \?\? | --issue) # {{{
+    ret=
+    case $param in
+    --setup) # {{{
+      ret=" - --title --recreate"
+      ${TICKET_SETUP_ALWAYS:-false}  && ret+=" --no-always" || ret+=" --always"
+      ${TICKET_SETUP_DONE:-false}    && ret+=" --no-done"   || ret+=" --done"
+      ${TICKET_SETUP_HIDDEN:-false}  && ret+=" --no-hide"   || ret+=" --hide"
+      ${TICKET_SETUP_MINIMAL:-false} && ret+=" --no-min"    || ret+=" --min"
+      ;;& # }}}
+    esac
+    files="$(getIssues)"
+    ret+=" $files" ;; # }}}
   -j | -J) # {{{
     marker="$TMP_MEM_PATH/j-cmd-marker.$$"
     touch -t $(command date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
     files="$(getIssues -newer $marker)"
     rm $marker
     files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
-    ret+=" $files" ;; # }}}
-  -jj | -JJ | -Jj | --setup | --init | \?\? | --issue) # {{{
-    files="$(getIssues)"
-    ret+=" $files" ;; # }}}
+    ret=" $files";; # }}}
   --hist | --hist-full | --hist-issue | -h ) # {{{
-    ret+=" -l --loop";;& # }}}
+    ret=" -l --loop";;& # }}}
   --hist | --hist-full | --hist-issue | -h | h | -hf | hf ) # {{{
-    ret+=" --clean - 10 20 50 100 500 1000";; # }}}
+    ret=" --clean - 10 20 50 100 500 1000";; # }}}
   -l) shift;&
   *) # {{{
     if [[ ${1,,} == '--kb' ]]; then
@@ -503,7 +523,7 @@ if [[ $1 == '@@' ]]; then # {{{
     fi
     [[ -z $issue ]] && issue="$(getIssue $3 true)"
     end=$3
-    echorm 1 "\nargs-j-in=[$@], e=[$end]"
+    $dbg_j && echorm 1 "\nargs-j-in=[$@], e=[$end]"
     shift 3
     [[ $end == [0-9]* ]] && end=
     while [[ ! -z $1 ]]; do
@@ -516,20 +536,24 @@ if [[ $1 == '@@' ]]; then # {{{
     done
     [[ $1 == $issue ]] && shift
     [[ $1 == '@@' ]] && shift
-    echorm 1 "\nargs-j-out=[$@]"
-    echorm -l2 -xv
+    $dbg_j && echorm 1 "\nargs-j-out=[$@]"
+    $dbg_j && echorm -l2 -xv
     if [[ ! -z $issue ]]; then
-      ret1=" $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $subcmd $@)"
-      if [[ ! -z "$ret1" ]]; then
-        ret+=" $ret1"
-      elif [[ ! -z "$subcmd" ]]; then
-        ret+=" $($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $@)"
+      isInstalled -t completionCacheInvocation || source $TICKET_TOOL_PATH/completion-cache
+      eval $(completionCacheInvocation)
+      completionCacheLoad
+      key="$@"; [[ -z $key ]] && key="@@"; key="${key// /-}"
+      ret1="${complMap[$key]}"
+      if [[ -z $ret1 ]]; then
+        ret1="$($TICKET_TOOL_PATH/ticket-tool.sh --issue $issue '@@' $@)"
+        completionCacheUpdate "$key" "$ret1"
       fi
+      [[ -z $@ ]] && ret+=" $ret1" || ret="$ret1"
     fi
-    echorm -l2 +xv
+    $dbg_j && echorm -l2 +xv
     ;; # }}}
   esac # }}}
-  echo $ret
+  echo "$ret"
   exit
   # }}}
 elif $do_history; then # {{{
@@ -588,16 +612,16 @@ elif $do_history; then # {{{
     | while read -r l; do
         [[ ! -e "$check_file" ]] && touch "$check_file"
         l="${l%% #*}"
-        echorm 1 "Executing '$l'"
+        $dbg_j && echorm 1 "Executing '$l'"
         l_eval="$l"
         case $l in
         j\ *) l_eval="${l_eval/j /$TICKET_TOOL_PATH/j-cmd.sh }";;
         esac
-        echorv 2 l_eval
-        echorm -xv
-        eval $l_eval
+        $dbg_j && echorv -M 2 l_eval
+        $dbg_j && echorm -xv
+        eval "$l_eval"
         err=$?
-        echorm +xv
+        $dbg_j && echorm +xv
         saveInHistory "$l" "$err"
       done
       if ! $loop || [[ ! -e "$check_file" ]]; then
@@ -613,8 +637,8 @@ elif [[ ! -z $do_wait ]]; then
 fi # }}}
 [[ -z $issue ]] && echore "Ticket not found" && exit 1
 saveConfiguration
-echorm 1 "i=[$issue] params=[$@]"
-echorm -l2 -xv
+$dbg_j && echorm 1 "i=[$issue] params=[$@]"
+$dbg_j && echorm -l2 -xv
 args=
 for i; do # {{{
   i="$(echo -e "$i" | sed -e 's/"/\\"/g' -e 's/'"'"'/\\'"'"'/g')"
@@ -625,14 +649,9 @@ historySaved=false
 loopI=1
 export TICKET_CONF_IN_LOOP=$loop
 while true; do # {{{
-  $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue $subcmd "$@"
+  $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue "$@"
   err=$?
-  l="j -j $issue $subcmd $args"
-  if [[ $err != 0 && ! -z $subcmd ]] && $ALIASES progress --msg "Fallback command ($fallback) did not success, trying without it" --wait 2s --key; then # {{{
-    $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue "$@"
-    err=$?
-    l="j -j $issue $args"
-  fi # }}}
+  l="j -j $issue $args"
   if ! $historySaved; then # {{{
     saveInHistory "$l" "$err"
     historySaved=true
@@ -653,6 +672,6 @@ while true; do # {{{
   esac || break # }}}
   loopI=$((loopI+1))
 done # }}}
-echorm -l2 +xv
+$dbg_j && echorm -l2 +xv
 exit $err
 

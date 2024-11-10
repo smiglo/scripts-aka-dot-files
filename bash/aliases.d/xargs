@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+xaa() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    find . -maxdepth 1 -type f -perm -u+x
+    declare -F | awk '{print $3}' | sed -n -e '/^_/d' -e '/^\(.\)\{,6\}$/p'
+    return 0
+  fi # }}}
+  local cmd= args=
+  while [[ ! -z 1 ]]; do # {{{
+    case $1 in
+    -v) echorm +;;
+    *)  cmd=$1; shift; break;;
+    esac
+    shift
+  done # }}}
+  eval local $(echorm -f?var)
+  args="$@"
+  [[ -z $cmd ]] && cmd="echo"
+  if [[ -e "$cmd" ]]; then # {{{
+    $dbg && echorm -m $module -l1 -xv
+    xargs -r -n1 -I{} "$cmd" $args "{}"
+    $dbg && echorm -m $module -l1 +xv
+    # }}}
+  elif declare -F "$cmd" >/dev/null 2>&1; then # {{{
+    $dbg && echorm -m $module -l1 -xv
+    xargs -r -n1 -I{} $(which bash) -c "$(declare -f $cmd); $cmd $args {}"
+    $dbg && echorm -m $module -l1 +xv
+    # }}}
+  else # {{{
+    if [[ $cmd != *{}* && $cmd != *\$1* && $cmd != *\$@* ]]; then
+      if [[ -z $args ]]; then
+        cmd+=" \$1"
+      else
+        cmd+=" {}"
+      fi
+    fi
+    args="${args# }" && args="${args% }"
+    $dbg && echorm -m $module -l1 -xv
+    xargs -r -n1 -I{} $(which bash) -c 'f() { '"eval $cmd"'; }; f '"$args"' {}'
+    $dbg && echorm -m $module -l1 +xv
+  fi # }}}
+} # }}}
+alias xa='xargs -r -n1 -I{}'
+export PHISTORY_IGNORED_COMMANDS+=":xaa:xa"
+

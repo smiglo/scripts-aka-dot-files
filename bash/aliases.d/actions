@@ -164,5 +164,4 @@ tf() { # @@ # {{{
   fi # }}}
   do-action tf "$@"
 } # }}}
-export -f is-found do-action doa tf
 

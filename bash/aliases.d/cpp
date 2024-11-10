@@ -1,6 +1,271 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+brun() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    if [[ $2 == --shorts ]]; then # {{{
+      local f=$(getFileList -t -1 '*.cpp')
+      [[ -z $f ]] && f=$(getFileList -t -1 '*.c')
+      [[ ! -z $f ]] && echo "lo --loop -lpthread $f"
+      return 0
+    fi # }}}
+    case $3 in
+    --conf) echo "${!BRUN_CONF_*}" | sed 's/BRUN_CONF_//g' | tr 'A-Z' 'a-z' ;;
+    --check-files) echo "@@-f";;
+    *)
+      echo "-- -V -G -R -r -l --conf -c --run --no-run --loop --check-files -s -v --clang --no-clear"
+      echo "-lpthread"
+      echo "$(getFileList '*.c') $(getFileList '*.cpp') $(getFileList '*.sh')"
+      [[ $2 != -- ]] && compl-short --shorts
+      ;;
+    esac
+    return 0
+  fi # }}}
+  local f= p= o= clangCmd="command clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W" run=true compile=true new_params= args= s= loop=false loop_delay=${BRUN_LOOP_DELAY:-2} key= modTime= sum= err= autoClear=true
+  local valgrind=false gdb=false
+  local filesToCheck="$BRUN_CHECK_FILES"
+  eval set -- $(compl-short --shorts --args "$@")
+  case $@ in # {{{
+  --\ *) set -- --run ${BRUN_PARAMS%% -- *} $@;;
+  -c | --no-run) set -- -c ${BRUN_PARAMS%% -- *};;
+  -r | --run | -q | -v) # {{{
+    set -- $@ $BRUN_PARAMS;; # }}}
+  esac # }}}
+  [[ -z $1 ]] && set -- $BRUN_PARAMS ## Required to capture file
+  [[ -z $1 ]] && set -- $BRUN_PARAMS_DEFAULT
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in # {{{
+    # Internal switches # {{{
+    -q) echorm -M -;;&
+    -v) echorm -M +;;&
+    -V) valgrind=true;;&
+    -G) gdb=true;;&
+    -R) BRUN_PARAMS=""; [[ -z $2 ]] && return 0;;&
+    -c | --no-run) run=false;;&
+    -r | --run)    compile=false; run=true;;&
+    -l | --loop)   loop=true;;&
+    --check-files) filesToCheck="$2"; shift;;&
+    --no-clear)    autoClear=false;;&
+    -lpthread)     clangCmd+=" -lpthread";;
+    -q | -v | -V | -G | -R | -c | --no-run | -r | --run | -lpthread) # {{{
+      s+=" $1";& # }}}
+    -l | --loop | --check-files | --no-clear) # {{{
+      shift; continue;; # }}}
+    --conf) # {{{
+      local conf="$(eval echo "\$BRUN_CONF_${2^^}")"
+      [[ -z "$conf" ]] && echor "Configuration not found" && return 1
+      shift 2
+      [[ ! -z "$1" ]] && conf="${conf%% -- *} --no-run"
+      brun $s $conf $p
+      [[ $? != 0 ]] && return 1
+      [[ -z $1 ]] && return 0
+      brun $@
+      return $?
+      ;; # }}}
+    --clang) clangCmd="command clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W";;
+    # }}}
+    *.c | *.cpp | *.sh) # {{{
+      if [[ -z $f ]]; then
+        f="$1"
+        if [[ -d ${f%.*} ]]; then
+          p+=" $(command find ${f%.*} -name \*.${f##*.} | tr '\n' ' ')"
+        else
+          filesToCheck+=" $1"
+        fi
+      else
+        p+=" $1"
+        filesToCheck+=" $1"
+      fi;; # }}}
+    --);;
+    --*) p+=" ${1#-}";;
+    *)   p+=" $1";;
+    esac # }}}
+    case $1 in # {{{
+    --)  new_params+=" $@"; shift; args="$@"; shift $#;;
+    --*) new_params+=" ${1#-}";;
+    *)   new_params+=" $1";;
+    esac # }}}
+    shift
+  done # }}}
+  if [[ -z $f ]]; then # {{{
+    local f="$(getFileList -t -1 '*.cpp')"
+    local fC="$(getFileList -t -1 '*.c')"
+    if [[ ! -z $fC ]]; then
+      [[ -z $f || $(file-stat $fC) -gt $(file-stat $f) ]] && f=$fC
+    fi
+    [[ -z $f ]] && echor "No file was found" && return 1
+    progress --msg "Auto chosen file [$f] proceed?" --key --dots --cnt 40 || return 0
+    new_params+=" $f"
+  fi # }}}
+  [[ ! -e $f ]] && echor "File [$f] does not exist" && return 1
+  [[ ! -z $new_params ]] && export BRUN_PARAMS="$new_params"
+  [[ -z $filesToCheck ]] && filesToCheck="$f"
+  local pushed=false
+  case $(echorm -f?; echo $?) in
+  10)
+    pushed=true
+    echorm --push
+    $loop && echorm -M - || echorm -M +
+    ;;
+  esac
+  $loop && compile=true && run=true && modTime="$(stat -c %Y $filesToCheck 2>/dev/null)" && sum="$(sha1sum $filesToCheck 2>/dev/null)"
+  [[ -z "$COff" ]] && source $BASH_PATH/colors
+  if [[ "$f" == *".sh" ]]; then
+    o="${f/.\/}"
+    clangCmd="$SHELL"
+    compile=false
+    run=true
+    loop=true
+  else
+    if $gdb; then
+      local gdb_params="${BRUN_GDB_PARAMS}"
+      [[ -z $gdb_params ]] && gdb_params="-O0 -g -ggdb3 -gdwarf-5"
+      clangCmd+=" $gdb_params"
+    fi
+    if [[ ! " $p " =~ \ -o\ +([^ ]+)\  ]]; then # {{{
+      o="${f%.*}.out"
+      p+=" -o $o"
+    else
+      o="${BASH_REMATCH[1]}"
+      case $o in
+      *.a | *.so | *.so.*)
+        [[ " $p " != *" -c "* ]] && p="-c $p"
+        run=false;;
+      esac
+    fi # }}}
+    [[ $f == *.c && $clangCmd == *clang++* ]] && clangCmd+=" -Wno-deprecated"
+  fi
+  set_title "$(echo "${clangCmd/command }" | sed -e 's/-W[^ ]*//g' -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
+  local progr_colors=($CYellow $CPurple $CBlue   $CGreen ) progr_i=0 doClear=false first=true
+  local   msg_colors=($CBlue   $CGreen  $CYellow $CPurple)
+  while true; do # {{{
+    err=0 err_run=0
+    local c="${progr_colors[progr_i]}" force=false
+    if $loop; then
+      ( $doClear || $autoClear ) && clear
+      doClear=false
+      echor -e -nh "${c}---------------${COff}\n${msg_colors[progr_i]}$(command date +"$TIME_FMT"): Start${COff}\n${c}---------------${COff}"
+    fi
+    ! $run && ! ${compile:-false} && compile=true
+    $run && [[ ! -e $o ]] && compile=true
+    if ${compile:-false} && [[ "$f" != *".sh" ]]; then # {{{
+      echorm "# Compiling as"
+      echorm "\$ $(echo "${clangCmd/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
+      rm -f $o
+      $clangCmd $f $p
+      err=$?
+    fi # }}}
+    if $run && [[ $err == 0 ]]; then # {{{
+      cmd="./${o#./}"
+      if $valgrind; then
+        cmd="valgrind $cmd"
+      elif $gdb; then
+        confFileF="${f%.*}.gdb"
+        confFileM="gdb.conf"
+        cmd="gdb$([[ -e $confFileF ]] && echo " -x $confFileF")$([[ -e $confFileM ]] && echo " -x $confFileM") --args $cmd"
+      fi
+      echorm "# Running as"
+      echorm "\$ $cmd ${args:-\b}"
+      $cmd $args
+      err_run=$?
+      err=$err_run
+    fi # }}}
+    ! $loop && break
+    $first && first=false && echorm --push && echorm -M -
+    compile=
+    [[ $err != 0 ]] && c="$CRed"
+    echor -n -nh "${c}---------------$([[ $err_run != 0 ]] && echor -nh " [$err_run]")${COff} "
+    progress --mark --color "${progr_colors[progr_i]}" --dots --delay 0.5
+    progr_i="$(((progr_i+1)%${#progr_colors[*]}))"
+    while true; do # {{{
+      if read -s -n1 -t $loop_delay key; then # {{{
+        case ${key^^} in
+        Q)       progress --unmark; break 2;;
+        C)       compile=true;;
+        R | '')  ;;
+        *)       continue;;
+        esac
+        force=true
+        doClear=true
+      fi # }}}
+      local modTime2="$(stat -c %Y $filesToCheck 2>/dev/null)" sum2="$(sha1sum $filesToCheck 2>/dev/null)"
+      [[ "$modTime2" == "$modTime" ]] && ! $force && continue
+      modTime="$modTime2"
+      [[ -z $compile ]] && compile=false
+      [[ "$sum2" != "$sum" ]] && sum="$sum2" && compile=true
+      break
+    done # }}}
+    progress --unmark
+  done # }}}
+  $loop && ! $first && echorm --pop
+  $pushed && echorm --pop
+  [[ ! -z $state ]] && eval $(echo export $state)
+  return $err
+} # }}}
+gdbenv() { # @@ # {{{
+  if [[ $1 == @@ ]]; then # {{{
+    case $(compl-short -i $3) in
+    --db)
+      echo "asm brk exp his mem reg src sta thr var";;
+    --set-env)
+      echo "core rr asm source"
+      echo "db dashboard --db"
+      echo "+core +rr -rr";;
+    *)
+      case $2 in
+      1) getFileList "*.out";;&
+      2) # {{{
+        [[ $3 == '--set-core' ]] && echo '---' && return 0
+        local l="$(getFileList "core.$3.*")"
+        [[ -z "$l" ]] && echo "---" && return 0
+        echo "$l";; # }}}
+      *) echo "--set-env"; [[ $2 != '--' ]] && compl-short;;&
+      esac;;
+    esac
+    return 0
+  fi # }}}
+  case $(compl-short -i $1) in
+  --set-env) # {{{
+    shift
+    export GDB_DB="dbsource"
+    export GDB_DB_O="$(tmux list-panes -F '#T #{pane_tty}' | awk '/gdb/ {print $2}' | sed 's|.*/||' | head -n 1)"
+    local i=
+    for i in asm brk exp his mem reg src sta thr var; do
+      local -n v="GDB_DB_O_${i^^}"
+      v="$(tmux list-panes -F '#T #{pane_tty}' | awk '/gdb-'$i'/ {print $2}' | sed 's|.*/||' | head -n 1)"
+    done
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      +core) # {{{
+        ulimit -c unlimited
+        echo "core-%e-%p-%t.dmp" | sudo tee /proc/sys/kernel/core_pattern;; # }}}
+      +rr) # {{{
+        ulimit -c unlimited
+        echo "1" | sudo tee /proc/sys/kernel/perf_event_paranoid
+        [[ -e cpufreq-set ]] && sudo cpufreq-set -g performance;; # }}}
+      -rr) # {{{
+        echo "4" | sudo tee /proc/sys/kernel/perf_event_paranoid
+        [[ -e cpufreq-set ]] && sudo cpufreq-set -g powersave;; # }}}
+      esac
+      case $1 in
+      core | +core)   export GDB_DB="dbcore";;
+      rr | asm | +rr) export GDB_DB="dbasm";;
+      source | src)   export GDB_DB="dbsource";;
+      db | dashboard) set_title --lock-force --set-pane gdb;;
+      db-*)           set_title --lock-force --set-pane gdb-${1#db-};;
+      --db)           set_title --lock-force --set-pane gdb-$2;;
+      esac; shift
+    done # }}}
+    ;; # }}}
+  *) # {{{
+    local f="${1:-$(getFileList -t -1 \*.out)}" && f="${f#./}"
+    [[ -e $f ]] || { echor "Executable not found"; return 1; }
+    local c="${2:-$(getFileList -t -1 core.$f.\*)}"
+    [[ -e $c ]] || { echor "Core file for executable [$f] not found"; return 1; }
+    echo -e "\nRunning: gdb $f $c\n"
+    gdb $f $c;; # }}}
+  esac
+} # }}}
 cpp() { # @@ # {{{
   local default_params="--no-edit --file --append --no-reset --no-keep --no-abs --ign --split --fzf"
   local setup="--var CPP --mask cpp --quiet" i=
@@ -62,7 +327,7 @@ cpp() { # @@ # {{{
   [[ -z $mode ]] && [[ -z $1 ]] && $do_ls_rec && mode='add'
   [[ -z $mode ]] && mode='copy'
   # }}}
-  if [[ "$mode" == 'add' ]]; then # Add files {{{
+  if [[ "$mode" == 'add' ]]; then # Add files # {{{
     if [[ -t 0 ]]; then
       if [[ -z $1 ]]; then
         if $do_ls_rec; then
@@ -75,7 +340,7 @@ cpp() { # @@ # {{{
     eval rem $setup $params ${@// /%20}
     [[ $? != 0 ]] && echo "Error when remembering files" >/dev/stderr && return 1
   fi # }}}
-  if [[ "$mode" == 'copy' ]]; then # Copy files to {{{
+  if [[ "$mode" == 'copy' ]]; then # Copy files to # {{{
     if [[ -z $1 ]]; then
       $do_reset && { rem $setup -r; return 0; }
       echo "Dry Run because not specified what to do" >/dev/stderr && dry_run=true && do_keep=true
@@ -97,7 +362,7 @@ cpp() { # @@ # {{{
   fi # }}}
   [[ $dbg_level -ge 2 ]] && set +xv
   return 0
-} # }}}
-
-export PHISTORY_IGNORED_COMMANDS+=":cpp"
+}
+export PHISTORY_IGNORED_COMMANDS+=":cpp" # }}}
+alias clang-smart='brun'
 

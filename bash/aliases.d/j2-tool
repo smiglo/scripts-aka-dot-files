@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if ${J2_USE_J2_WRAPPER:-true}; then # {{{
+  j() { # @@ # {{{
+    __j2_getSections() { # {{{
+      [[ -z "$fileContent" ]] && return
+      echo "$fileContent" | sed -n '/^# S@[^ ]\+ .*# {\{3\}$/s/^# S@\([^ ]\+\) .*# {\{3\}/\1/p' | xargs
+    } # }}}
+    __j2_getSection() { # {{{
+      [[ -z "$fileContent" ]] && return
+      echo "$fileContent" | file-part -rS "^# S@$1 .*# {\{3\}$" -rE "^# }\{3\}$"
+    } # }}}
+    __j2_mapSection() { # {{{
+      case $1 in
+      --get) echo "s";;
+      s)     echo "setup";;
+      *)     echo "$1";;
+      esac
+    } # }}}
+    local sections= section= cmd= section_bash= dbg=${J2_DBG:-false} fileContent= err=0
+    for ticketFile in $J2_TICKET_FILE; do # {{{
+      [[ -e $ticketFile ]] && break
+    done # }}}
+    if [[ $1 == '@@' ]]; then # {{{
+      if [[ ! -e "$ticketFile" ]]; then # {{{
+        echo "--create --edit"
+        [[ -d $TICKET_TOOL_PATH && -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] && echo "--use-full-j"
+        return 0
+      fi # }}}
+      fileContent="$(cat "$ticketFile")" lastArg=${@: -1}
+      sections="$(__j2_getSections)"
+      if [[ -z $4 ]]; then # {{{
+        section="$3"
+      else
+        local i= cnt=0
+        for i; do
+          cnt=$((cnt+1))
+          [[ $cnt -lt 4 ]] && continue
+          [[ $i == -* ]] && continue
+          section="$i"
+          break
+        done
+      fi # }}}
+      section="$(__j2_mapSection "$section")"
+      local addGlobal=true
+      [[ " $sections " == *" $section "* ]] && addGlobal=false || section="$J2_SECTION_DEFAULT"
+      if $addGlobal; then # {{{
+        echo "--dbg --edit"
+        echo "$sections"
+        [[ -d $TICKET_TOOL_PATH && -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] && echo "--use-full-j"
+        __j2_mapSection --get
+        # return
+      fi # }}}
+      section_bash="$(__j2_getSection "$section")"
+      local sectionLine="$(cat "$ticketFile" | sed -n "/^# S@$section .*# {\{3\}$/p")" compl=
+      if [[ ! -z $3 && $sectionLine == *"@@"* ]]; then # {{{
+        export cmd="@@"
+        shift; shift
+        compl="$(bash -c "$section_bash" - "$@")"
+        [[ ! -z "$compl" ]] && echo "$compl" && return 0
+      fi # }}}
+      compl="$(echo "$section_bash" | sed -n '/^[^ ][^)]\+)/s/).*//p' | xargs | tr ' ' '\n' | sed -e '/^\*$/d' -e '/^|$/d' -e '/^@@$/d')"
+      echo "$compl"
+      return 0
+    fi # }}}
+    [[ -e "$ticketFile" ]] && fileContent="$(cat "$ticketFile")"
+    sections="$(__j2_getSections)"
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --use-full-j) # {{{
+        [[ -d $TICKET_TOOL_PATH && -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] || eval $(die "env not set")
+        export J2_USE_J2_WRAPPER=false
+        source $TICKET_TOOL_PATH/ticket-helper-j
+        return;; # }}}
+      --create) # {{{
+        [[ ! -e "$ticketFile" ]] || eval $(die "file already exists")
+        cat >"$ticketFile" <<-"EOF"
+					# vim: fdl=2 ft=sh
+					
+					# S@setup # {{{
+					case $cmd in
+					esac
+					# }}}
+				EOF
+        return 0;; # }}}
+      --dbg) # {{{
+        dbg=true;; # }}}
+      -e | --edit) # {{{
+        [[ -e "$ticketFile" ]] || j --create
+        vim "$ticketFile" </dev/tty
+        return 0;; # }}}
+      -s | --section) # {{{
+        section="$2"; shift;; # }}}
+      *) # {{{
+        local v=$(__j2_mapSection $1)
+        if [[ -z $section && " $sections " == *" $v "* ]]; then
+          section=$v
+        else
+          export cmd=$v; shift; break
+        fi;; # }}}
+      esac; shift
+    done # }}}
+    [[ -e "$ticketFile" ]] || eval $(die "no ticket file")
+    [[ -z $section ]] && section="$J2_SECTION_DEFAULT"
+    [[ " $sections "  == *" $section "* ]] || eval $(die "section [$section] not found")
+    echor -c $dbg "section: [$section], sections: [$sections]"
+    section_bash="$(__j2_getSection "$section")"
+    echor -c $dbg "cmd=$cmd, args=$@"
+    echor -c $dbg "$section_bash"
+    bash -c "cmd='$cmd'; echorm --name 'j:$section' +; $section_bash" - "$@"
+    err=$?
+    unset cmd
+    return $err
+  } # }}}
+  PHISTORY_IGNORED_COMMANDS+=":j"
+fi # }}}
+

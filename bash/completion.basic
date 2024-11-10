@@ -12,13 +12,19 @@ compl-add() { # {{{
 completion_add() {
   compl-add "$@"
 }
-export -f compl-add completion_add # }}}
+export -f compl-add completion_add
+# }}}
 _completion_generic() { # {{{
   local cur= prev= opts= cmd= _alias= param= i=
   cur=${COMP_WORDS[COMP_CWORD]}
   _get_comp_words_by_ref -n : cur
   prev=${COMP_WORDS[COMP_CWORD-1]}
-  cmd=${COMP_WORDS[0]}
+  if [[ $1 == '--cmd' ]]; then
+    shift
+    cmd="$@"
+  else
+    cmd=${COMP_WORDS[0]}
+  fi
   param="@@"
   if [[ $cmd == 'git' ]]; then
     cmd="git-cmds.sh"
@@ -32,9 +38,10 @@ _completion_generic() { # {{{
       cmd=${cmd/ *}
     fi
   fi
-  # echo "c=[$cmd $param]" >/dev/stderr
+  ${COMPLETION_DBG:-false} && echor "c=[$cmd $param]"
   opts="$($cmd $param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})"
-  set -- $(echo -e "$opts")
+  local flags=${-//[is]}
+  set -f; set -- $(echo -e "$opts"); set +f -$flags
   opts=''
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -69,4 +76,6 @@ _completion_generic() { # {{{
 }
 export -f _completion_generic
 # }}}
+
+source $SCRIPT_PATH/bash/completion.alias
 

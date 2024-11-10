@@ -20,4 +20,7 @@ pu mbcolor          BLUE
 pu tfcolor          WHITE
 pu sfcolor          WHITE
 pu sbcolor          BLUE
-pu sound            No 
+pu sound            No
+pu logfname
+pu logconn          No
+pu logxfer          No

@@ -10,18 +10,18 @@
 	path = bash/profiles/work1
 	url = ../scripts-profiles-work1.git
 	branch = master
-[submodule "bash/inits/atom"]
-	path = bash/inits/atom
-	url = ../scripts-atom.git
-	branch = master
+# [submodule "bash/inits/atom"]
+# 	path = bash/inits/atom
+# 	url = ../scripts-atom.git
+# 	branch = master
 [submodule "bash/profiles/work2"]
 	path = bash/profiles/work2
 	url = ../scripts-profiles-work2.git
 	branch = master
-[submodule "bash/inits/xcape"]
-	path = bash/inits/xcape
-	url = https://github.com/alols/xcape.git
-	branch = master
+# [submodule "bash/inits/xcape"]
+# 	path = bash/inits/xcape
+# 	url = https://github.com/alols/xcape.git
+# 	branch = master
 [submodule "bash/inits/fzf"]
 	path = bash/inits/fzf
 	url = https://github.com/junegunn/fzf.git
@@ -29,4 +29,6 @@
 	path = bash/personalities
 	url = ../scripts-personalities.git
 	branch = master
-
+[submodule "bash/inits/gdb/pwn-dbg"]
+	path = bash/inits/gdb/pwn-dbg
+	url = https://github.com/pwndbg/pwndbg.git

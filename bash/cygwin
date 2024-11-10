@@ -5,7 +5,7 @@ ${RCSTUFF_CYGWIN_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 export RCSTUFF_CYGWIN_INSTALLED=true
 [[ $1 == '--force' ]] && shift
 # }}}
-# Env {{{
+# Env # {{{
 # PS1='\w $(__git_ps1 "(%s)")\$ '
 export find_cmd=/bin/find
 export PATH=/bin:$PATH

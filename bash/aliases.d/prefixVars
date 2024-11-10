@@ -6,12 +6,12 @@ if false; then # {{{
   prefixVars_util_isVar() {
     [[ -v "$1" ]]
   }
-# BASH }}}
+# BASH # }}}
 # OS-X # {{{
   prefixVars_util_isVar() {
     compgen -v | command grep -q "^$1$"
   }
-# OS-X }}}
+# OS-X # }}}
 fi # }}}
 if ! $IS_MAC; then
   source <(sed -n '/^# BASH/,/^# BASH/p' "$SCRIPT_PATH/bash/aliases.d/prefixVars")
@@ -30,6 +30,7 @@ prefixVars_util() { # {{{
   local prefix="$1" name="$2"
   shift 2
   [[ -z $prefix ]] && echor "No prefix provided" && return 1
+  prefix=${prefix//[.,:-]/_}
   [[ $1 == '-' ]] && prefix="vv_PID$$"
   [[ ! -z $name && $name != '-' ]] && name="${prefix}_$name" || name="$prefix"
   case $cmd in
@@ -84,5 +85,24 @@ vBool() { # {{{
   echo "$ret"
   $ret
 } # }}}
-export -f vIsSet vGet vSet vClean vBool prefixVars_util prefixVars_util_isVar
+vDumpArrayNicely() { # {{{
+  local n=${1} i= decl=
+  [[ -z $n ]] && return 1
+  decl="$(declare -p $n 2>/dev/null | sed 's/=.*//')"
+  [[ -z "$decl" ]] && return 2
+  if [[ "$decl" =~ ^"declare -a" ]]; then
+    decl="-a"
+  elif [[ "$decl" =~ ^"declare -A" ]]; then
+    decl="-A"
+  else
+    return 3
+  fi
+  local -n ref=$n
+  echo "declare -p $n >/dev/null 2>&1 || declare $decl $n"
+  for i in $(echo ${!ref[*]} | tr ' ' '\n' | LC_COLLATE=C sort); do
+    echo "$n[$i]=\"${ref[$i]}\""
+  done
+} # }}}
+export -f vIsSet vGet vSet vClean vBool prefixVars_util vDumpArrayNicely prefixVars_util_isVar
+
 

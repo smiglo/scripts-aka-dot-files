@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # vim: fdl=0
-# env:  ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
 
 f() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
-    echo "-+tee=false +tee=true +-fzf +fzf +find"
+    echo "-+tee=false +tee=true +-fzf +fzf +find --full -f"
     return 0
   fi
-  local use_tee=true use_fzf=true fallback=false params= query= force_find=false
-  ! which fdfind >/dev/null 2>&1 && force_find=true
+  local use_tee=true use_fzf=true fallback=false params= query= find_force=false find_full=false
+  ! which fdfind >/dev/null 2>&1 && find_force=true
   while [[ ! -z $1 ]]; do
     case $1 in
     +t | +tee)   use_tee=true;;
     +tee=*)      use_tee=${1/+tee=};;
     +-fzf | +-f) use_fzf=false;;
+    -f | --full) find_full=true; find_force=true;;
     +fzf)        use_fzf=$FZF_INSTALLED;;
     +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
-    +find | +f)  force_find=true;;
+    +find | +f)  find_force=true;;
     *) # {{{
       query="$1"
       if [[ ! -z $2 ]]; then
@@ -40,13 +40,14 @@ f() { # @@ # {{{
     shift
   done
   [[ ! -t 1 ]] && use_fzf=false
+  $find_force && [[ -z $@ ]] && fallback=true && set -- .
   if ! $fallback; then
-    if ! $force_find; then
+    if ! $find_force; then
       echorm "fd $1"
-      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'fd: $query> '" --no-err fd "$1"
+      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'fd: $query> '" --no-err fdfind "$1"
     else
       echorm "find . -name \"$1\""
-      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err find . -name "$1"
+      output_to_file $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err eval find . $(! $find_full && [[ ! -z "$F_FIND_EXCLUDE" ]] && echo "-path '$F_FIND_EXCLUDE' -prune -o") -name "$1" -print
     fi
   else
     echorm "find $params \"$@\""

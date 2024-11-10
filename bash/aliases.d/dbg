@@ -1,182 +1,376 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# Levels # {{{
-export DBG_L_FAT=0
-export DBG_L_ERR=1
-export DBG_L_WRN=2
-export DBG_L_INF=3
-export DBG_L_DBG=4
-export DBG_L_TRC=5 # }}}
-dbg() { # @@ # {{{
-  local flagsIn=$- flagsOut=
+dbgF() { # @@ # {{{
+  local __dbg_flagsIn=$-
   set +xv
-  [[ $flagsIn == *v* ]] && flagsOut+="v"
-  [[ $flagsIn == *x* ]] && flagsOut+="x"
-  local out=${DBG_OUT:-/dev/stderr}
-  local print=${DBGS_PRINT:-true}
-  case $1 in # {{{
-  true  | 0)  print=true;  shift;;
-  false | 1)  print=false; shift;;
-  esac # }}}
-  $print && echo "$@" >>$out
-  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
-} # }}}
-dbgF() { # {{{
-  local flagsIn=$- flagsOut=
-  set +xv
-  [[ $flagsIn == *v* ]] && flagsOut+="v"
-  [[ $flagsIn == *x* ]] && flagsOut+="x"
+  local __dbg_flagsOut=${__dbg_flagsIn//[^xv]}
   if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
+    [[ -z $3 || $3 == 'dbg' ]] && echo "-id -id="
+    case $3 in # {{{
     -v) # {{{
-      echo "F E W I D T 6 7 8";; # }}}
+      echo "F E W I D T";; # }}}
+    --reset) # {{{
+      echo "---";; # }}}
     *) # {{{
-      [[ -z $3 ]] && echo "-id id="
-      case ${4:-$3} in
-      --set | --init)
-        echo "F E W I D T --ts-add --ts-remove --ts-reset --ts-reset= --out --prefix --no-prefix --print-id -v -v="
-        ;;
-      *) [[ -z $4 ]] && echo "--unset --set --init --deinit -? - -- $(seq $DBG_L_FAT $DBG_L_TRC)" || echo "---" ;;
-      esac;; # }}}
-    esac
-    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      if [[ " $@ " == *" --set "* || " $@ " == *" --init "* ]]; then # {{{
+        echo "--out --out=FILE -o1 -o2 -v --name="
+        echo -v={F,E,W,I,D,T}
+        echo --ts-{reset{,=},abs,rel}
+        echo --{ts,prefix,id}={show,hide} --all=show
+        echo --colors={true,false} # }}}
+      elif [[ " $@ " == *" -f "* || " $@ " == *" -f="*" "* ]]; then # {{{
+        local f= list=
+        echo "--env --init -o1 -o2 --out"
+        list="$(getFileList '*.dbg') $(getFileList --pwd "$APPS_CFG_PATH/dbg" '*.dbg' 2>/dev/null)"
+        for f in $list; do
+          echo "-f=$f"
+        done # }}}
+      else
+        echo "--unset --set --init --deinit --reset"
+        echo "F E W I D T"
+        echo "-f -f=FILE -? - --"
+        echo "-o1 -o2 --out=FILE"
+      fi;; # }}}
+    esac # }}}
+    if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
     return 0
   fi # }}}
-  local id=${DBG_ID:-$$} l= p=
-  [[ $2 == '-id' || $2 == '-id=*' ]] && l=$1 && shift
-  case $1 in # {{{
-  -id)   id=$2; shift 2;;
-  -id=*) id=${1#-id=}; shift;;
+  # Levels # {{{
+  local __dbg_levelFat=0 __dbg_levelErr=1 __dbg_levelWrn=2 __dbg_levelInf=3 __dbg_levelDbg=4 __dbg_levelTrc=5 # }}}
+  local __dbg_id=${DBG_ID:-$$} __dbg_level= __dbg_prefixVar= __dbg_printEmpty=false __dbg_out=
+  [[ -z $DBG_ID && $0 =~ ^-?bash$ ]] && __dbg_id='cli'
+  # capture id # {{{
+  case $1 in
+  -id)   __dbg_id=$2; shift 2;;
+  -id=*) __dbg_id=${1#-id=}; shift;;
   esac # }}}
-  [[ ! -z $l ]] && set -- $l "$@" || l=$DBG_L_INF
-  local p="__dbg_verbose_$id"
-  ! declare -F time2s >/dev/null 2>&1 && echo "!!! sourcing time2s" >/dev/stderr && source $SCRIPT_PATH/bash/aliases.d/time2s
+  # capture log-level # {{{
+  if [[ $1 =~ ^-?[FEWIDT0-5]$ ]]; then
+    while [[ $2 =~ ^-?[FEWIDT0-5]$ ]]; do shift; done # move to the last one
+    __dbg_level=$1; shift
+  fi # }}}
+  if [[ ! -z $__dbg_level ]]; then
+    [[ $__dbg_level =~ ^-?[FEWIDT]$ ]] && set -- $__dbg_level "$@"
+  else
+    __dbg_level=$__dbg_levelInf
+  fi
+  __dbg_prefixVar="__dbg_verbose_$__dbg_id"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    -f | -f=*) # {{{
+      local __dbg_dbgFile="$APPS_CFG_PATH/dbg/dbg.sh" __dbg_separeateEnv=true __dbg_err=0 __dbg_mainFile=true __dbg_prefix= __dbg_out=
+      [[ $__dbg_id != "$$" ]] && __dbg_prefix="$(vGet $__dbg_prefixVar name "$__dbg_id")"
+      while [[ ! -z $1 ]]; do # {{{
+        case $1 in
+        --env) # {{{
+          __dbg_separeateEnv=false;; # }}}
+        --init) # {{{
+          [[ ! -z ${2:-$__dbg_prefix} && -x $__dbg_dbgFile ]] && $__dbg_dbgFile --init ${2:-$__dbg_prefix}
+          if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+          return 0;; # }}}
+        --out=*) __dbg_out="$1";;
+        -o1)     __dbg_out="--out=/dev/stdout";;
+        -o2)     __dbg_out="--out=/dev/stderr";;
+        -f);;
+        -f=*) # {{{
+          __dbg_mainFile=false
+          __dbg_dbgFile="${1#-f=}"
+          if [[ -z "$__dbg_dbgFile" ]]; then
+            if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+            return 1
+          fi
+          [[ -e "$__dbg_dbgFile" ]] || __dbg_dbgFile="$__dbg_dbgFile.dbg"
+          [[ -e "$__dbg_dbgFile" ]] || __dbg_dbgFile="$APPS_CFG_PATH/dbg/$__dbg_dbgFile"
+          [[ -e "$__dbg_dbgFile" ]] || __dbg_dbgFile="$APPS_CFG_PATH/dbg/$__dbg_dbgFile.dbg";; # }}}
+        *) break;;
+        esac; shift
+      done # }}}
+      if [[ ! -e "$__dbg_dbgFile" ]]; then # {{{
+        if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+        return 1
+      fi # }}}
+      local __dbg_fDbg="$TMP_MEM_PATH/dbg.$$"
+      if $__dbg_mainFile; then
+        [[ -z $__dbg_prefix ]] && __dbg_prefix=$1 && shift
+      else
+        __dbg_prefix=
+      fi
+      if $__dbg_separeateEnv; then
+        ( source "$__dbg_dbgFile" $__dbg_prefix "$@"; )
+      else
+        source "$__dbg_dbgFile" $__dbg_prefix "$@"
+      fi </dev/tty >$__dbg_fDbg
+      __dbg_err=$?
+      if [[ -s $__dbg_fDbg ]]; then
+        local l=
+        while IFS= read -r l; do
+          dbgF -id=$__dbg_id $__dbg_level $__dbg_out "$l"
+        done <<<$(cat $__dbg_fDbg)
+      fi
+      rm -f "$__dbg_fDbg"
+      if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+      return $__dbg_err;; # }}}
     --set | --init) # {{{
-      [[ $1 == '--init' ]] && vClean $p
-      local moduleDbg="$(__echor_util --convert-to-var)_DBG" l=$DBG_L_INF
+      [[ $1 == '--init' ]] && vClean $__dbg_prefixVar
+      shift
+      local moduleDbg="$(__echor_util --convert-to-var)_DBG" __dbg_level=$__dbg_levelInf
       local -n refDbg=$moduleDbg
       if [[ ! -z $refDbg ]]; then # {{{
         case $refDbg in
-        F | E | W | I | D | T)  l=$refDbg;;
-        [0-9] | :* | true:*)    l=${refDbg#*:};;
-        on  | + | true)         l=$DBG_L_INF;;
-        off | - | false | * )   l=$DBG_L_ERR;;
+        F | E | W | I | D | T)  __dbg_level=$refDbg;;
+        [0-9] | :* | true:*)    __dbg_level=${refDbg#*:};;
+        on  | + | true)         __dbg_level=$__dbg_levelInf;;
+        off | - | false | * )   __dbg_level=$__dbg_levelErr;;
         esac
       fi # }}}
-      ! prefixVars_util_isVar $p && vSet $p - $l
-      shift
       while [[ ! -z $1 ]]; do # {{{
         case $1 in
         F | E | W | I | D | T) # {{{
-                      vSet $p - $1;; # }}}
-        -v)           vSet $p - $2; shift;;
-        -v=*)         vSet $p - ${1#-v=};;
-        --ts-add)     vSet $p ts_add true;;
-        --ts-remove)  vSet $p ts_add false;;
-        --ts-reset)   vSet $p ts_zero "";;
-        --ts-reset=*) vSet $p ts_zero "${1#--ts-reset=}";;
-        --out)        vSet $p out "$2"; shift;;
-        --no-prefix)  vSet $p prefix false;;
-        --prefix)     vSet $p prefix true;;
-        --print-id)   vSet $p id true;;
+                       vSet $__dbg_prefixVar - $1;; # }}}
+        -v)            vSet $__dbg_prefixVar - $2; shift;;
+        -v=*)          vSet $__dbg_prefixVar - ${1#-v=};;
+        --name=*)      vSet $__dbg_prefixVar name "${1#--name=}";;
+        --ts-reset)    vSet $__dbg_prefixVar ts_zero;;
+        --ts-reset=*)  vSet $__dbg_prefixVar ts_zero "${1#--ts-reset=}";;
+        --ts-abs)      vSet $__dbg_prefixVar ts_abs true;;
+        --ts-rel)      vSet $__dbg_prefixVar ts_abs false;;
+        --out)         vSet $__dbg_prefixVar out "$2"; shift;;
+        --out=*)       vSet $__dbg_prefixVar out "${1#--out=}";;
+        -o1)           vSet $__dbg_prefixVar out "/dev/stdout";;
+        -o2)           vSet $__dbg_prefixVar out "/dev/stderr";;
+        --all=show) # {{{
+                       vSet $__dbg_prefixVar id true
+                       vSet $__dbg_prefixVar prefix true
+                       vSet $__dbg_prefixVar ts true;; # }}}
+        --id=show)     vSet $__dbg_prefixVar id true;;
+        --id=hide)     vSet $__dbg_prefixVar id false;;
+        --prefix=show) vSet $__dbg_prefixVar prefix true;;
+        --prefix=hide) vSet $__dbg_prefixVar prefix false;;
+        --ts=show)     vSet $__dbg_prefixVar ts true;;
+        --ts=hide)     vSet $__dbg_prefixVar ts false;;
+        --colors=*)    vSet $__dbg_prefixVar colors ${1#--colors=};;
         esac; shift
       done # }}}
-      local v=$(vGet $p)
-      case $v in # {{{
-      F) vSet $p - $DBG_L_FAT;;
-      E) vSet $p - $DBG_L_ERR;;
-      W) vSet $p - $DBG_L_WRN;;
-      I) vSet $p - $DBG_L_INF;;
-      D) vSet $p - $DBG_L_DBG;;
-      T) vSet $p - $DBG_L_TRC;;
+      case $(vGet $__dbg_prefixVar - $__dbg_level) in # {{{
+      F) vSet $__dbg_prefixVar - $__dbg_levelFat;;
+      E) vSet $__dbg_prefixVar - $__dbg_levelErr;;
+      W) vSet $__dbg_prefixVar - $__dbg_levelWrn;;
+      I) vSet $__dbg_prefixVar - $__dbg_levelInf;;
+      D) vSet $__dbg_prefixVar - $__dbg_levelDbg;;
+      T) vSet $__dbg_prefixVar - $__dbg_levelTrc;;
+      *) vSet $__dbg_prefixVar - $__dbg_levelInf;;
       esac # }}}
-      if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
       return 0;; # }}}
     --unset | --deinit) # {{{
-      vClean $p
-      if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+      vClean $__dbg_prefixVar
+      if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
       return 0;; # }}}
     -\?) # {{{
-      vGet --all $p
+      vGet --all $__dbg_prefixVar
       return 0;; # }}}
-    --) shift; break;;
-    -)  l="$((-$l))"; shift; [[ $1 == '--' ]] && shift; break;;
-    *) # {{{
-      if [[ $1 =~ ^-?[FEWIDT]$ ]]; then
-        local s=
-        [[ $1 == -* ]] && s=-
-        case ${1#-} in # {{{
-        F) l=$s$DBG_L_FAT;;
-        E) l=$s$DBG_L_ERR;;
-        W) l=$s$DBG_L_WRN;;
-        I) l=$s$DBG_L_INF;;
-        D) l=$s$DBG_L_DBG;;
-        T) l=$s$DBG_L_TRC;;
-        esac # }}}
-      elif [[ $1 =~ ^-?[0-9]+$ ]]; then
-        l=$1
-        [[ $2 == "-" ]] && l="$((-$l))" && shift
-      else
-        break
-      fi;; # }}}
+    --reset) vSet $__dbg_prefixVar ts_zero;;
+    --) __dbg_printEmpty=true; shift; break;;
+    -)  __dbg_level="$((-${__dbg_level#-}))";;
+    -o1)     __dbg_out="/dev/stdout";;
+    -o2)     __dbg_out="/dev/stderr";;
+    --out=*) __dbg_out="${1#--out=}";;
+    -[FEWIDT] | [FEWIDT]) # {{{
+      local __dbg_s=
+      [[ $1 == -* ]] && __dbg_s=-
+      case ${1#-} in # {{{
+      F) __dbg_level=$__dbg_s$__dbg_levelFat;;
+      E) __dbg_level=$__dbg_s$__dbg_levelErr;;
+      W) __dbg_level=$__dbg_s$__dbg_levelWrn;;
+      I) __dbg_level=$__dbg_s$__dbg_levelInf;;
+      D) __dbg_level=$__dbg_s$__dbg_levelDbg;;
+      T) __dbg_level=$__dbg_s$__dbg_levelTrc;;
+      esac ;; # }}} # }}}
+    *) break;;
     esac; shift
   done # }}}
-  if [[ $(vGet $p - $DBG_L_INF) -lt $l ]]; then
-    if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+  local len=10
+  if ! $__dbg_printEmpty && [[ -z $1 ]]; then # {{{
+    if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
     return 0
-  fi
-  l=${l#-}
-  # ts # {{{
-  local ts=$(vGet $p ts_add false) ts_diff=
-  if $ts; then
-    local ts0=$(vGet $p ts_zero ${EPOCHSECONDS:-$(epochSeconds)})
-    vIsSet $p ts_zero || vSet $p ts_zero $ts0
-    ts_diff="$(time2s --diff-HMS @$ts0): "
+  fi # }}}
+  if [[ $(vGet $__dbg_prefixVar - $__dbg_levelInf) -lt $__dbg_level ]]; then # {{{
+    if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+    return 0
   fi # }}}
   # out # {{{
-  local out=$(vGet $p out ${DBG_OUT:-/dev/stderr}) # }}}
-  # prefix # {{{
-  local prefix=$(vGet $p prefix)
-  if [[ -z $prefix ]]; then
-    [[ -f $out ]] && prefix=true || prefix=false
+  [[ -z $__dbg_out ]] && __dbg_out=$(vGet $__dbg_prefixVar out ${DBG_OUT:-/dev/stderr}) # }}}
+  # colors # {{{
+  local colorsOn=${colorsOn:-${COLORS_ON:-true}}
+  local useColors=$(vGet $__dbg_prefixVar colors)
+  declare -A colorsMap=([prefix]="info" [id]="CIBlack")
+  if [[ $useColors == 'false' ]]; then
+    colorsOn=false
+  elif false \
+    || ( [[ $__dbg_out == '/dev/stdout' && ! -t 1 && $useColors != 'true' ]] ) \
+    || ( [[ $__dbg_out == '/dev/stderr' && ! -t 2 && $useColors != 'true' ]] ) \
+    || ( [[ $__dbg_out != '/dev/stdout' && $__dbg_out != '/dev/stderr' && $useColors != 'true' ]] ); then
+    colorsOn=false
+    vIsSet $__dbg_prefixVar colors || vSet $__dbg_prefixVar colors false
   fi
+  # }}}
+  # prefix # {{{
+  local prefix=$(vGet $__dbg_prefixVar prefix true) prefixColor='prefix'
+  local isForced=false
+  [[ $__dbg_level == -* ]] && __dbg_level=${__dbg_level#-} && isForced=true
   if $prefix; then
-    case $l in # {{{
-    $DBG_L_FAT) prefix="F ";;
-    $DBG_L_ERR) prefix="E ";;
-    $DBG_L_WRN) prefix="W ";;
-    $DBG_L_INF) prefix="I ";;
-    $DBG_L_DBG) prefix="D ";;
-    $DBG_L_TRC) prefix="T ";;
-    *)          prefix="L$l ";;
+    case $__dbg_level in # {{{
+    $__dbg_levelFat) prefix="F"; prefixColor='err';;
+    $__dbg_levelErr) prefix="E"; prefixColor='err';;
+    $__dbg_levelWrn) prefix="W"; prefixColor='wrn';;
+    $__dbg_levelInf) prefix="I";;
+    $__dbg_levelDbg) prefix="D"; prefixColor='gray';;
+    $__dbg_levelTrc) prefix="T"; prefixColor='gray';;
+    *)               prefix="L$__dbg_level"; prefixColor='gray';;
     esac # }}}
   else
     prefix=""
   fi # }}}
   # id # {{{
-  $(vGet $p id false) && id="$(printf "%10s " "$id")" || id="" # }}}
-  echo "$prefix$id$ts_diff$@" >>$out
-  if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+  if $(vGet $__dbg_prefixVar id false); then
+    [[ ! -z $prefix ]] && $isForced && prefix="$prefix!" && len=$((len - 1))
+    __dbg_id="$(printf "%${len}s" "$(vGet $__dbg_prefixVar name "$__dbg_id")")"
+  else
+    __dbg_id=""
+  fi # }}}
+  # ts # {{{
+  local ts=$(vGet $__dbg_prefixVar ts true) ts_diff=
+  if $ts; then
+    local ts0=$(vGet $__dbg_prefixVar ts_zero -z ${EPOCHSECONDS:-$(epochSeconds)}) tsFirst=false
+    vIsSet $__dbg_prefixVar ts_zero || { vSet $__dbg_prefixVar ts_zero $ts0; tsFirst=true; }
+  fi # }}}
+  # formatting  # {{{
+  if $colorsOn; then
+    [[ ! -z $prefix ]] && prefix="$(cl $prefixColor $prefix) "
+    [[ ! -z $__dbg_id ]] && __dbg_id="$(cl id "$__dbg_id") "
+  else
+    [[ ! -z $prefix ]] && prefix+=" "
+    [[ ! -z $__dbg_id ]] && __dbg_id+=" "
+  fi # }}}
+  local str=
+  if [[ ! -t 0 && -z $@ ]] && $__dbg_printEmpty; then
+    cat -
+  else
+    echo "${@@Q}"
+  fi \
+  | while IFS= read -r str; do
+    str="$(eval set -- $str; eval printfc "${str@Q}")"
+    str="${str#$}"
+    str="${str#\'}" && str="${str%\'}"
+    if $ts; then # {{{
+      if $tsFirst || $(vGet $__dbg_prefixVar ts_abs false); then
+        ts_diff="$(time2s --to-HMS)"
+      else
+        ts_diff="$(time2s --diff-HMS @$ts0)"
+      fi
+      if $colorsOn; then
+        [[ ! -z $ts_diff ]] && ts_diff="$(cl ts $ts_diff): "
+      else
+        [[ ! -z $ts_diff ]] && ts_diff+=": "
+      fi
+    fi # }}}
+    local outStr="$prefix$__dbg_id$ts_diff$str"
+    echo "${outStr% }" >>$__dbg_out
+  done
+  if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
 } # }}}
 # Level wrappers # {{{
-FAT() { dbgF $DBG_L_FAT "$@"; }
-ERR() { dbgF $DBG_L_ERR "$@"; }
-WRN() { dbgF $DBG_L_WRN "$@"; }
-INF() { dbgF $DBG_L_INF "$@"; }
-DBG() { # @@ # {{{
+FAT() { dbgF F "$@"; }
+ERR() { dbgF E "$@"; }
+WRN() { dbgF W "$@"; }
+INF() { dbgF I "$@"; }
+DBG() { dbgF D "$@"; }
+TRC() { dbgF T "$@"; } # }}}
+dbg() { # by default prints with INFO level # @@ # {{{
+  [[ -z $1 ]] && return 0
+  local __dbg_flagsIn=$-
+  set +xv
+  local __dbg_flagsOut=${__dbg_flagsIn//[^xv]}
   if [[ $1 == '@@' ]]; then # {{{
     dbgF "$@"
+    if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
     return 0
   fi # }}}
-  local l=$DBG_L_DBG
-  if   [[ $1 == '-' ]]; then l=-$l && shift
-  elif [[ $1 =~ ^-?[0-9]+$ || $l =~ ^-?[FEWIDT]$ ]]; then l=$1 && shift
-  fi
-  dbgF $l "$@"
+  local __dbg_level=I
+  [[ $1 =~ ^-?[FEWIDT]$ ]] && __dbg_level=$1 && shift
+  [[ -z $1 ]] && return 0
+  dbgF $__dbg_level "$@"
+  if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
 } # }}}
-TRC() { dbgF $DBG_L_TRC "$@"; } # }}}
-export -f dbg dbgF FAT ERR WRN INF DBG TRC
+dbgC() { # @@ # {{{
+  [[ -z $1 ]] && return 0
+  local __dbg_flagsIn=$-
+  set +xv
+  local __dbg_flagsOut=${__dbg_flagsIn//[^xv]}
+  if [[ $1 == '@@' ]]; then # {{{
+    if [[ $2 == 1 ]]; then
+      echo {,-}{true,false,0,1}
+    fi
+    if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+    return 0
+  fi # }}}
+  local __dbg_out=${DBG_OUT:-/dev/stderr}
+  local __dbg_print=${DBGS_PRINT:-true}
+  case $1 in # {{{
+   true  |  0) __dbg_print=true;  shift;;
+  -true  | -0) __dbg_print=false; shift;;
+   false |  1) __dbg_print=false; shift;;
+  -false | -1) __dbg_print=true;  shift;;
+  esac # }}}
+  [[ -z $1 ]] && __dbg_print=false
+  $__dbg__dbg__print && dbgF "$@" >>$__dbg_out
+  if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
+} # }}}
+export -f dbgF FAT ERR WRN INF DBG TRC dbg dbgC
 
+# -----------------------------------------------------
+# Template: $APPS_CFG_PATH/dbg/dbg.sh: # {{{
+# #!/usr/bin/env bash
+# # vim: fdl=0
+#
+# __dbg_white_list=""
+# # set up # {{{
+# if [[ ${BASH_SOURCE[0]} == $0 ]]; then
+#   case $1 in
+#   @@) # {{{
+#     case $3 in
+#     --init | --deinit) # {{{
+#       sed -n '/^# debugs # {\{3\}/,/^# debugs # }\{3\}/p' $0 | sed -n '/^[^ ]* *)/s/ *).*//p' | sed 's/-.*//' | sort -u;; # }}}
+#     *) # {{{
+#       echo "--init --deinit"
+#       sed -n '/^# debugs # {\{3\}/,/^# debugs # }\{3\}/p' $0 | sed -n '/^[^ ]* *)/s/ *).*//p'
+#       ;; # }}}
+#     esac;; # }}}
+#   --init) # {{{
+#     [[ -z $2 ]] && exit 1
+#     touch $TMP_MEM_PATH/.dbg.${2%%-*};; # }}}
+#   --deinit) # {{{
+#     [[ -z $2 ]] && exit 1
+#     rm -f $TMP_MEM_PATH/.dbg.${2%%-*};; # }}}
+#   esac
+#   exit 0
+# fi # }}}
+# __dbg_prefix=$1 __dbg_suffix=$2
+# # check # {{{
+# if [[ -z $__dbg_suffix || " $__dbg_white_list " == *" $__dbg_prefix "* || -e $TMP_MEM_PATH/.dbg.$__dbg_prefix ]]; then
+#   :
+# else
+#   unset __dbg_white_list __dbg_prefix __dbg_suffix
+#   return 0
+# fi # }}}
+# # debugs # {{{
+# case $__dbg_prefix in
+# DBG_MODULE) # {{{
+#   case $__dbg_suffix in
+#   CASE-01) ;;
+#   esac;; # }}}
+# esac
+# unset __dbg_white_list __dbg_prefix __dbg_suffix
+# # debugs # }}}
+# }}}

@@ -1,29 +1,38 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-hl() { # @@ # {{{
+__hl() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "+l --lines ++ +-"
+    echo "+cCOLOR@PHRASE"
     echo +c={Gray,Red,Green,Yellow,Blue,Pink,Cyan,Gold,Hls,Search}
     return 0
   fi # }}}
   local cmd_root="$GREP_DEFAULT_PARAMS --text --line-buffered --color=yes"
   local params=() cnt=0 lines=false add_lines=false lines_colors=($(echo "48;5;235 48;5;232")) c= add_default=false
-  #  hl --lines "48;5;239  48;5;232"
   [[ -z $1 ]] && set -- ++
+  __util_hl_getPhrase() { # {{{
+    local phrase="$1"
+    phrase="${phrase//;/\\;}"
+    phrase="${phrase//\\|/|}"
+    phrase="${phrase//|/\\\\\\|}"
+    echo "$phrase"
+  } # }}}
   while true; do # {{{
     while [[ ! -z "$1" ]]; do # {{{
       case "$1" in # {{{
       ++)       add_default=true;;
       +-)       add_default=false;;
       +c*)      # {{{
-                if ! $lines && ! $add_lines; then
+                if ! $lines && ! $add_lines; then # {{{
                   [[ ! -z ${params[$cnt]} ]] && cnt=$(($cnt+1))
+                  local phrase="$1"
                   case $1 in
-                  +c)  params[$cnt]+=" +c=${2//;/\\;}"; shift;;
-                  +c*) params[$cnt]+=" ${1//;/\\;}";;
+                  +c) phrase="+c=$2"; shift;;
                   esac
-                else
+                  params[$cnt]+=" \"$(__util_hl_getPhrase "$phrase")\""
+                  # }}}
+                else # {{{
                   c=${1/+c}
                   [[ -z $c ]] && c=$2 && shift
                   case $(echo ${c,,}) in
@@ -38,7 +47,8 @@ hl() { # @@ # {{{
                   [0-9]*)         c="48;5;$c";;
                   esac
                   lines_colors=($(echo "$c 48;5;232" | sed -e 's/\[//g' -e 's/m//g'))
-                fi ;; # }}}
+                fi # }}}
+                ;; # }}}
       +l)       add_lines=true;;&
       --lines)  lines=true;;&
       +l|--lines) # {{{
@@ -54,9 +64,9 @@ hl() { # @@ # {{{
                   done
                   lines_colors=($(echo "$lines_colors" | sed -e 's/\[//g' -e 's/m//g'))
                 fi;; # }}}
-      -e)       params[$cnt]+=" -e \"${2//%20/ }\""; shift;;
+      -e)       params[$cnt]+=" -e \"$(__util_hl_getPhrase "$2")\""; shift;;
       -*)       params[$cnt]+=" $1";;
-      *)        params[$cnt]+=" -e \"${1//%20/ }\"";;
+      *)        params[$cnt]+=" -e \"$(__util_hl_getPhrase "$1")\"";;
       esac # }}}
       shift
     done # }}}
@@ -66,6 +76,7 @@ hl() { # @@ # {{{
     add_default=false
     eval set -- $HL_DEFAULTS
   done # }}}
+  unset -f __util_hl_getPhrase
   if $lines; then
     [[ -z $COff ]] && source $BASH_PATH/colors
     # Sed fixes grep's color reset markup and interpretation of '&' in gawk's gensub
@@ -79,17 +90,14 @@ hl() { # @@ # {{{
       }'
     return
   fi
-  if [[ -z $params ]] && ! $add_lines; then
-    grep_wrapper --cmd-grep +tee=false +-fzf $cmd_root -e "${HIGHLIGHT_DEFAULT}" -e "\$" ${params[0]}
-    return
-  fi
   cnt=${#params[*]}
   local cmd=
   local i=
   for (( i=0; i<$cnt; i++ )); do
     [[ ! -z $cmd ]] && cmd+=" | "
-    cmd+="grep_wrapper --cmd-grep +tee=false +-fzf $cmd_root ${params[$i]:-"-e \"$HIGHLIGHT_DEFAULT\""} -e \"\$\""
+    cmd+="grep_wrapper --cmd-grep +tee=false +-fzf $cmd_root ${params[$i]} -e \"\$\""
   done
+  [[ -z $cmd ]] && return 1
   if $add_lines; then
     [[ ! -z $cmd ]] && cmd+=" | "
     cmd+=" hl --lines \"${lines_colors[*]}\""
@@ -97,4 +105,11 @@ hl() { # @@ # {{{
   echorv -M cmd
   eval $cmd
 } # }}}
+
+if ! $IS_MAC; then # {{{
+  export -f __hl
+  hl() { __hl "$@"; }
+else
+  hl() { $ALIASES __hl "$@"; }
+fi # }}}
 

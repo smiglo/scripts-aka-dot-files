@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 # vim: fdl=0
-# env:  ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
 
 grep_wrapper() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "+tee=true +tee=false +fzf +-fzf"
+    echo "+cCOLOR@PHRASE"
     echo +c={Gray,Red,Green,Yellow,Blue,Pink,Cyan,Gold,Hls,Search}
     return 0
   fi
-  [[ $1 != --cmd-* && $1 != +tee* ]] && { command grep "$@";  return $?; }
-  [[ $1 == --cmd-* && $2 != +tee* && ${#BASH_SOURCE[*]} != 1 ]] && shift && { command grep "$@"; return $?; }
-  local params="$GREP_DEFAULT_PARAMS -s"
   local cmd="grep"
+  [[ $1 != --cmd-* && $1 != +tee* ]] && { command grep "$@";  return $?; }
+  if [[ $1 == --cmd-* && $2 != +tee* && ${#BASH_SOURCE[*]} != 1 ]]; then
+    cmd=${1#--cmd-} && shift
+    command $cmd "$@"
+    return
+  fi
+  local params="$GREP_DEFAULT_PARAMS -s"
   local args=
   local oldColors=$GREP_COLORS
   local gnuGrep="$(command grep --version | head -n1 | command grep -q 'GNU' && echo 'true' || echo 'false')"
   $IS_MAC && ! $gnuGrep && oldColors=$GREP_COLOR
   local color=
-  local use_tee=
+  local use_colors=
   local ignoreErr=
   local query="${@: -2}"
-  local fzf_params=
-  local fzf_prompt=
-  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*GREP:[^,]\+,' | command grep -o 'true\|false')"
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+  local use_fzf= fzf_params= fzf_prompt= use_tee=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
       --cmd-*) cmd=${1/"--cmd-"}
@@ -32,6 +33,7 @@ grep_wrapper() { # @@ # {{{
                 esac;;
       +c=*)    color=${1/"+c="};;
       +c)      color=$2; shift;;
+      +c*@*)   args+=" -e \"${1#*@}\""; color=${1%%@*} && color=${color/"+c"};;
       +c*)     color=${1/"+c"};;
       +tee=*)  use_tee=${1/+tee=};;
       +tee)    use_tee=true;;
@@ -40,6 +42,7 @@ grep_wrapper() { # @@ # {{{
       +fzf-prompt) fzf_prompt="$2"; shift;;
       +fzf=*)  use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
       +fzf-*)  fzf_params+=" $1";;
+      --colors | --no-colors) use_colors="$1" params="${params/--color}";;
       -*)      args+=" $1";;
       *)       args+=" \"$1\"";;
     esac
@@ -66,7 +69,7 @@ grep_wrapper() { # @@ # {{{
   export GREP_COLORS
   $IS_MAC && ! $gnuGrep && export GREP_COLOR=${GREP_COLORS/mt=}
   local exclude=
-  [[ -t 0 && $cmd != z* ]] && exclude=" --exclude-dir .git --exclude-dir .hg --exclude=tags --exclude 'cscope*' $GREP_EXCLUDES"
+  [[ -t 0 && $cmd != z* ]] && exclude=" --exclude-dir=.git --exclude-dir=.hg --exclude=tags --exclude='cscope*' $GREP_EXCLUDES"
   if [[ -t 0 ]]; then # {{{
     [[ $args != *-h* ]] && params+=" -Hn"
   fi # }}}
@@ -75,26 +78,38 @@ grep_wrapper() { # @@ # {{{
   fi # }}}
   local err=
   if [[ ! -t 1 ]]; then # {{{
-    use_fzf=false
-    params="${params/--color=yes}"
-    params="${params/--color}"
-    params+=" --color=no "
+    [[ -z $use_fzf ]] && use_fzf=false
+    [[ -z $use_colors ]] && use_colors="--no-colors"
+  else
+    [[ -z $use_colors ]] && use_colors="--colors"
   fi # }}}
-  if $use_tee; then # {{{
+  if [[ -z $use_fzf ]]; then # {{{
+    if [[ ! -t 1 ]]; then
+      use_fzf=false
+    else
+      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*GREP:[^,]\+,' | command grep -o 'true\|false')"
+      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    fi
+  fi # }}}
+  if [[ ! -z $use_colors ]]; then
     params=" $params "
-    [[ -t 1 ]] && params="${params/--color }" && params="--color=$($use_fzf && echo 'no' || echo 'yes') $params"
-  fi # }}}
+    params="${params/--color }"
+    params="${params/--color=yes}"
+    params="${params/--color=no}"
+  fi
   set - "$args"
-  # echo "output_to_file $use_tee +fzf=$use_fzf $ignoreErr "eval $cmd" $params "$@" $exclude" >/dev/stderr
-  [[ -z fzf_prompt ]] && fzf_prompt="grep: $query> "
-  output_to_file --no-sort $use_tee +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
+  echor -M "output_to_file $use_tee +fzf=$use_fzf $ignoreErr "eval $cmd" $params "$@" $exclude"
+  [[ -z $fzf_prompt ]] && fzf_prompt="grep: $query> "
+  output_to_file --no-sort $use_tee $use_colors +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
   err=$?
   export GREP_COLORS=$oldColors
   $IS_MAC && ! $gnuGrep && export GREP_COLOR=$oldColors
   return $err
 } # }}}
+export -f grep_wrapper
 
 alias grep='grep_wrapper --cmd-grep' # @@
+alias gr='grep_wrapper --cmd-grep -i -E' # @@
 alias egrep='grep_wrapper --cmd-egrep'
 alias fgrep='grep_wrapper --cmd-fgrep'
 alias zgrep='grep_wrapper --cmd-zgrep'

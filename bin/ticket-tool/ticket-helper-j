@@ -24,9 +24,11 @@ if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
     wnd_name="$(tmux display-message -p -t $TMUX_PANE -F '#W' | sed 's/--.*//')"
     wnd_name=${wnd_name,,}
     path_issue="$($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$wnd_name" true)"
+    export TICKET_CONF_SKIP_ENV=true
     if [[ ! -z $path_issue && -e $path_issue ]]; then
       eval "$($TICKET_TOOL_PATH/ticket-tool.sh --issue $wnd_name env --silent --min)"
     fi
+    unset TICKET_CONF_SKIP_ENV
     unset wnd_name path_issue
   fi # }}}
   function j() { # {{{

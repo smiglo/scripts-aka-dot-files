@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+simple_http() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo '-t --timeout -p --port -f --file'
+    return 0
+  fi
+  ! type nc >/dev/null 2>&1 && echo "\"nc\" not installed" >/dev/stderr && return 1
+  local file=
+  local port=8080
+  local timeout=$((5*60))
+  while [[ ! -z $1 ]]; do
+    case $1 in
+      -p|--port)    shift; port=$1;;
+      -t|--timeout) shift; timeout=$1;;
+      -f|--file)    shift; file=$1;;
+      *)            file=$1;;
+    esac
+    shift
+  done
+  [[ -z $file ]] && echo "File name is missing" >/dev/stderr && return 1
+  echo -e "Serving file [$file] on port [$port], waiting for [$timeout] second for any connection...\n" >/dev/stderr
+  { echo -ne "HTTP/1.0 200 OK\r\n\r\n"; cat "$file"; } | nc -kl -q $timeout -p $port
+} # }}}
+www() { # {{{
+  local params="-s" query= site= title="www"
+  while [[ ! -z "$1" ]]; do
+    case "$1" in
+    --)         shift; params+="$@"; site="-"; break;;
+    www* | *.*) params+=" -N"; site="$1"; title+=" $1";;
+    -*)         params+=" $1";;
+    *)
+      [[ ! -z $query ]] && query+="%20"
+      query+="${1// /%20}"
+      [[ $title == "www" ]] && title+=" ?"
+      title+=" $1";;
+    esac
+    shift
+  done
+  if [[ -z $site ]]; then
+    site="${WWW_DEFAULT_SITE:-"www.google.pl"}"
+  elif [[ $site == '-' ]]; then
+    site=
+  fi
+  [[ ! -z $query ]] && params+=" -N $site/search?q=$query" && site=
+  if [[ -z $params ]]; then
+    params="-N"
+    title+=" $site"
+  fi
+  set_title "$title"
+  ( set -x; w3m $params $site)
+}
+export HISTIGNORE+=":www" # }}}
+

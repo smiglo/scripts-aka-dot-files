@@ -1,10 +1,10 @@
 #eco solarized
 eco onedark
 
-# e asm.describe = true
 e asm.syntax = intel
 e asm.describe = true
-e bin.cache = true
+e bin.relocs.apply = true
+# e io.cache.read = true
 e cfg.fortunes.type = tips, fun, nsfw
 # e cmd.hexcursor = pf dbw word len msg
 e cmd.hexcursor = ? [$$]&1u32

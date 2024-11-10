@@ -9,9 +9,9 @@ dashboard -style  syntax_highlighting         'rrt'
 dashboard -style  value_truncation_string     '+'
 dashboard -style  prompt_running              '\\[\\e[1;35m\\]>>:\\[\\e[0m\\]'
 dashboard assembly    -style function         False
-dashboard assembly    -style highlight-line   True
+# dashboard assembly    -style highlight-line   True
 dashboard assembly    -style opcodes          False
-dashboard expressions -style align            True
+# dashboard expressions -style align            True
 dashboard history     -style limit            10
 dashboard memory      -style cumulative       True
 dashboard memory      -style placeholder      '.'
@@ -33,7 +33,7 @@ define dbasm
   dashboard
 end
 define dbcore
-  dashboard -layout  source !assembly !registers  threads !stack  variables  memory  exporession !history !breakpoints
+  dashboard -layout  source !assembly !registers  threads !stack  variables  memory  expressions !history !breakpoints
   dashboard stack    -style locals True
   dashboard
 end

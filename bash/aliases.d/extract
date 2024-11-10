@@ -59,9 +59,9 @@ extract() { # @@ # {{{
   else
     cmd="$cmd $file"
     echo $cmd
-    $ALIASES progress --mark --dots --msg "Extracting '$file'"
+    progress --mark --dots --msg "Extracting '$file'"
     eval $cmd 1>/dev/null
-    $ALIASES progress --unmark
+    progress --unmark
     echo
   fi
 } # }}}

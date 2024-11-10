@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-tm() { # @@ # {{{
+__tm() { # @@ # {{{
   ! type tmux >/dev/null 2>&1 && return 1
   local buffers_path="$APPS_CFG_PATH/tmux/buffers" layouts_path="$APPS_CFG_PATH/tmux/layouts"
   local lFile="$layouts_path/l.layout"
@@ -10,9 +10,12 @@ tm() { # @@ # {{{
     local sessions="$(tmux list-sessions -F '#S')"
     local ret=""
     if [[ $2 == 1 ]]; then
-      ret="-d -a --attach -p --path --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l --new --pane --env -e"
+      ret="-d -a --attach -p --path -s --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l"
+      ret+=" --new --pane --env -e --switch --pids --session"
+      ret+=" ss sd sr"
     else
       case $4 in
+      --session)   ret="-s --save -d --delete -e --edit -r --restore";;
       -a|--attach) ret="$sessions";;
       -p|--path)   ret="@@-d";;
       --b-restore) ret="$(command cd $buffers_path; command ls -Ad *)";;
@@ -36,34 +39,56 @@ tm() { # @@ # {{{
           ret="-"
           [[ -e "$layouts_path/l.layout" ]] && ret+=" l"
           [[ -e "$layouts_path/predefined.layout" ]] && ret+=" predefined"
-          ret+=" $($ALIASES getFileList '*.layout' | sed -e 's/^/.\//' -e 's/\.layout//g')"
-          ret+=" $($ALIASES getFileList -d --pwd $layouts_path '*.layout' | head -n4 | sed -e 's/\.layout//g')"
+          ret+=" $(getFileList '*.layout' | sed -e 's/^/.\//' -e 's/\.layout//g')"
+          ret+=" $(getFileList -d --pwd $layouts_path '*.layout' | head -n4 | sed -e 's/\.layout//g')"
           echo "$ret"
           return 0
           ;; # }}}
+        --check) # {{{
+          echo ret="PATH";; # }}}
         *)  # {{{
           case $4 in
-          --l-dump | --l-restore | ld | lr) ret="--all -v --file $(tmux display-message -pF '#S #S:* #S:#W')";;
-          --l-edit) ret="--file"
+          --l-dump | --l-restore | ld | lr) ret="--all -v --check --file . - $(tmux display-message -pF '#S #S:* #S:#W')";;
+          --l-edit) ret="--file .";;
           esac;; # }}}
         esac;;& # }}}
       --l-dump | ld) # {{{
-        ret+=" --paths --no-paths"
+        ret+=" --paths --no-paths --ignore-backup -d --default -w"
         [[ -e $lFile ]] && ret+=" $(awk '!/^#/ && /^[^:]* /{print $1}' "$lFile")"
         ;; # }}}
       --l-restore | lr) # {{{
-        ret+=" --all-all --cd --acd --mcd --no-cd --match"
+        ret+=" --all-all --cd --acd --mcd --no-cd --match -d --default -w -wd --choose --dst --set-pane-1 --no-pane-1"
         [[ -e "$lFile" ]] && ret+=" $(sed -e '/^#/d' -e '/^-/d' $lFile | awk '{print $1}')"
         ;; # }}}
       --layout | l) # {{{
         ret=" --swap -s"
         ret+=" orig o next n prev p save s even-horizontal even-vertical main-horizontal h main-vertical v tiled";; # }}}
+      --switch) # {{{
+        echo "--get"
+        tmux list-panes -a -F '#S:#I.#P';; # }}}
       esac
     fi
     echo -e "$ret"
     return 0
   fi # }}}
-  local title= inBackground=false utils= nest=false cmd=
+  local title= inBackground=false utils= nest=false cmd= silent=false
+  if [[ -n $TMUX ]]; then # {{{
+    if [[ -e "./.layout" ]]; then
+      if [[ -z $1 ]]; then
+        tm --l-dump . --ignore-backup "last"
+        set -- --l-restore . -d
+      elif [[ $1 == '-' ]]; then
+        shift
+      fi
+    fi # }}}
+  else # {{{
+    [[ -z $1 ]] && set -- -a
+  fi # }}}
+  case $1 in # {{{
+  ss) shift; set -- --session --save "$@";;
+  sd) shift; set -- --session --delete "$@";;
+  sr) shift; set -- --session --restore "$@";;
+  esac # }}}
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     ld | lr | l    | \
@@ -79,7 +104,10 @@ tm() { # @@ # {{{
     --l-edit       | \
     --layout       | \
     --pane         | \
+    --pids         | \
     --new          | \
+    --switch       | \
+    --session      | \
     --exec)
           case $1 in # {{{
           -a) utils='attach';;
@@ -94,6 +122,7 @@ tm() { # @@ # {{{
           shift; break;;
     -d)             inBackground=true;;
     -n | --nest)    nest=true;;
+    -s)             silent=true;;
     *)              break;;
     esac
     shift
@@ -101,6 +130,21 @@ tm() { # @@ # {{{
   [[ ! -z $utils ]] || return 1
   local var= i= buffer_fix='buffer'
   case $utils in # {{{
+  session) # {{{
+    local dst="$TMUX_SESSION_PATH/windows.save"
+    local name=$(tmux display-message -pF '#S:#W')
+    case $1 in
+    -s | --save) # {{{
+      update-file $dst --update-line "^$name " "$(tm --l-dump --file -)";; # }}}
+    -d | --delete) # {{{
+      update-file $dst --remove-line "^$name ";; # }}}
+    -e | --edit) # {{{
+      vim $dst;; # }}}
+    -r | --restore) # {{{
+      shift
+      tm --l-restore --file $dst --set-pane-1 "$@";; # }}}
+    esac
+    return 0;; # }}}
   env) # {{{
     local pGlob='-g' verbose=false
     while [[ ! -z $1 ]]; do # {{{
@@ -115,8 +159,7 @@ tm() { # @@ # {{{
       [[ $i == *=* ]] && v=${i#*=} && i=${i%%=*}
       w="$(tmux show-environment $p $i 2>/dev/null)"; e=$?
       if [[ $e != 0 ]]; then
-        p=
-        w="$(tmux show-environment $p $i 2>/dev/null)"; e=$?
+        w="$(tmux show-environment $i 2>/dev/null)" && p=
       fi
       [[ $e == 0 ]] && $verbose && echor "Current value$([[ $p != '-g' ]] && echo " (-w)") : $w"
       if [[ -z $v ]]; then # {{{
@@ -156,14 +199,14 @@ tm() { # @@ # {{{
   l-edit) # {{{
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
+      .) lFile="./.layout";;
       --file) # {{{
         lFile="$2"; shift
         if [[ "$lFile" != '/dev/std'* && "$lFile" != '-' ]]; then
           [[ "$lFile" != "./"* && "$lFile" != "/"*  && "$lFile" != '~'* ]] && lFile="$layouts_path/$lFile"
-          [[ "$lFile" != *".layout" ]] && lFile+=".layout"
         fi
         ;; # }}}
-      esac
+      esac; shift
     done # }}}
     [[ ! -e $lFile && $lFile != "-" ]] && echo "Layout file does not exist" && return 1
     if [[  $lFile = "-" ]]; then
@@ -171,24 +214,36 @@ tm() { # @@ # {{{
     else
       vim --fast "$lFile"
     fi
-    return 0
-    ;; # }}}
+    return 0;; # }}}
   l-dump | l-restore) # {{{
-    local session= wName= all=false entry= lOrig= l= e= all_all=false entries= file= paths= do_cd= real_paths= verbose=false match=
-    read session wName lOrig <<<$(tmux display-message -pF '#S #S:#W #{window_layout}')
-    entry="$wName"
+    local session= wName= all=false firstMatch=true entry= lOrig= l= e= all_all=false entries= file= paths= do_cd= real_paths= verbose=false match= ignoreBackup=false
+    local dst= wId= wNo= setPane1=false
+    lFile=
+    read session wNo wName wId lOrig <<<$(tmux display-message -t $TMUX_PANE -pF '#S #I #S:#W #{window_id} #{window_layout}')
+    entry="${wName//[\/]/-}"
+    [[ -z $1 && -e "./.layout" ]] && lFile="./.layout"
     [[ ! -e "$layouts_path" ]] && command mkdir -p "$layouts_path"
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
+      .) lFile="./.layout"; real_paths=true;;
+      -) lFile="$layouts_path/l.layout";;
+      --check) # {{{
+        lFile="${2:-.}/.layout"
+        [[ -e "$lFile" ]] || return 1
+        if [[ ! -z 3 ]]; then
+          command grep -q -i "$3 " "$lFile" || return 2
+        fi
+        return 0;; # }}}
       --file) # {{{
         lFile="$2"; shift
         if [[ "$lFile" != '/dev/std'* && "$lFile" != '-' ]]; then
           [[ "$lFile" != "./"* && "$lFile" != "/"*  && "$lFile" != '~'* ]] && lFile="$layouts_path/$lFile"
-          [[ "$lFile" != *".layout" ]] && lFile+=".layout"
         fi
         ;; # }}}
       -v) # {{{
         verbose=true;; # }}}
+      --ignore-backup) # {{{
+        ignoreBackup=true;; # }}}
       *) # {{{
         case $utils in
         l-dump) # {{{
@@ -196,18 +251,38 @@ tm() { # @@ # {{{
           --all)      all=true;;
           --paths)    real_paths=true;;
           --no-paths) real_paths=false;;
-          *)          entry="$1"; [[ -z $real_paths ]] && real_paths=false;;
+          -d | --default | -w) # {{{
+            [[ -z $lFile ]] && lFile="./.layout"
+            case $1 in
+            -d | --default)  entry="default";;
+            -w)              entry="$wName";;
+            esac
+            silent=true; real_paths=true; ignoreBackup=true;; # }}}
+          *) entry="$1"; [[ -z $real_paths ]] && real_paths=false;;
           esac;; # }}}
         l-restore) # {{{
           case $1 in
-          --all) all=true;;
+          --all)     all=true;;
           --all-all) all_all=true;;
-          --cd)  do_cd='auto';;
-          --acd) do_cd='auto';;
-          --mcd) do_cd=true;;
-          --no-cd) do_cd=false;;
-          --match) match="$2"; shift;;
-          *)     entry="$1";;
+          --cd)      do_cd='auto';;
+          --acd)     do_cd='auto';;
+          --mcd)     do_cd=true;;
+          --no-cd)   do_cd=false;;
+          --choose)  firstMatch=false;;
+          --dst)     dst="$2"; shift;;
+          --match)   match="$2"; shift;;
+          --set-pane-1) setPane1=true;;
+          --no-pane-1)  setPane1=false;;
+          -d | --default | -w | -wd) # {{{
+            [[ -z $lFile ]] && lFile="./.layout"
+            [[ -e "$lFile" ]] || return 1
+            case $1 in
+            -d | --default)  entry="default";;
+            -w)              entry="$wName";;
+            -wd)             entry="$wName defalt";;
+            esac
+            silent=true; real_paths=true;; # }}}
+          *) [[ $entry == 'default' ]] && entry="$@ $entry" || entry="$@"; shift $#;;
           esac # }}}
         esac;; # }}}
       esac
@@ -220,13 +295,16 @@ tm() { # @@ # {{{
       [[ "$lFile" == '-' ]] && lFile='/dev/stdout'
       ;; # }}}
     l-restore) # {{{
-      [[ -z $do_cd ]] && do_cd=false
+      [[ -z $do_cd ]] && do_cd='auto'
       [[ ! -t 0 ]] && lFile="/dev/stdin"
       [[ "$lFile" == '-' ]] && lFile='/dev/stdin'
+      [[ -z $dst ]] && dst=$session:$wNo
       ;; # }}}
     esac # }}}
     ;;& # }}}
   l-dump) # {{{
+    [[ -z $lFile && -e './.layout' ]] && lFile="./.layout"
+    [[ -z $lFile ]] && lFile="$layouts_path/l.layout"
     if $all; then # {{{
       local lFileOld="${lFile%.layout}.backup-$(command date +"$DATE_FMT").layout" wId=
       [[ -e "$lFile" ]] && mv "$lFile" "$lFileOld"
@@ -243,14 +321,18 @@ tm() { # @@ # {{{
     else # {{{
       if [[ "$lFile" != '/dev/stdout' ]]; then # {{{
         if [[ -e "$lFile" ]]; then # {{{
-          sed -i "s/^$entry /# $(command date +"$DATE2_FMT") \0/" "$lFile"
+          if $ignoreBackup; then
+            sed -i "/^$entry /d" "$lFile"
+          else
+            sed -i "s/^$entry /# $(command date +"$DATE2_FMT") \0/" "$lFile"
+          fi
         else
           echo -e "# vim ft=conf\n" >"$lFile"
         fi # }}}
       fi # }}}
       if $real_paths; then # {{{
         echo "$entry $lOrig # $( \
-          tmux list-panes -t "$wName" -F ':#{pane_current_path}:' \
+          tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
           | sed -e 's/::/~/g' -e 's/://g' \
           | tr '\n' ':' \
           | sed -e "s|$HOME|~|g" -e 's/:$//' \
@@ -258,17 +340,18 @@ tm() { # @@ # {{{
           # }}}
       else # {{{
         echo "$entry $lOrig # $( \
-          tmux list-panes -t "$wName" -F '-' \
+          tmux list-panes -t "$wId" -F '-' \
           | tr '\n' ':' \
           | sed -e 's/:$//' \
           )" >>"$lFile"
       fi # }}}
     fi # }}}
-    return 0
-    ;; # }}}
+    return 0;; # }}}
   l-restore) # {{{
+    [[ -z $lFile && -e './.layout' ]] && lFile="./.layout"
+    [[ -z $lFile ]] && lFile="$layouts_path/l.layout"
     if [[ "$lFile" != "/dev/stdin" ]]; then
-      [[ ! -e "$lFile" ]] && echo "Layout file [$lFile] not exist" >/dev/std/err && return 1
+      [[ ! -e "$lFile" ]] && echor -cn $silent "Layout file [$lFile] not exist" && return 1
       if $all_all; then # {{{
         file="$(sed -e '/^#/d' -e 's/\s\s\+/ /g' "$lFile" | sort -k1,1)"
         tmux list-windows -a -F '#S:#W #{window_layout}' | while read entry lOrig; do
@@ -293,27 +376,40 @@ tm() { # @@ # {{{
         read l paths <<<$(sed -n -e '/^'"$entry"' /p' "$lFile" | head -n1 | cut -d' ' -f2,4-) # }}}
       else # {{{
         local out= e_out=
-        entries="$entry"
-        [[ "$entry" == "$wName" ]] && entries="$entry $session:\\* $session@.* $session $(awk '!/^#/ && /^[^:]* / {print $1}' "$lFile")"
-        out="$(sed -n -e 's/^# \([0-9]\+\) \('"${entry//\//\\/}"'\) \(.*\)/\2@\1 \3/p' "$lFile")\n"
+        if [[ "$entry" == "$wName" ]]; then
+          entries="$entry default $session:\\* $session@.* $session $(awk '!/^#/ && /^[^:]* / {print $1}' "$lFile")"
+        else
+          [[ -z "$entry" ]] && entry="$wName"
+          entries="$entry default"
+        fi
+        # out="$(sed -n -e '/^# \([0-9]\+\) \('"${entry//\//\\/}"'\) \(.*\)/s/^# \([0-9]\+\) \('"${entry//\//\\/}"'\) \(.*\)/\2@\1 \3/p' "$lFile")"
+        [[ ! -z $out ]] && out+="\n"
         for e in $entries; do
-          e_out="$(command grep -i "^$e " "$lFile")"
+          e_out="$(command grep -i "$e " "$lFile")"
           [[ -z "$e_out" ]] && continue
-          out+="$e_out\n"
-          [[ $e == $entry ]] && break
+          if $firstMatch; then
+            out+="$(echo "$e_out" | grep -v "^#")\n"
+          else
+            out+="$e_out\n"
+          fi
+          [[ $entry == *' '* ]] && break
         done
+        [[ -z "$out" && "$entries" == 'default' ]] && out="$(command grep -i "$wName " "$lFile")"
         out="$(echo -e "$out" | sed -e 's/\s\s\+/ /g')"
+        if $firstMatch; then
+          local _out="$(echo -e "$out" | grep "^$entry " | tail -n1)"
+          [[ ! -z $_out ]] || _out="$(echo -e "$out" | sed -e '/^#/d' | tail -n1)"
+          [[ ! -z $_out ]] && out="$_out" || { echor "cannot find entry"; out=""; }
+        fi
         entry="$(echo -e "$out" | sed -e '/^#/d' -e '/^\s*$/d' -e 's/ .* # / # /' | sort -k1,1 -u | fzf -1 -0 | cut -d' ' -f1)"
         [[ "$entry" =~ ^(.*)@([0-9]+)$ ]] && entry="# ${BASH_REMATCH[2]} ${BASH_REMATCH[1]}"
-        read l paths <<<$(echo -e "$out" | sed -n -e '/^'"$entry"' /p' | head -n1 | cut -d' ' -f2,4-)
+        read l paths <<<$(echo -e "$out" | sed -n -e '/^#/d' -e '/^ /d' -e '/^'"$entry"' /p' | head -n1 | cut -d' ' -f2,4-)
       fi # }}}
     else
       read l paths <<<$(cat - | sed -n -e 's/\s\s\+/ /g' -e '/.* # .*/s|\(.* \)\{0,1\}\(.*\) # \(.*\)|\2 \3|p;t;' -e 's|\(.* \)\{0,1\}\(.*\)|\2|p')
     fi
-    [[ -z "$l" ]] && return 1
+    [[ -z "$l" ]] && echor -cn $silent "No layout found (entries: $entries)" && return 1
     local err=0
-    [[ "$l" != "$lOrig" ]] && { tmux select-layout "$l" >/dev/null 2>&1; err=$?; }
-    [[ $err == 0 && "${l#*,}" != "${lOrig#*,}" ]] && $verbose && echo "lOrig=\"$lOrig\""
     if [[ ! -z $paths ]]; then # {{{
       local pDiff= pNow="$(tmux list-panes -t "$wName" -F '#{pane_current_path}' | tr '\n' ' ' | sed -e "s|$HOME|~|g" -e 's/\s\+$//' -e 's/ \+/:/g')" i=
       IFS=':' read -a pNow <<<$(echo "$pNow")
@@ -325,22 +421,33 @@ tm() { # @@ # {{{
             pd=$((-$pd))
             for i in $(seq 1 $pd); do
               [[ $(tmux display-message -t ".$i" -pF '#{pane_active}') == 1 ]] && i=$((i+1))
-              tmux kill-pane -t .$i
+              tmux kill-pane -t $dst.$i
             done
           elif [[ $pd -gt 0 ]]; then
             for i in $(seq 1 $pd); do
-              tmux split-window -d
+              tmux split-window -t $dst -l 3 -d
+              sleep 0.3
             done
           fi # }}}
-          [[ "$l" != "$lOrig" ]] && { tmux select-layout "$l" >/dev/null 2>&1; err=$?; }
         else
-          echo "Different number of panes (${#paths[*]} vs ${#pNow[*]})" >/dev/stderr
+          echor -cn $silent "Different number of panes (${#paths[*]} vs ${#pNow[*]})"
         fi # }}}
       fi # }}}
       for i in ${!paths[*]}; do # {{{
         [[ ${paths[i]} == ${pNow[i]} || ${paths[i]} == '-' ]] && continue
         if [[ $do_cd == 'true' || $do_cd == 'auto' ]]; then
-          [[ $i -lt ${#pNow[*]} || $do_cd == 'auto' ]] && tmux send-keys -t ".$((i+1))" " cd \"${paths[i]}\" && clr"
+          if [[ $i -lt ${#pNow[*]} || $do_cd == 'auto' ]]; then
+            local paneNo=$((i+1))
+            local panePids="$(unset -f tm; pstree $(tmux display-message -t ".$paneNo" -pF '#{pane_pid}') | wc -l | xargs)"
+            paths[i]="${paths[i]/\~/$HOME}"
+            if [[ $panePids == 1 ]]; then
+              tmux send-keys -t "$dst.$paneNo" " cd \"${paths[i]}\" && clr"
+            elif ${setPane1:-false} && [[ $paneNo == 1 ]]; then
+              tmux send-keys -t "$dst.$paneNo" " cd \"${paths[i]}\" && clr"
+            else
+              echor -c $verbose "pane[$paneNo]: skipping cd to '${paths[i]}'"
+            fi
+          fi
         else
           pDiff+="  $((i+1)): ${paths[i]}\n"
         fi
@@ -349,8 +456,9 @@ tm() { # @@ # {{{
         echo -en "Paths:\n$pDiff"
       fi # }}}
     fi # }}}
-    return $err
-    ;; # }}}
+    [[ "$l" != "$lOrig" ]] && { tmux select-layout -t $dst "$l" >/dev/null 2>&1; err=$?; }
+    [[ $err == 0 && "${l#*,}" != "${lOrig#*,}" ]] && $verbose && echo "lOrig=\"$lOrig\""
+    return $err;; # }}}
   b-dump) # {{{
     if [[ ! -z $1 ]]; then
       buffers_path+="/$1"
@@ -367,7 +475,7 @@ tm() { # @@ # {{{
     else
       buffers_path+="/$(command cd $buffers_path; ls -Adt * | tail -n1)"
     fi
-    [[ ! -d $buffers_path ]] && echo "Buffer directory [$buffers_path] does not exis" >/dev/stderr && return 1
+    [[ ! -d $buffers_path ]] && echor -cn $silent "Buffer directory [$buffers_path] does not exis" && return 1
     buffers_path+="/restore.backup"
     ;;& # }}}
   b-restore | b-dump) # {{{
@@ -526,16 +634,16 @@ tm() { # @@ # {{{
     if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
       [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && var="$(cat $TMP_PATH/.tmux_last_session.$USER)"
       if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
-        var=${TMUX_DEFAULT_SESSION:-'MAIN'}
+        var=${TMUX_SESSION_DEFAULT:-'MAIN'}
       fi
     fi
-    ! tmux has-session -t $var >/dev/null 2>&1 && echo "Session [$var] not found" >/dev/stderr && return 1
+    ! tmux has-session -t $var >/dev/null 2>&1 && echor -cn $silent "Session [$var] not found" && return 1
     if [[ -n $TMUX ]]; then
       [[ -z $var ]] && return 1
       if $nest; then
         tmux set-option -t "$var" -q @master_pane $TMUX_SESSION
         tmux set-option -t "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" -qw @marked_pane $(tmux display-message -p -t $TMUX_PANE -F '#P')
-        $ALIASES set_title --from-tmux "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" "$var"
+        set_title --from-tmux "$(tmux display-message -p -t $TMUX_PANE -F '#S:#I')" "$var"
         cmd="TMUX= tmux attach-session -t \"$var\""
       else
         cmd="tmux switch-client -t \"$var\""
@@ -631,6 +739,34 @@ tm() { # @@ # {{{
       tmux send-keys -t $p "$(echo -e "${i//\\n/}")"
     done
     ;; # }}}
+  switch) # {{{
+    local getCurrent=false dstId=
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      --get) getCurrent=true;;
+      *)     dstId="$1"; break
+      esac; shift
+    done
+    [[ ! -z $dstId ]] || return 1
+    local currS= currW= currP= currId=
+    if $getCurrent; then
+      currS=$(tmux display-message -pF '#{client_session}')
+      currW=$(tmux display-message -t $currS -pF '#{active_window_index}')
+      currP=$(tmux list-panes -t $currS:$curW -F '#{pane_active} #P' | awk '/^1 / {print $2}')
+      currId=$(tmux list-panes -a -F '#S:#I.#P: :: #{pane_id}' | sed -n '/^'"$currS:$currW.$currP"':/s/.* :: //p')
+      echo "$currId"
+    fi
+    case $dstId in
+    %*) ;;
+    *)  dstId="$(tmux list-panes -a -F '#S:#I.#P :: #{pane_id}' | sed -n '/^'"$dstId"' ::  /s/.*:: //p' | head -n1)"
+    esac
+    [[ ! -z $dstId ]] && tmux switch-client -t "$dstId"
+    return 0;; # }}}
+  pids) # {{{
+    local pane=$(tmux list-panes -F '#{pane_pid} :: #P :: #T :: #{pane_current_command} :: #{pane_current_path}' | column -t | fzf)
+    [[ $? != 0 || -z $pane ]] && return 0
+    echo "$pane" | awk '{print $1}' | tr '\n' ' '
+    return 0;; # }}}
   esac # }}}
   if [[ ! -z $cmd ]]; then # {{{
     echo $cmd
@@ -641,10 +777,152 @@ tmux_progress() { # @@ # {{{
   [[ ! -n $TMUX ]] && return
   $HOME/.tmux.bash progress_bar "$@"
 } # }}}
-tmux-lock-toggle() {
+tmux-lock-toggle() { # {{{
   [[ ! -n $TMUX ]] && return
-  $HOME/.tmux.bash lock_toggle --ssh
-}
+  $HOME/.tmux.bash lock_toggle --ssh $@
+} # }}}
+if [[ -n $TMUX && $TMUX_VERSION -gt 30 ]]; then # {{{
+  tmux-popup() { # @@ # {{{
+    [[ -n $TMUX ]] || return 1
+    local popupPath="${TMUX_POPUP_PATH:-$APPS_CFG_PATH/tmux/popup}"
+    if [[ $1 == '@@' ]]; then # {{{
+      echo "-E -EE -e -t"
+      declare -A TMUX_POPUP_CMD
+      [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
+      echo "n r ${!TMUX_POPUP_CMD[*]}"
+      return 0
+    fi # }}}
+    [[ -e $popupPath ]] || command mkdir -p $popupPath >/dev/null
+    local tp=$TMUX_PANE cmd= params= silent=false showCmd=true name=
+    source-basic
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      -E | -EE) params="$1";;
+      -e) params="-e";;
+      -t) tp=$2; shift;;
+      -c) shift; cmd="${@:-help}"; shift $#;;
+      *)  cmd="$@"; shift $#;;
+      esac; shift
+    done # }}}
+    if [[ ! -z $cmd ]]; then # {{{
+      declare -A TMUX_POPUP_CMD
+      TMUX_POPUP_CMD[gg]="git cba 1"
+      TMUX_POPUP_CMD[gb]="git backup"
+      TMUX_POPUP_CMD[gc]="git cba"
+      TMUX_POPUP_CMD[gl]="git l ## log"
+      TMUX_POPUP_CMD[gs]="git sync --reset"
+      TMUX_POPUP_CMD[gst]="git-cmds.sh gitst -v # @W"
+      if isInstalled --which htop; then
+        TMUX_POPUP_CMD[h]="htop"
+      fi
+      TMUX_POPUP_CMD[n]="net --loop"
+      TMUX_POPUP_CMD[N]="net -ll"
+      if isInstalled reminder; then
+        TMUX_POPUP_CMD[r]="reminder # @W"
+        TMUX_POPUP_CMD[rrm]="reminder -rm"
+      fi
+      TMUX_POPUP_CMD[pid]="tmux list-panes -F \"#P :: #T :: #{pane_pid} :: #{pane_current_command} :: #{pane_current_path}\" | column -t # @-W @C"
+      [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
+      local waitTimeout="-t5 -n1"
+      local addWait=false
+      case $cmd in
+      help) # {{{
+        colorCacheInit
+        local i= once=true
+        name=select
+        showCmd=false
+        params="-EE"
+        (
+          waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s; }"
+          echo "source \$HOME/.bashrc --do-basic"
+          echo "list=\"\$(cat <<-EOF"
+          for i in $(echo "${!TMUX_POPUP_CMD[*]}" | tr ' ' '\n' | sort); do
+            echo "	$(printf "$(getColor info)%-5s$(getColor off)" "$i") : ${TMUX_POPUP_CMD[$i]}"
+          done
+          echo "EOF"
+          echo ")\""
+          echo "err=0"
+          echo "once=$once"
+          echo "wait=false"
+          echo "while true; do"
+          echo "  action=\"\$(echo -e \"\$list\" | fzf --ansi | sed -e 's/[^:]*: //' -e 's/ ## .*//')\""
+          echo "  [[ -z \"\$action\" ]] && { err=255; break; }"
+          echo "  [[ \"\$action\" == *' # @W'* ]] && wait=true"
+          echo "  action=\"\${action%% # *}\""
+          echo "  eval \"\$action\" || { err=1; break; }"
+          echo "  \$once && break"
+          echo "done"
+          echo "\$wait && $waitCmd"
+          echo "exit \$err"
+        ) >$TMP_MEM_PATH/tmux-popup.sh
+        chmod +x $TMP_MEM_PATH/tmux-popup.sh
+        cmd="$TMP_MEM_PATH/tmux-popup.sh"
+        ;; # }}}
+      *) # {{{
+        name=${cmd%% *}
+        if [[ ! -z ${TMUX_POPUP_CMD[$name]} ]]; then
+          if [[ "$name" != "$cmd" ]]; then
+            cmd="${TMUX_POPUP_CMD[$name]} ${cmd#* }"
+          else
+            cmd=${TMUX_POPUP_CMD[$name]}
+          fi
+          name=${cmd%% *}
+        else
+          [[ $cmd == *sleep* ]] || addWait=true
+        fi;; # }}}
+      esac
+      local c="$cmd" shell=$SHELL
+      [[ $IS_MAC ]] && shell=bash
+      [[ $c == *' # '*'@W'* ]] && addWait=true
+      [[ $c == *' # '*'@-W'* ]] && addWait=true && waitTimeout=""
+      [[ $c == *' # '*'@C'* ]] && showCmd=false
+      local waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s $waitTimeout; }"
+      c="${c%% # *}"
+      cmd="$shell -i -c '"
+      $showCmd && cmd+="(echorm --name popup 0 \"${c//\"/\\\"}\"; echo; );"
+      cmd+=" $c; err=\$?;"
+      cmd+=" [[ \$err != 0 && \$err != 255 ]] && { ( echorm --name popup 0 \"\$(cl err fail)\" ); };"
+      $addWait && cmd+=" [[ \$err == 0 ]] && $waitCmd;"
+      cmd+=" [[ \$err == 0 || \$err == 255 ]];"
+      cmd+="'"
+      [[ -z $params ]] && params="-EE"
+      silent=true
+    else
+      [[ -z $params ]] && params="-E"
+    fi # }}}
+    [[ $params == '-e' ]] && params=
+    local p="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
+    local d="$popupPath/mem"
+    command mkdir -p $TMP_MEM_PATH/${popupPath//\//-} >/dev/null
+    [[ -e $d ]] || ln -sf $TMP_MEM_PATH/${popupPath//\//-} $d
+    [[ -e $popupPath/notes.txt ]] || touch $popupPath/notes.txt
+    [[ -e $d/notes.txt ]] || ln -sf $popupPath/notes.txt $d/notes.txt
+    tmux display-popup -t $tp $params -d "$p" -w 75% -h 75% -T " ${name:-shell} " \
+      -e "TMUX_POPUP=true" \
+      -e "TMUX_POPUP_SILENT=$silent" \
+      -e "s=$p" \
+      -e "d=$d" \
+      -e "spane=$TMUX_PANE" \
+      "$cmd"
+    unset cmd
+    return 0
+  } # }}}
+  alias tp='tmux-popup' # }}}
+else # {{{
+  tmux-popup() { # {{{
+    echor "tmux >= 3.0 is required (vs $(tmux -V))"
+    return 1
+  } # }}}
+fi # }}}
 
-export PHISTORY_IGNORED_COMMANDS+=":tm:tmux_progress:tmux-lock-toggle"
+if ! $IS_MAC; then # {{{
+  export -f __tm
+  tm() { __tm "$@"; }
+else
+  tm() { $ALIASES __tm "$@"; }
+fi
+export -f tm
+compl-add tm # }}}
+
+export PHISTORY_IGNORED_COMMANDS+=":tm:tmux_progress:tmux-lock-toggle:tmux-popup"
 

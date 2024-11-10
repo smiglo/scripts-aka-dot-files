@@ -51,9 +51,6 @@ wasOk=false
 displayFull=false
 
 shopt -s expand_aliases
-source $BIN_PATH/bash/aliases
-
-source $BIN_PATH/bash/colors
 
 while true; do
   time=$(date +"%H:%M:%S")

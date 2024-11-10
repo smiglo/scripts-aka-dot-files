@@ -13,11 +13,14 @@ set history expansion on
 set print address
 set print array
 set print raw-values
-set $PRM = "☯"
-set $PR = "$PRM >>>"
+set $PR = ">>> "
+set prompt [1;35m>>: [0m
 
 alias -a ib = info breakpoint
 
+define prompt-restore
+  set prompt [1;35m>>: [0m
+end
 define set-radix
   set output-radix $arg0
 end
@@ -57,38 +60,40 @@ define dump_native
 end
 define xxde
   if $argc == 2
-    dump_native $arg0 $arg0+$arg1
+    dump_native $arg0 $arg1
   else
-    dump_native $arg0 $arg0+256
+    dump_native $arg0 256
   end
   shell xxd -e -g4 dump.bin
 end
 define xxd
   if $argc == 2
-    dump_native $arg0 $arg0+$arg1
+    dump_native $arg0 $arg1
   else
-    dump_native $arg0 $arg0+256
+    dump_native $arg0 256
   end
   shell xxd -g4 dump.bin
 end
 define rev
   set exec-direction reverse
-  set $PR = "$PRM <<:"
-  dashboard -style prompt_running '\\[\\e[1;35m\\]<<:\\[\\e[0m\\]'
+  set $PR = "<<< "
+  set prompt [1;35m<<: [0m
+  # dashboard -style prompt_running '\\[\\e[1;35m\\]<<:\\[\\e[0m\\]'
 end
 define ffd
   set exec-direction forward
-  set $PR = "$PRM >>:"
-  dashboard -style prompt_running '\\[\\e[1;35m\\]>>:\\[\\e[0m\\]'
+  set $PR = ">>> "
+  set prompt [1;35m>>: [0m
+  # dashboard -style prompt_running '\\[\\e[1;35m\\]>>:\\[\\e[0m\\]'
 end
 
-define ln
+define logon
   if $argc == 1
     shell rm -f gdb.txt
   end
-  set logging on
+  set logging enabled on
 end
-define lf
-  set logging off
+define logoff
+  set logging enabled off
 end
 

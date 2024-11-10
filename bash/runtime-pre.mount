@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ ! -z $PS1 && $UID != 0 ]]; then
+  user_id="$UID"
+  [[ -e $RUNTIME_PATH/runtime-pre.cfg ]] && source $RUNTIME_PATH/runtime-pre.cfg
+  if ! $IS_DOCKER; then
+    [[ -z $mount_src ]] && mount_src="/run/user/$user_id"
+    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true
+  else
+    [[ -z $mount_src ]] && mount_src=/tmpfs
+    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=false
+  fi
+  if ${RUNTIME_MOUNT_DO_MOUNT:-true} && [[ -e "$mount_src" && ( ! -n $TMUX || $1 == '-f' ) ]]; then
+    [[ -e $mount_src  ]] || echor "Mount-Src ($mount_src) does not exist"
+    mount_p="bind"
+    $IS_MAC || $IS_DOCKER || mount_p+=",x-gvfs-hide"
+    mounts_default=".tmp/.mem $BASHRC_RUNTIME_PATH"
+    ! $IS_DOCKER && mounts_default+=" Desktop/mem"
+    ts="mount.$ts"
+    for aDir in ${RUNTIME_MOUNT_MEM_DIRS:-$mounts_default}; do
+      aDir="${aDir/$HOME\/}"
+      do_mount=false
+      s="m-"
+      s+="$(echo "${aDir%/*}" | tr "/" "\n" | sed -e '/^$/d' -e 's/^\.//' -e 's/\(.\).*/\L\1/' | tr '\n' '-')"
+      s+="$(echo "${aDir##*/}" | sed -e 's/^\.//' -e 's/.*/\L&/')"
+      d="$aDir"
+      [[ "$d" == /* ]] || d="$HOME/$d"
+      [[ -e "$(dirname "$d")" ]] || continue
+      if [[ ! -e "$mount_src/$s" ]]; then
+        command mkdir -p "$mount_src/$s"
+        do_mount=true
+      fi
+      if $do_mount || [[ $1 == '-f' ]]; then
+        touch $mount_src/$s/$ts
+        if [[ ! -e $d/$ts ]]; then
+          if [[ -e "$d" ]]; then # {{{
+            command mkdir -p "$d.bck"
+            cp -a "$d/." "$d.bck/"
+            rm -rf "$d"
+          fi # }}}
+          if ${RUNTIME_MOUNT_USE_MOUNT:-false}; then # {{{
+            command mkdir -p "$d"
+            command mount | command grep -qF "$d" && sudo umount "$d"
+            sudo mount -o $mount_p "$mount_src/$s" "$d" # }}}
+          else # {{{
+            ln -sf "$mount_src/$s" "$d"
+          fi # }}}
+          if [[ -e "$d.bck" ]]; then # {{{
+            cp -a "$d.bck/." "$d/"
+            rm -rf "$d.bck"
+          fi # }}}
+        fi
+        rm -f $mount_src/$s/$ts
+      fi
+    done
+    unset aDir s d mount_p do_mount
+  fi
+  unset user_id mount_src RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT
+fi
+
+

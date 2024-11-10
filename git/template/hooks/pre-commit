@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+useHook=$(git config --get utils.hook-precommit 2>/dev/null)
+${useHook:-false} || exit 0
+
 maindir() {
   local dir=$PWD
   while true; do
@@ -93,25 +96,6 @@ displayTB() {
 }
 
 source ~/.bashrc --do-min
-
-[[ ! -z $GIT_PRE_COMMIT_IGNORE ]] && echo "$PWD" | command grep -q -e "---$GIT_PRE_COMMIT_IGNORE" && exit 0
-
-if [[ ! -z $GIT_PRE_COMMIT_REPO_WHITELIST ]]; then
-  found=false
-  for i in $GIT_PRE_COMMIT_REPO_WHITELIST; do
-    echo "$PWD" | command grep -q -e "$i" && found=true
-    $found && break
-  done
-  ! $found && exit 0
-fi
-
-if [[ ! -z $GIT_PRE_COMMIT_REPO_BLACKLIST ]]; then
-  found=false
-  for i in $GIT_PRE_COMMIT_REPO_BLACKLIST; do
-    echo "$PWD" | command grep -q -e "$i" && found=true && break
-  done
-  $found && exit 0
-fi
 
 err=0
 

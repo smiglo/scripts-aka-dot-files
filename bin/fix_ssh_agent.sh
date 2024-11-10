@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# INIT {{{
+# INIT # {{{
 if [[ $1 == '@@' ]]; then
-  echo "fix_ssh_agent start_if_needed fix_tmux --help"
+  echo "--fix --start --fix"
   exit 0
 fi
 
-
 if [[ "$BASH_SOURCE" == "$0" ]]; then
-  echo "Script has to be sourced!"
-  echo
-  echo "Usage:"
-  echo "  source $0 [fix_ssh_agent | start_if_needed | fix_tmux]"
-  echo "source $0 start_if_needed" | ccopy
-  exit 1
+  echor "Script has to be sourced!"
+  echor
+  echor "Usage:"
+  echor "  source $0 [--fix | --start | --fix-tmux]"
+  echor "(copied)"
+  echor
+  echo "source $0 --start" | xc
+  exit 0
 fi
 
-SSH_PATH="$TMP_MEM_PATH/.ssh/$(hostname)"
+SSH_PATH="$BASHRC_RUNTIME_PATH/ssh/$(hostname)"
 SSH_ENV="$SSH_PATH/environment"
 LINK_PATH="$SSH_PATH/ssh_auth_sock"
 # }}}
-# Functions {{{
+# Functions # {{{
 fix_tmux() { # {{{
   [[ -z $SSH_AUTH_SOCK ]] && return 0
   tmux set-environment -g 'SSH_AUTH_SOCK' $LINK_PATH
@@ -73,14 +74,16 @@ start_if_needed() { # {{{
   fix_ssh_agent
 } # }}}
 # }}}
-# MAIN {{{
-cmd="start_if_needed"
+# MAIN # {{{
+cmd="--start"
 [[ ! -z $1 ]] && cmd="$1" && shift
 case $cmd in
-fix_ssh_agent|start_if_needed|fix_tmux) $cmd $@;;
+--start)    start_if_needed "$@";;
+--fix)      fix_ssh_agent "$@";;
+--fix-tmux) fix_tmux "$@";;
 esac
 # }}}
-# Cleaning {{{
+# Cleaning # {{{
 unset cmd SSH_PATH SSH_ENV LINK_PATH
 unset fix_ssh_agent fix_tmux start_if_needed start_agent
 # }}}

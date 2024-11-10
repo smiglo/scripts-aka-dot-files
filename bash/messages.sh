@@ -18,7 +18,7 @@ if [[ "$1" == 'login' ]]; then
   $debug && log_file=$TMP_MEM_PATH/msg_receiver.log
 
   log() {
-    $debug && echo "$($ALIASES date): $1" >>$log_file
+    $debug && echo "$(date): $1" >>$log_file
   }
 
   _msg_receiver_() {

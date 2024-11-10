@@ -1,15 +1,23 @@
 Session*.vim
+.vim/
 .DS_Store
+.vscode
 
 *.adoc.html
 *.bck
 *.dmp
 *.hist
+.layout
 *.out
+*.o
 *.pyc
 *.swo
 *.swp
+*.tmp
+*.no-git
 *~
+temp
+tmp
 
 .rr
 rr-*
@@ -25,6 +33,7 @@ tags
 .gitbranches
 
 .env
+.ticket
 
 # ------------------------------------------------------------------------
 # Could be quite controversial, let's see:

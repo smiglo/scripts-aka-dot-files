@@ -2,8 +2,8 @@
 # vim: fdl=0
 
 # Initial checks & set up # {{{
-[[ -z $TICKET_PATH ]] && "Env[TICKET_PATH] not defined (tt-s)" >/dev/stderr && exit 1
-[[ -z $TICKET_TOOL_PATH ]] && "Env[TICKET_TOOL_PATH] not defined (tt-s)" >/dev/stderr && exit 1
+[[ -z $TICKET_PATH ]] && echo "Env[TICKET_PATH] not defined (tt-s)" >/dev/stderr && exit 1
+[[ -z $TICKET_TOOL_PATH ]] && echo "Env[TICKET_TOOL_PATH] not defined (tt-s)" >/dev/stderr && exit 1
 getPath() { # {{{
   local issue="$1" must_exisit="${2:-false}" ext=
   local path_issue="$TICKET_PATH/$issue"
@@ -17,7 +17,7 @@ getPath() { # {{{
     fi
   done # }}}
   if $must_exisit; then
-    [[ ! -e "$path_issue/${issue}-data.txt" && ! -e "$path_issue/.${issue}-data.txt" ]] && path_issue=
+    [[ ! -e "$path_issue/${issue}-data.txt" && ! -e "$path_issue/.${issue}-data.txt" ]] && return 1
   else
     [[ -z $path_issue ]] && path_issue="$TICKET_PATH/$issue"
   fi
@@ -31,7 +31,7 @@ while [[ ! -z $1 ]]; do # {{{
   --no-eval)   do_eval=false;;
   --open)      do_open=true;;
   --layout)    do_layout=true; do_eval=false;;
-  --get-path)  getPath "$2" "$3"; exit 0;;
+  --get-path)  getPath "$2" "$3"; exit $?;;
   --always)    always=true;;
   --no-always) always=false;;
   --done)      done=true;;
@@ -96,11 +96,12 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     $ext --setup "$@"
   done
   # }}}
-  # Template of data file {{{
+  # Template of data file # {{{
   # Header # {{{
   cat >>"$fname" <<-"EOF"
 		# ## Header # {{{
 		# vim: ft=sh fdm=marker fdl=0
+		# j-info: CONF: conf=([use-new-args]=true)
 		# j-info: -ALWAYS-INCLUDE, -DONE
 		# j-info: -LAYOUT:
 		# j-info: -ENV:
@@ -121,8 +122,9 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			@@ ENV @@
 			# }}}
 			# -setup -# {{{
+			[[ -z $scmd ]] && scmd=$1 && shift
 			echorm --name tt:setup +
-			case $1 in
+			case $scmd in
 			# alias)   commands;; # @@: compl
 			@travelsal) # {{{
 			  case $2 in
@@ -136,8 +138,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			esac
 			# }}}
 			# -info # {{{
-			echorm --name tt:info
-			# For separators use: ---, ===; for sections: ## @, or [## @ ... # {{{] + [## @ }}}]
+			# For separators use: ---, ===; for sections: ## @, or [## @ ... # {{.] + [## @ }}. where 'dot' is the third bracket]
 			@@ ## @ Description @@
 			@@ DESCRIPTION @@
 			@@ INFO @@
@@ -222,7 +223,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
     command cd $path_issue
     git add -f "${fname#${path_issue}/}"
     git add .
-    git commit -m"[i] $issue" --no-verify
+    git commit -m"[$issue]" --no-verify
     echo
     command cd - >/dev/null 2>&1
   fi # }}}

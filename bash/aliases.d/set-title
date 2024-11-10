@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-set_title() { # @@ # {{{
+# @@: set_title:__set_title
+__set_title() { # {{{
   if [[ $1 == @@ ]]; then # {{{
     local ret="--set-all --set-none --set-terminal --set-pane --set-window --lock --lock-force --unlock --unlock-force --tmux-session -wl -wlf -l -lf --from-tmux --batch --pwd= --pwd-pane="
     [[ $2 == 1 ]] && ret+=" --dbg"
@@ -20,6 +21,7 @@ set_title() { # @@ # {{{
     $TMP_MEM_PATH/*)     ret='tmp-mem';;
     $TMP_PATH/*)         ret='tmp';;
     /etc*)               ret='/etc';;
+    $HOME)               ret='~';;
     esac # }}}
     echo "$ret"
     return 0
@@ -61,6 +63,7 @@ set_title() { # @@ # {{{
         fi
         ret+="$last";; # }}}
       set_title_getter_PROFILES) # {{{
+        ${SET_TITLE_USE_GETTER_PROFILES:-false} || continue
         if [[ -z $ret ]]; then
           local retInternal=
           for i in $BASH_PROFILES_FULL; do
@@ -97,6 +100,7 @@ set_title() { # @@ # {{{
   local dbg=false
   [[ $1 == '--dbg' ]] && shift && dbg=true && set -xv
   [[ -n $TMUX ]] && type tmux >/dev/null 2>&1 && isTMUX=true
+  ${TMUX_POPUP:-false} && return 0
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --pwd=*)           pwdGetter=${1/--pwd=};;
@@ -188,4 +192,19 @@ set_title() { # @@ # {{{
   unset convertPwd set_title_getter_check_map set_title_getter_default
   return 0
 } # }}}
-
+set_title_pane() { # {{{
+  if ${SET_TITLE_PANE_FULL:-false}; then
+    set_title "$@"
+    return 0
+  fi
+  local title="$@"
+  [[ -z $title ]] && title="${PWD/$HOME/\~}" && title="${title##*/}"
+  printf ']2;%s\\' "$title" >/dev/stderr
+} # }}}
+if ! $IS_MAC; then # {{{
+  export -f __set_title
+  set_title() { __set_title "$@"; }
+else
+  set_title() { $ALIASES __set_title "$@"; }
+fi
+export -f set_title # }}}

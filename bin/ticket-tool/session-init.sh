@@ -24,7 +24,7 @@ elif [[ -z $TMUX_SESSION ]] || ! tmux list-sessions -F '#S' | command grep -q "^
       new-session -d -s "$sessionName" -c "$sessionDir" \; \
       set -q -t "$sessionName" @tmux_path "$sessionDir" \; \
       send-keys -t "${sessionName}:1.1" " \$TICKET_TOOL_PATH/j-cmd.sh --init; clear"
-    $ALIASES set_title --from-tmux "${sessionName}:1.1" "Main"
+    set_title --from-tmux "${sessionName}:1.1" "Main"
     local TMUX=
     [[ -z $TMUX_SESSION ]] && tmux attach-session -t "$sessionName" || tmux switch-client -t "$sessionName"
   } # }}}

@@ -13,9 +13,9 @@ ask() { # {{{
 } # }}}
 case $c in
 -H | --help | help) # {{{
-  ret+=" $(awk -F ')' '/^-.*).*#\s*\{{3}$/{print $1}' "$0" | sed -e 's/|//g' -e "s/''//g")" ;& # }}}
+  ret+=" $(awk -F ')' '/^-.*).*#\s*\{{3}$/{print $1}' "$0" | sed -e '/($/d' -e 's/|//g' -e "s/''//g")" ;& # }}}
 -h | '') # {{{
-  ret+=" $( command grep -v "# IGN" "$0" | awk -F ')' '/^[a-z].*).*#\s*\{{3}$/{print $1}')"
+  ret+=" $( command grep -v "# IGN" "$0" | awk -F ')' '/^[a-z].*).*#\s*\{{3}$/{print $1}' | sed -e '/(/d')"
   echo $ret | tr ' ' '\n' | sort | tr '\n' ' '; echo;; # }}}
 -i | --install) # {{{
   sudo cp $0 /root/bin/utils.sh;; # }}}
@@ -47,5 +47,7 @@ shutdown) # @@: -y # {{{
       echo "Reboot command not found" >/dev/stderr
     fi
   fi;; # }}}
+fix-routing) # {{{
+  ip route add 10.42.0.0/24 via 10.42.0.1;; # }}}
 esac
 

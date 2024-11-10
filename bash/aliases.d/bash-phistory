@@ -38,7 +38,8 @@ bash_phistory() { # {{{
   if [[ $today != $BASH_PHISTORY_TODAY ]]; then
     [[ -e "$BASH_PHISTORY_FILE" ]] || touch $BASH_PHISTORY_FILE
     if [[ -z $BASH_PHISTORY_TODAY && ! -n $TMUX ]]; then
-      sed -i  '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+      sed -i '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+      sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
     fi
     export BASH_PHISTORY_TODAY=$today
     export BASH_PHISTORY_TODAY_LINE="$(cut -d\  -f4 "$BASH_PHISTORY_FILE" | command grep -anm1 "^$BASH_PHISTORY_TODAY" | cut -d: -f1)"
@@ -168,7 +169,7 @@ phist () { # @@ # {{{
   fi # }}}
   if [[ ! -z $cmd ]]; then # {{{
     cmd="$(echo "$cmd" | cut -d'|' -f 2- | sed 's/^\s\+//')"
-    $use_rem && echo "$cmd" | $ALIASES rem
+    $use_rem && echo "$cmd" | rem
     ! $use_fzf && [[ $(echo "$cmd" | wc -l) == 1 ]] && echo -e "\n${color_reg}\$ ${color_nr}${cmd}${color_off}"
     if [[ -n $TMUX ]]; then
       tmux set-buffer -b 'last-cmd' "$cmd"
@@ -179,7 +180,32 @@ phist () { # @@ # {{{
       eval $cmd
     fi
   fi # }}}
-} # }}}
-
-export HISTIGNORE+=":phist*"
+}
+alias H="phist"
+# }}}
+hist() { # {{{
+  if [[ ! -z $HISTFILE && -e $HISTFILE ]]; then # {{{
+    tac $HISTFILE | awk '!($0 in a){a[$0]; print}' | tac >$HISTFILE.tmp
+    mv $HISTFILE.tmp $HISTFILE
+  fi # }}}
+  if [[ ! -z $1 ]]; then
+    history $@
+    return
+  fi
+  $FZF_INSTALLED || return 1
+  local v=
+  v="$(history | fzf --no-sort --tac)"
+  [[ $? == 0 && ! -z $v ]] || return 0
+  v="$(echo "$v" | sed -e 's/^ *[0-9]* *//' -e 's/ *$//')"
+  if [[ -t 1 ]]; then
+    echo "$v" | xc
+  else
+    echo "$v"
+  fi
+  return 0
+}
+alias h="hist" # }}}
+alias l="fc -s"
+export HISTIGNORE+=":h:hist:history"
+export HISTIGNORE+=":phist:H"
 

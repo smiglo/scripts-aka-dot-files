@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+run_for_some_time() { # @@ # {{{
+  if [[ $1 == @@ ]]; then
+    case $3 in
+    --wait) echo 15{,:10} 30s{,:2,:10} 2m30s{,:2,:10};;
+    *)
+      echo "--cmd --watchdog-cmd --initial-sleep --dbg --wait --dbg=2"
+      isInstalled -w timeout && echo "--use-timeout";;
+    esac
+    return 0
+  fi
+  local cmd= watchdog_cmd= cnt=30 sleep_for=1 initial_sleep=2 use_timeout=false dbgL=0 watchdog_pid= cmd_return=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --cmd)           shift; cmd="$1";;
+    --watchdog-cmd)  shift; watchdog_cmd="$1";;
+    --initial-sleep) shift; initial_sleep=$1;;
+    --use-timeout)   use_timeout=true;;
+    --dbg)           dbgL=1;;
+    --dbg=*)         dbgL=${1#--dbg=};;
+    --wait) # {{{
+      shift
+      local s=0
+      s=$(time2s ${1%:*} -o s)
+      cnt="${1#*:}"
+      [[ -z $cnd || $cnt == 0 ]] && cnt="1"
+      sleep_for="$(echo "1 $cnt" | awk '{print $1/$2}')"
+      cnt="$((${s:-0}*$cnt))"
+      [[ -z $cnt || cnt == 0 ]] && cnt=30
+      ;; # }}}
+    esac
+    shift
+  done # }}}
+  if $use_timeout; then # {{{
+    isInstalled -w timeout || return 1
+    timeout $s $cmd
+    return $?
+  fi # }}}
+  [[ -z $cmd ]] && echo "Command to execute is missing" >/dev/stderr && return 1
+  watchdog() { # {{{
+    local process_pid=
+    initial_sleep=$(( $initial_sleep * 10 ))
+    for (( ; $initial_sleep > 0; initial_sleep-- )); do
+      sleep 0.1
+      command ps | command grep -q "$watchdog_cmd" 2>/dev/null && break
+    done
+    local first=true
+    for (( ; $cnt > 0; cnt-- )); do
+      process_pid=$(command ps | command grep "$watchdog_cmd" | sed -e 's/^ *//' | cut -d\  -f1)
+      if [[ $? != 0 || -z $process_pid ]]; then
+        ! $first && return 1
+        sleep 1
+      fi
+      first=false
+      sleep $sleep_for
+    done
+    local err=0
+    if ps | command grep -q "$process_pid" 2>/dev/null; then
+      [[ $dbgL == 1 ]] && echor "killing main pid ($process_pid)"
+      kill $process_pid >/dev/null 2>&1
+    else
+      [[ $dbgL == 1 ]] && echor "nothing to kill"
+      err=2
+    fi
+    return $err
+  } # }}}
+  [[ -z $watchdog_cmd ]] && watchdog_cmd=$(echo "$cmd" | sed -e 's/^\(command\|eval\) \+//' -e 's/ .*//')
+  case $dbgL in
+  0) exec 3>&2; exec 2> /dev/null;;
+  1) echor "cmd=[$(eval echo "$cmd")], pid=[$$]"; echorv cnt sleep_for;;
+  2) set -xv;;
+  esac
+  watchdog &
+  watchdog_pid=$!
+  [[ $dbgL == 1 ]] && echorv watchdog_pid
+  eval $cmd; cmd_return=$?
+  wait $watchdog_pid
+  local interrupted_by_watchdog=$(test $? == 0 && echo true || echo false)
+  [[ $dbgL == 1 ]] && echorv -nl cmd_return interrupted_by_watchdog
+  if ps | command grep -q $watchdog_pid; then
+    [[ $dbgL == 1 ]] && echor "killing watchdog [$watchdog_pid]"
+    kill $watchdog_pid
+  fi
+  unset watchdog
+  case $dbgL in
+  0) exec 2>&3; exec 3>&-;;
+  2) set +xv;;
+  esac
+  $interrupted_by_watchdog && return 255
+  [[ $cmd_return != 0 ]] && return 1
+  return 0
+} # }}}
+

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+getUnicodeChar() { # {{{
+  [[ -e "$UNICODE_EXTRA_CHARS_FILE" ]] || { echor "missing unicode file [$UNICODE_EXTRA_CHARS_FILE]"; return 1; }
+  source "$UNICODE_EXTRA_CHARS_FILE"
+  local i= v= len= width=
+  if [[ $1 == '--check' ]]; then # {{{
+    for i in $(echo ${!UNICODE_EXTRA_CHARS[*]} | tr ' ' '\n' | sort); do
+      v="${UNICODE_EXTRA_CHARS[$i]}"
+      len="${#v}"
+      width="$(echo -en "$v" | wc -L)"
+      if [[ $len != $width ]]; then
+        echo "UNICODE_EXTRA_CHARS[$i]=\"$v\" # l:$len vs w:$width"
+      fi
+    done # }}}
+  elif [[ $1 == '--add' ]]; then # {{{
+    shift
+    [[ -z $1 || -z $2 ]] && { echor "missing params"; return 1; }
+    [[ -z ${UNICODE_EXTRA_CHARS[$1]} ]] || { echor "already set"; return 1; }
+    UNICODE_EXTRA_CHARS[$1]="$2"
+    echo "UNICODE_EXTRA_CHARS[$1]=\"${UNICODE_EXTRA_CHARS[$1]}\"" >>"$UNICODE_EXTRA_CHARS_FILE" # }}}
+  elif [[ $1 == '--fill' ]]; then # {{{
+    shift
+    v="${UNICODE_EXTRA_CHARS[$1]}"
+    len="${#v}"
+    width="$(echo -en "$v" | wc -L)"
+    while [[ $len -lt $width ]]; do
+      v+=" "
+      len="${#v}"
+    done
+    echo "$v" # }}}
+  else # {{{
+    echo "${UNICODE_EXTRA_CHARS[$1]}"
+  fi # }}}
+} # }}}
+

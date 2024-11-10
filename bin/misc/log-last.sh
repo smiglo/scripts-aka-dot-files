@@ -3,14 +3,14 @@
 
 if [[ $1 == '@@' ]]; then # {{{
   if [[ $3 == '--cmd' ]]; then
-    echo 'quit margin comment check st backup sync fetch pause pause-toggle pause-mod store plot plot-full stats stats-full'
-    echo 'suspend end e! shutdown End E! refresh r reset R'
+    echo 'quit margin comment check st backup sync fetch pause pause-toggle pause-mod store plot plot-full stats stats-full reschedule'
+    echo 'suspend end e! shutdown End E! refresh r reset R pna pnl pni'
     exit 0
   fi
   ret_val=
   ret_val+=' --today --first --full --percentage --tmux --passed --store --store-force --clear --stats --stats-full'
   ret_val+=' --toggle --show-end --show-left --logins --remaining --clear-screen --loop --show-current-time --shutdown'
-  ret_val+=' --plot --plot-full --suspend --shutdown --cmd --force-new-day'
+  ret_val+=' --plot --plot-full --suspend --shutdown --cmd --force-new-day --default --nested --nested-default'
   # noes= i=
   # for i in $ret_val; do
   #   noes+=" --no-${i/--}"
@@ -20,41 +20,131 @@ if [[ $1 == '@@' ]]; then # {{{
   exit 0
 fi # }}}
 is_to_be_done() { # {{{
-  [[ "$to_do $to_do_extra" == *\ $1\ * ]]
+  [[ " $to_do $to_do_extra " == *\ $1\ * ]]
+} # }}}
+reset_vars() { # {{{
+  end_at=
+  end_margin=0
+  extra_added=false
+  extra_comment=
+  extra_margin=
+  inactivity_pause=false
+  inactivity_pause_allowed=${LOGLAST_USE_INACTIVITY_PAUSE:-true}
+  inactivity_pause_not_allowed_end=0
+  inactivity_ts=0
+  overtime_msg_sent=false
+  pause_auto_unpause=true
+  pause_buffer=15
+  pause_locked=false
+  pause_margin=0
+  pause_msg_show=false
+  paused=false
+  paused_last_time=
+  paused_time=
+  startup_margin=0
+  user_comment=
+  user_margin=0
 } # }}}
 save_info() { # {{{
-  local mem_file=$TMP_MEM_PATH/.work_time.nfo
+  local mem_file=$TMP_MEM_PATH/.work_time.nfo list=
+  list+=" user_margin user_comment paused paused_time paused_last_time pause_margin pause_buffer extra_added end_at"
+  list+=" overtime_msg_sent pause_auto_unpause"
+  list+=" inactivity_pause inactivity_ts inactivity_pause_allowed inactivity_pause_not_allowed_end"
   (
-    echo "user_margin=\"$user_margin\""
-    echo "user_comment=\"${user_comment#, }\""
-    echo "paused=\"$paused\""
-    echo "paused_time=\"$paused_time\""
-    echo "paused_last_time=\"$paused_last_time\""
-    echo "pause_margin=\"$pause_margin\""
-    echo "extra_added=\"$extra_added\""
-    echo "end_at=\"$end_at\""
+    for i in $list; do
+      declare -p $i
+    done
   ) >$mem_file
   rsync $mem_file $FILE_DATA
+} # }}}
+reschedule() { # {{{
+  local schedule_f="$APPS_CFG_PATH/log-last/schedule.txt"
+  [[ -e "$schedule_f" ]] || return 1
+  local days=( [1]="pn" [2]="wt" [3]="sr" [4]="czw" [5]="pt" )
+  local dow=$(command date +'%w') today=$((10#$(command date +%m%d)))
+  local dbg=false
+  local t= w= cond= action= checkForRemval= extraLLCmd=
+  cat "$schedule_f" | sed -n -e '/^\s*#/d' -e '/^'"${days[dow]}"':/,/^[^ ]/p' | sed -e '/^[^ ]/d' | \
+  while read t w; do
+    [[ -z $t ]] && continue
+    checkForRemval= extraLLCmd=
+    w="$(echo $w | tr -s ' ')"
+    cond=true
+    w="${w% # *}"
+    case $w in
+    *\ if\ *) # {{{
+      cond="[[ ${w#* if } ]]"
+      cond="${cond// >= / -ge }"
+      cond="${cond// > / -gt }"
+      cond="${cond// <= / -le }"
+      cond="${cond// < / -lt }"
+      w="${w% if *}";; # }}}
+    *\ on\ *) # {{{
+      checkForRemval=${w#* on }
+      cond="[[ $today == $((10#${w#* on })) ]]"
+      w="${w% on *}";; # }}}
+    *\ until\ *) # {{{
+      checkForRemval=${w#* until }
+      cond="[[ $today -le $((10#${w#* until })) ]]"
+      w="${w% until *}";; # }}}
+    *\ after\ *) # {{{
+      cond="[[ $today -gt $((10#${w#* after })) ]]"
+      w="${w% after *}";; # }}}
+    esac
+    $dbg && echorv -nl t w cond
+    if [[ $w == *' @:'* ]]; then # {{{
+      extraLLCmd="${w##* @:}" && extraLLCmd="${extraLLCmd# }"
+      w="${w% @:*}" # }}}
+    elif [[ $w == *' @'* ]]; then # {{{
+      extraLLCmd="pni ${w##* @}"
+      w="${w% @*}"
+    fi # }}}
+    case $w in
+    @\ *) # {{{
+      w="${w#@ }"
+      if [[ "$extraLLCmd" == "pni"* ]]; then
+        w+="@${extraLLCmd#pni }"
+        extraLLCmd=
+      fi
+      action="--no-at ll-pni.sh '$w'";; # }}}
+    \!\ *)  w="${w#! }" ; action="'$w'";;
+    GH\ *)  w="${w#GH }"; action="go-home.sh '$w'";;
+    P\ *)   w="${w#P }" ; action="pause.sh '$w'";;
+    *)      action="pause.sh '$w'";;
+    esac
+    $dbg && echorv -nl w action extraLLCmd
+    if ! eval "$cond"; then # {{{
+      $dbg && echor "cond-NOK"
+      if [[ ! -z $checkForRemval && $today -gt $checkForRemval ]]; then
+        local name="Fix-schedule-${days[dow]}-$t"
+        do-action "reminder -s '$name' '$(time2s 10m)'" if-not-found "$name\$" 'in' "reminder --list"
+      fi
+      continue
+    fi # }}}
+    if do-action "reminder -s $action '$t'" if-not-found "$w\$" 'in' "reminder --list" && [[ ! -z $extraLLCmd ]]; then
+      [[ $extraLLCmd == *@* ]] && t="${extraLLCmd#*@}" && extraLLCmd="${extraLLCmd%%@*}"
+      reminder -s $0 --cmd $extraLLCmd "$t"
+    fi
+  done
 } # }}}
 __util_loglast_extra() { # {{{
   local cmd="$1" && shift
   case $cmd in
   @@) # {{{
     echo "reset suspend" ;; # }}}
-    set-comment) # {{{
-      local DEF_COMMENT= c= comment=
-      [[ -e $APPS_CFG_PATH/log-last/log-last.cfg ]] && source $APPS_CFG_PATH/log-last/log-last.cfg
-      for i in $BASH_PROFILES_FULL; do
-        [[ -e "$i/aliases" ]] && c="$($i/aliases __util_loglast_extra "$cmd" "$DEF_COMMENT" $@)"
-        [[ ! -z $c ]] && comment+=", $c"
-      done
-      comment="${comment#, }"
-      echo "${comment:-$DEF_COMMENT}"
-      return 0
-      ;; # }}}
+  set-comment) # {{{
+    local DEF_COMMENT= c= comment=
+    [[ -e $APPS_CFG_PATH/log-last/log-last.cfg ]] && source $APPS_CFG_PATH/log-last/log-last.cfg
+    for i in $BASH_PROFILES_FULL; do
+      [[ -e "$i/aliases" ]] && c="$($i/aliases __util_loglast_extra "$cmd" "$DEF_COMMENT" $@)"
+      [[ ! -z $c ]] && comment+=", $c"
+    done
+    comment="${comment#, }"
+    echo "${comment:-$DEF_COMMENT}"
+    return 0;; # }}}
   suspend) # {{{
-    $ALIASES tm --b-dump
-    $ALIASES tm --l-dump --all --file "susp-$(command date +"$DATE_FMT").layout";; # }}}
+    tm --b-dump
+    tm --l-dump --all --file "susp-$(command date +"$DATE_FMT").layout";; # }}}
   reset) # {{{
     local resetFile="$TMP_MEM_PATH/log-last-reset.tmp"
     if [[ ! -e $resetFile || "$(stat -c %y "$resetFile" | awk '{print $1}')" != "$(command date +"%Y-%m-%d")" ]]; then
@@ -67,6 +157,7 @@ __util_loglast_extra() { # {{{
   new-day) # {{{
     $BASH_PATH/runtime --force --clean-tmp-silent
     __util_loglast_extra 'reset'
+    reschedule
     ;; # }}}
   help) # {{{
     ;; # }}}
@@ -81,29 +172,41 @@ loglast() { # {{{
   [[ -z $FILE ]] && FILE=$APPS_CFG_PATH/log-last/work_time.default
   local FILE_DATA=${FILE}.nfo CMD_FILE=$TMP_MEM_PATH/.loglast.cmd
   [[ ! -e "$(dirname $FILE)" ]] && mkdir -p "$(dirname $FILE)"
-  local LOOP_TIME=$(( 10 * 60 ))
-  local PARAMS_DEFAULT='--logins --first --remaining --passed --show-left --show-end --show-current-time'
+  local LOOP_TIME=60
   local CMsg='[38;5;8m'
-  local to_do=''
-  local to_do_extra=''
-  local paused=false paused_time= pause_msg_show=false pause_msg_last_time= pause_msg_delta="$((10*60))" paused_last_time= paused_suspend_delta="$((30*60))"
-  local colors=true force_new_day=false
-  local pause_char="$($ALIASES getUnicodeChar 'log_last_pause')" normal_char="$($BASH_PATH/aliases getUnicodeChar 'log_last_play')"
-  set -- $PARAMS_DEFAULT $@
+  local to_do='' to_do_extra=''
+  local margin_s= TODAY= TODAY_YMD= end_delay= i=
+  local colors=true force_new_day=false isDbg=false isRlWrap=true
+  local pause_msg_last_time=0
+  local inactivity_delta=$((15*60)) pause_lock_delta=$((15*60)) pause_msg_delta=$((10*60)) paused_suspend_delta=$((30*60)) overtime_delta=$((20*60))
+  local inactivity_f=$TMP_MEM_PATH/.locks/ssh-lock
+  local pause_char="$(getUnicodeChar 'pause')" normal_char="$(getUnicodeChar 'play')"
+  local iconOk="$(getUnicodeChar 'icon-ok')" iconNok="$(getUnicodeChar 'icon-err')"
+  isInstalled rlwrap || isRlWrap=false
+  # Vars cleared in reset_vars() # {{{
+  local end_at end_margin extra_added extra_comment extra_margin
+  local inactivity_pause inactivity_pause_allowed inactivity_pause_not_allowed_end inactivity_ts
+  local overtime_msg_sent
+  local pause_auto_unpause pause_buffer pause_locked pause_margin pause_msg_show paused paused_last_time paused_time
+  local startup_margin user_comment user_margin
+  reset_vars
+  # }}}
   [[ ! -t 1 ]] && colors=false
+  [[ -z $1 ]] && set -- --default
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --full|\
-    --logins|--remaining|\
-    --toggle|--show-end|--show-left|--percentage|--passed|\
-    --store|--store-force|\
-    --stats|--stats-full|\
-    --loop|--show-current-time|\
-    --first|--today|\
-    --suspend|--shutdown|\
-    --plot|\
+    --full    | \
+    --logins  | --remaining   | \
+    --toggle  | --show-end    | --show-left | --percentage | --passed | \
+    --store   | --store-force | \
+    --stats   | --stats-full  | \
+    --loop    | --show-current-time | \
+    --first   | --today    | \
+    --suspend | --shutdown | \
+    --plot | \
     --clear-screen)     to_do+=" ${1/--}";;&
-    --loop)             echo $2 | command grep -q '[0-9]\+' && LOOP_TIME=$(( $2 * 60 )) && shift;;
+    --loop)             [[ $2 =~ ^[0-9]+$ ]] && LOOP_TIME=$(( $2 * 60 )) && shift;;&
+    --default | --loop) to_do+=" logins first remaining passed show-left show-end show-current-time" ;;
     --stats-full)       to_do+=' stats';&
     --stats)            to_do+=' stats-main';;
     --store-force)      to_do+=' store';&
@@ -114,22 +217,21 @@ loglast() { # {{{
     %)                  to_do+=' percentage';;&
     --percentage|%)     to_do=${to_do//'show-left'}; to_do=${to_do//'show-end'};;
     --tmux)             to_do='  tmux remaining show-left';;
-    --nested)           to_do='nested logins first';;
+    --nested-default)   to_do='logins first full';;&
+    --nested | \
+    --nested-default)   to_do+=' nested';;
     --no-colors)        colors=false;;
     --force-new-day)    force_new_day=true;;
     --no-*)             to_do=${to_do//${1/'--no-'}};;
     --clear)            to_do=''; cmd='';;
-    --cmd)              shift; echo "$@" >$CMD_FILE; return 0;;
+    --cmd)              shift; echo "$@" >>$CMD_FILE; return 0;;
     esac
     shift
   done # }}}
   to_do=" $to_do "
-  local margin_s= startup_margin= end_margin= user_margin= pause_margin= user_comment= TODAY= TODAY_YMD= end_delay= pause_buffer=15 i=
-  local extra_comment= extra_margin= extra_added=false end_at=
-  source $ALIASES
-  source $BASH_PATH/colors
   source $RUNTIME_FILE
   if ! $colors; then
+    export colorsOn=false
     unset $($BASH_PATH/colors --list)
     CMsg=""
   fi
@@ -155,11 +257,11 @@ loglast() { # {{{
     $force_new_day && TODAY= && force_new_day=false
     local dow=$(command date +'%w')
     if [[ "$new_today" != "$TODAY" ]]; then # {{{
-      if ! is_to_be_done 'nested' && [[ -z $($0 --nested | cut -c8-12) ]]; then # {{{
+      if ! is_to_be_done 'nested' && [[ -z $(loglast --nested-default | cut -c8-12) ]]; then # {{{
         progress \
           --dots --no-err \
           --msg "Waiting for login time..." --color "${CGold}" \
-          --cmd "! test -z \$($0 --nested | head -n1 | cut -c8-12)"
+          --cmd "! test -z \$(loglast --nested-default | head -n1 | cut -c8-12)"
       fi # }}}
       TODAY=$new_today
       TODAY_YMD="$(command date +"%Y%m%d")"
@@ -167,37 +269,24 @@ loglast() { # {{{
         echo "export TODAY='$TODAY'"
         echo "export TODAY_YMD='$TODAY_YMD'"
       ) >$TMP_PATH/.log-last.today
-      startup_margin=0
-      end_margin=0
-      pause_margin=0
-      user_margin=0
-      user_comment=
-      paused=false
-      paused_time=
-      paused_last_time=
-      pause_msg_show=false
-      pause_buffer=15
-      extra_comment=
-      extra_margin=
-      extra_added=false
-      end_at=
-      if [[ -n $LOGLAST_MARGIN ]]; then
+      reset_vars
+      if [[ -n $LOGLAST_MARGIN ]]; then # {{{
         [[ ${#LOGLAST_MARGIN[*]} == 1 ]] && startup_margin=$LOGLAST_MARGIN || startup_margin=${LOGLAST_MARGIN[$dow]}
         sm="${startup_margin/*:}"
         extra_comment+=", $sm"
         startup_margin=${startup_margin/:*}
-      fi
-      if [[ -z $startup_margin ]]; then
+      fi # }}}
+      if [[ -z $startup_margin ]]; then # {{{
         case $dow in
         1) startup_margin=${LOGLAST_SMARGIN_MON:-5};;
         *) startup_margin=${LOGLAST_SMARGIN:-3};;
         esac
-      fi
-      case $dow in
+      fi # }}}
+      case $dow in # {{{
       6) extra_comment+=", sat";;&
       0) extra_comment+=", sun";;&
       0 | 6) paused=true ;;
-      esac
+      esac # }}}
       if is_to_be_done 'loop'; then # {{{
         fix_caps
         __util_loglast_extra 'new-day'
@@ -215,13 +304,13 @@ loglast() { # {{{
     fi # }}}
     [[ -e $FILE_DATA ]] && source $FILE_DATA
     extra_comment="${extra_comment#, }" && extra_comment="${extra_comment%, }"
-    if ! $extra_added; then
+    if ! $extra_added; then # {{{
       [[ ! -z $extra_margin ]] && user_margin=$((user_margin+extra_margin))
       [[ ! -z $extra_comment && $user_comment != *"$extra_comment"* ]] && user_comment="$(echo "$user_comment, $extra_comment")"
       user_comment="${user_comment#, }" && user_comment="${user_comment%, }"
       extra_added=true extra_margin= extra_comment=
       save_info
-    fi
+    fi # }}}
     case $dow in
     0 | 6) # {{{
       if is_to_be_done 'tmux'; then
@@ -267,8 +356,8 @@ loglast() { # {{{
     fi # }}}
     if is_to_be_done 'logins'; then # {{{
       if ! $IS_MAC; then
-        local gr_cmd= resOk=true
-        if ! is_to_be_done 'full'; then # {{{
+        local gr_cmd= resOk=false
+        if false && ! is_to_be_done 'full'; then # {{{
           gr_cmd="command zgrep -a -h \"gkr-pam: unlocked login keyring\" $(ls -rt /var/log/auth.log*)"
           if is_to_be_done 'first' || is_to_be_done 'today'; then
             local _cmd="$gr_cmd | tr -s ' ' $cmd"
@@ -284,9 +373,9 @@ loglast() { # {{{
       else
         cmd="last $USER $cmd"
       fi
-      is_to_be_done 'highlight' && cmd+=" | $ALIASES hl +cY '$TODAY.*'"
+      is_to_be_done 'highlight' && cmd+=" | hl +cY '$TODAY.*'"
     fi # }}}
-    is_to_be_done 'clear-screen' && clear
+    is_to_be_done 'clear-screen' && ! $isDbg && clear
     echorm "[$to_do] [$to_do_extra]" >/dev/stderr # DBG
     local d_cur=$(command date +"%H:%M")
     if $paused; then
@@ -298,12 +387,51 @@ loglast() { # {{{
       printf 'Time: %6s ' $d_cur
       if $paused; then
         printf "${CRed}%s${COff}" "$pause_char"
+        ! $pause_locked && printf " %b" "$iconOk" || printf " %b" "$iconNok"
+        printf "%b" "$(getUnicodeChar 'padlock')"
+        $pause_auto_unpause && printf " %b" "$iconOk" || printf " %b" "$iconNok"
+        printf "%b" "$(getUnicodeChar 'play')"
         if [[ ! -z $paused_last_time && $paused_last_time != -1 ]]; then
           printf " ${CYellow}@ $(command date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
         fi
       else
         printf "${CGreen}%s${COff}" "$normal_char"
+        if ! $inactivity_pause_allowed; then
+          printf " %b%b" "😴 " "$iconNok"
+          if [[ $inactivity_pause_not_allowed_end != 0 ]]; then
+            local ed="$(time2s $inactivity_pause_not_allowed_end)"
+            printf "/${ed%:*}"
+          fi
+        fi
+        if [[ ! -z $paused_last_time && $paused_last_time != -1 ]]; then
+          printf " ${CRed}!!! $(command date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
+        fi
       fi
+      local reminderTime= reminderWhat= reminderRest=
+      reminder --list | while read reminderTime reminderWhat reminderRest; do
+        local reminderNext="$reminderTime $reminderWhat $reminderRest"
+        local reminderChar="$(getUnicodeChar 'bell') " llCmd=
+        case $reminderWhat in
+        C) continue;;
+        -) continue;;
+        P)  reminderChar="$(getUnicodeChar 'pause')"; reminderNext="$reminderTime $reminderRest";;
+        GH) reminderChar="$(getUnicodeChar 'home')";  reminderNext="$reminderTime $reminderRest";;
+        ll-*) # {{{
+          if [[ $reminderNext =~ ([0-9:]*)': ll-'(.*)'@'(.*) ]]; then
+            llCmd=${BASH_REMATCH[2]%% *}
+            reminderNext="${BASH_REMATCH[1]}: ${BASH_REMATCH[2]/ /: }(${BASH_REMATCH[3]})"
+          elif [[ $reminderNext =~ ([0-9:]*):' ll-'(.*) ]]; then
+            reminderNext="${BASH_REMATCH[1]}: ${BASH_REMATCH[2]/ /: }"
+            llCmd=${BASH_REMATCH[2]%% *}
+          fi
+          if [[ ! -z $llCmd ]]; then
+            local reminderChar=$(getUnicodeChar "ll-$llCmd")
+            [[ -z $reminderChar ]] && llChar=$(getUnicodeChar 'disk')
+          fi;; # }}}
+        esac
+        printf " %b ${CMsg}%s${COff}" "$reminderChar" "${reminderNext%: }"
+        break
+      done
       printf "\n"
       printf -- "${CMsg}------------${COff}\n"
     fi # }}}
@@ -318,14 +446,14 @@ loglast() { # {{{
     is_to_be_done 'nested' && return 0
     local update_file=false
     if is_to_be_done 'remaining' || is_to_be_done 'store'; then # {{{
-      local d_log=$($0 --nested | cut -c8-12)
+      local d_log=$(loglast --nested-default | cut -c8-12)
       local d_log_s=$(command date -d "$d_log" '+%s')
       local d_end_s=$((d_log_s - $margin_s + 8 * 60 * 60))
       if is_to_be_done 'remaining'; then # {{{
         local percentage=$(( ( ($d_cur_s - $d_log_s + $margin_s) * 100) / (8 * 60 * 60) ))
         local color_tmux='white'
         local color_term=${CWhite}
-        if   [[ $percentage -lt 25 ]]; then
+        if   [[ $percentage -lt 25 ]]; then # {{{
           color_tmux='colour196'
           color_term='[38;5;196m'
         elif [[ $percentage -lt 50 ]]; then
@@ -343,10 +471,9 @@ loglast() { # {{{
         else
           color_tmux='colour6'
           color_term='[38;5;6m'
-        fi
+        fi # }}}
         ! $colors && color_term=
         if is_to_be_done 'tmux'; then # {{{
-          $paused && echo -n "#[fg=red]$pause_char"
           echo -n "#[fg=$color_tmux]"
         else
           echo -e "${CMsg}------------${COff}"
@@ -358,6 +485,11 @@ loglast() { # {{{
           printf "%3d%%" $tmp_perc
           ! is_to_be_done 'tmux' && echo    "${COff}"
         fi # }}}
+        if ! $paused && ! $overtime_msg_sent && [[ $(($d_end_s + $overtime_delta)) -lt $d_cur_s ]] && ! is_to_be_done 'tmux'; then # {{{
+          overtime_msg_sent=true
+          save_info
+          notify-send 'Time Tracker: Overtime' -u 'critical'
+        fi # }}}
         if is_to_be_done 'show-left' || is_to_be_done 'show-end' || is_to_be_done 'toggle'; then # {{{
           if is_to_be_done 'toggle'; then # {{{
             to_do=${to_do//'show-end'}
@@ -368,13 +500,13 @@ loglast() { # {{{
           if is_to_be_done 'show-left'; then # {{{
             ! is_to_be_done 'tmux' && echo -n "Left:  ${color_term}"
             if [[ $d_end_s -gt $d_cur_s ]]; then
-              command date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M'
+              echo -n "$(command date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M')"
             else
               if is_to_be_done 'passed'; then
                 ! is_to_be_done 'tmux' && echo -en "\b"
-                echo "-$(command date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
+                echo -n "-$(command date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
               else
-                printf "%5s\n" 'END'
+                printf "%5s" 'END'
               fi
             fi
             ! is_to_be_done 'tmux' && echo -n "${COff}"
@@ -382,6 +514,7 @@ loglast() { # {{{
           if is_to_be_done 'show-end'; then # {{{
             local d_print="$(command date -u -d "$(echo $(command date +'%z') | cut -c2-) $d_end_s seconds" '+%H:%M')"
             if ! is_to_be_done 'tmux'; then
+              echo
               echo -en "End:   ${CGreen}$d_print${COff}"
               if [[ ! -z $end_at ]]; then
                 echo -n " ${CMsg}"
@@ -392,15 +525,18 @@ loglast() { # {{{
                   [[ $diff -lt 0 ]] && sign="-" && diff=$((-diff))
                   echo -n " $sign$(command date +%H:%M -d @$diff --utc)"
                 fi
-                echo "${COff}"
+                echo -n "${COff}"
               fi
-              echo
             else
-              echo "$d_print"
+              echo -n "$d_print"
             fi
           fi # }}}
         fi # }}}
-        ! is_to_be_done 'tmux' && echo -e "${CMsg}------------${COff}" && echo
+        if is_to_be_done 'tmux'; then
+          $paused && echo -n "#[fg=red]$pause_char"
+        else
+          echo && echo -e "${CMsg}------------${COff}" && echo
+        fi
       fi # }}}
       if is_to_be_done 'store'; then # {{{
         local d_mod_s=0
@@ -517,8 +653,8 @@ loglast() { # {{{
       # }}}
     fi # }}}
     if is_to_be_done 'send'; then # {{{
-      [[ ! -z $LOGLAST_BACKUP_FILE ]] && rsync $RSYNC_DEFAULT_PARAMS $FILE $LOGLAST_BACKUP_FILE >/dev/null 2>&1 &
-      __util_loglast_extra 'send' >/dev/null 2>&1
+      [[ ! -z $LOGLAST_BACKUP_FILE ]] && saveInBackup -s "$FILE" -d "$LOGLAST_BACKUP_FILE"
+      __util_loglast_extra 'send' >/dev/null
     fi # }}}
     if is_to_be_done 'plot' || is_to_be_done 'plot-full'; then # {{{
       ! type gnuplot 1>/dev/null 2>&1 && echo "\"gnuplot\" not installed" >/dev/stderr && return 1
@@ -549,15 +685,39 @@ loglast() { # {{{
         echo  "${CMsg}------------------------------------------------------${COff}"
         echo
       fi # }}}
-      local was_break=false
-      trap "was_break=true;" INT
-      eval "(                                                                                                                                                       \
-        progress --pv --cnt $end_delay                                                                                                                              \
-          --color \"$(is_to_be_done "suspend" && echo "${CGold}" || echo "${CRed}")\"                                                                               \
-          --msg \"${CBlue}Going into $(is_to_be_done "suspend" && echo "${CGold}sleep${CBlue}" || echo "${CRed}shutdown${CBlue}") in $end_delay seconds...${COff}\" \
-      )"
-      trap - INT
-      echo -en "${COff}"
+      local was_break=false param="--err-on-timeout"
+      local cImp=$(getColor imp) cErr=$(getColor err) cWrn=$(getColor wrn) cOk=$(getColor ok) cInfo=$(getColor info) cOff=$COff fridayAfternoon=false
+      [[ $(command date +%w) == 5 && $(command date +%H%M) -gt 1520 ]] && fridayAfternoon=true
+      $fridayAfternoon && param="--no-err"
+      case $(__util_loglast_extra ask-for-shutdown) in
+      1) # {{{
+        if progress --wait $end_delay $param --msg "${cOk}Long uptime${cOff}, maybe ${cImp}shutdown${cOff}?"; then
+          to_do_extra="${to_do_extra/suspend/shutdown}"
+        fi;; # }}}
+      2) # {{{
+        if progress --wait $end_delay $param --msg "${cWrn}It is getting serious${cOff} - long uptime, ${cImp}shutdown${cOff} highly suggested"; then
+          to_do_extra="${to_do_extra/suspend/shutdown}"
+        fi;; # }}}
+      3) # {{{
+        case $(progress --wait $end_delay --keys 'Q' --msg "${cErr}It got too serious${cOff} - long uptime, doing ${cImp}shutdown${cOff} (almost-Q) without an ask") in
+        Q)
+          if $fridayAfternoon; then
+            to_do_extra="${to_do_extra/suspend/shutdown}"
+            echo "Well, it is Friday, sorry, shutting down anyway..."
+            sleep 3
+          fi;;
+        *) to_do_extra="${to_do_extra/suspend/shutdown}";;
+        esac;; # }}}
+      0 | *) # {{{
+        local uptimeTime="$(cat /proc/uptime | awk '{print $1}' | sed 's/\..*//')"
+        if [[ $(command date +%w) == 5 && $uptimeTime -gt $(( 1 * 24 * 60 * 60 )) ]]; then
+          if progress --wait $end_delay --no-err --msg "${cOk}It's Friday${cOff}, maybe ${cImp}shutdown${cOff}?"; then
+            to_do_extra="${to_do_extra/suspend/shutdown}"
+          fi
+        elif ! progress --wait $end_delay --no-err --msg "Going into $(is_to_be_done "suspend" && echo "${cOk}sleep${cOff}" || echo "${cImp}shutdown${cOff}") in $end_delay seconds..."; then
+          was_break=true
+        fi;; # }}}
+      esac
       end_delay=
       if ! $was_break; then # {{{
         __util_loglast_extra 'suspend'
@@ -570,93 +730,155 @@ loglast() { # {{{
             save_info
           fi
         fi
-        if is_to_be_done 'suspend'; then
-          if [[ ! -z $RUN_AS_ROOT ]]; then
-            $RUN_AS_ROOT suspend
-          else
-            sudo systemctl suspend
-          fi
-          sleep 10
-          __util_loglast_extra 'suspend-post'
-          to_do_extra=" store store-force send"
-          local key=
-          end_margin=0
+        if is_to_be_done 'suspend'; then # {{{
+          local suspendTime_s=$(command date '+%s')
           while true; do
-            echo -n "Press any key to continue..."
-            while [[ $(command date +"%Y%m%d") == $TODAY_YMD ]]; do
-              read -t 10 -s key && break
+            if [[ ! -z $RUN_AS_ROOT ]]; then
+              $RUN_AS_ROOT suspend
+            else
+              sudo systemctl suspend
+            fi
+            local cnt= suspendDelay=10 lastUnlock_time= lastUnlock_s=
+            for ((cnt=0; cnt<60; cnt+=suspendDelay)); do
+              sleep $suspendDelay
+              lastUnlock_time="$(loglast --nested --logins --today | tail -n1)"
+              [[ -z $lastUnlock_time || $lastUnlock_time =~ ^0+$ ]] && continue
+              lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s' 2>/dev/null)
+              [[ $? != 0 ]] && continue
+              [[ $lastUnlock_s -ge $((suspendTime_s - 60)) ]] && break 2
             done
-            echo
-            break
           done
-          continue
-        else
+          reset
+          [[ -e "$inactivity_f" ]] && touch "$inactivity_f"
+          to_do_extra=" store store-force send"
+          end_margin=0
+          __util_loglast_extra 'suspend-post'
+          continue # }}}
+        else # {{{
           if [[ ! -z $RUN_AS_ROOT ]]; then
             $RUN_AS_ROOT shutdown -y
           else
             sudo shutdown now
           fi
-        fi
+        fi # }}}
       else
         to_do_extra=
-        echo "unpause" >$CMD_FILE
+        echo "unpause" >>$CMD_FILE
       fi # }}}
     fi # }}}
+    if is_to_be_done 'tmux'; then # {{{
+      break
+    fi # }}}
     if $paused; then # {{{
-      local now=$EPOCHSECONDS
-      if $pause_msg_show; then # {{{
-        if [[ $(($pause_msg_last_time + $pause_msg_delta)) -lt $now ]]; then
-          notify-send 'Time Tracker: PAUSED' -u 'critical'
-          pause_msg_last_time=$now
-          pause_msg_show=false
-        fi
-      fi # }}}
-      [[ -z $paused_last_time ]] && paused_last_time=$now
-      if [[ $paused_last_time != -1 ]]; then # {{{
-        if [[    $(($paused_last_time + $paused_suspend_delta)) -lt $now \
-              && $(($paused_last_time + $paused_suspend_delta)) -gt $(($now-5*60)) ]]; then
-          paused_last_time=-1
-          echo "suspend" >>$CMD_FILE
-        fi
+      local pt_s=$(command date -d "$paused_time" '+%s')
+      local lastUnlock_time="$(loglast --nested --logins --today | tail -n1 | cut -c8-12)"
+      local lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s')
+      ! $inactivity_pause && [[ -e "$inactivity_f" ]] && inactivity_pause_allowed=false
+      if $inactivity_pause && [[ ! -e "$inactivity_f" ]]; then # {{{
+        local ts="$((EPOCHSECONDS - pt_s))"
+        local tsHMS="$(time2s --to-hms $ts)"
+        inactivity_pause=false
+        echo "unpause" >>$CMD_FILE
+        if [[ $((EPOCHSECONDS - inactivity_ts - inactivity_delta)) -le 300 ]]; then
+          [[ $ts -gt 60 ]] && echo "pause-mod -$((ts / 60))" >>$CMD_FILE
+        else
+          notify-send "Time Tracker: Unpaused after $tsHMS due to inactivity" -u 'critical'
+          local currId=$(tm --switch --get $(tmux list-panes -a -F '#S:#I.#P :: #{pane_title} :: #{pane_id}' | sed -n '/^MAIN.* :: Working Time :: /s/.* :: //p' | head -n1))
+          if ! progress --wait 20s --key --msg "Accept a pause of $tsHMS due to inactivity" --no-err; then
+            [[ $ts -gt 60 ]] && echo "pause-mod -$((ts / 60))" >>$CMD_FILE
+          fi
+          tm --switch $currId
+        fi # }}}
+      elif [[ $lastUnlock_s -gt $pt_s ]]; then # {{{
+        if $pause_auto_unpause; then
+          echo "unpause" >>$CMD_FILE
+          notify-send 'Time Tracker: Unpaused' -u 'critical'
+        fi # }}}
+      else # {{{
+        local now=$EPOCHSECONDS
+        if $pause_msg_show && ! $inactivity_pause; then # {{{
+          if [[ $(($pause_msg_last_time + $pause_msg_delta)) -lt $now ]]; then
+            notify-send 'Time Tracker: PAUSED' -u 'critical'
+            pause_msg_last_time=$now
+            pause_msg_show=false
+          fi
+        fi # }}}
+        if ! $pause_locked; then # {{{
+          if [[ $(($pt_s + $pause_lock_delta)) -lt $now ]]; then
+            pause_locked=true
+            gnome-screensaver-command -l
+          fi
+        fi # }}}
+        [[ -z $paused_last_time ]] && paused_last_time=$now
+        if [[ $paused_last_time != -1 ]]; then # {{{
+          if [[    $(($paused_last_time + $paused_suspend_delta)) -lt $now \
+                && $(($paused_last_time + $paused_suspend_delta)) -gt $(($now-5*60)) ]]; then
+            paused_last_time=-1
+            echo "suspend" >>$CMD_FILE
+          fi
+        fi # }}}
       fi # }}}
     fi # }}}
     # Handle loop # {{{
     ! is_to_be_done 'loop' && break
     to_do_extra=
-    local key= wasEnterPressed=false
-    local LOOP_KEY=10 delayed=0
-    export cmdsCompl="p pm m c C s e e! E E! q st bck sync fetch r R help plot $(__util_loglast_extra @@ | sed -e 's/^/ /' -e 's/\s\+$//' -e 's/\s\s\+/ /' -e 's/ / extra-/g')"
+    local key= keyFromKbd=false wasEnterPressed=false prompt=' > '
+    local waitForKey=10
+    export cmdsCompl="p pm pna pnl pni m c C s e e! E E! q st bck sync fetch r R help plot rsch"
+    cmdsCompl+=" $(__util_loglast_extra @@ | sed -e 's/^/ /' -e 's/\s\+$//' -e 's/\s\s\+/ /' -e 's/ / extra-/g')"
+    local stopAtTS=$((EPOCHSECONDS + LOOP_TIME)) isInactivePause=false
     tput sc
-    while true; do # Wait for a key or input file {{{
+    while true; do # Wait for a key or input file # {{{
       tput rc
-      if type rlwrap >/dev/null 2>&1; then
-        key=$($ALIASES run_for_some_time --no-fallback --wait $LOOP_KEY:10 \
-          --cmd 'eval rlwrap $RLWRAP_OPTS -o -S \"\ \>\ \" -w 0 -C log-last -H /dev/null --histsize -1 \
-                  -f <(echo "$cmdsCompl") \
-                  cat')
+      if [[ -e $CMD_FILE ]]; then # {{{
+        key="$(cat $CMD_FILE)"
+        rm -rf $CMD_FILE
+        [[ ! -z $key ]] && break
+      fi # }}}
+      if ! $paused; then # {{{
+        if ! $inactivity_pause_allowed && [[ $inactivity_pause_not_allowed_end != 0 ]]; then # {{{
+          if [[ $inactivity_pause_not_allowed_end -lt $EPOCHSECONDS ]]; then
+            inactivity_pause_not_allowed_end=0
+            inactivity_pause_allowed=${LOGLAST_USE_INACTIVITY_PAUSE:-true}
+          fi
+        fi # }}}
+        if $inactivity_pause_allowed && [[ -e "$inactivity_f" ]]; then # {{{
+          local inactivity_ts=$(file-stat "$inactivity_f" 2>/dev/null) || inactivity_ts=0
+          if [[ $inactivity_ts != 0 && $((inactivity_ts + inactivity_delta)) -lt $EPOCHSECONDS ]]; then
+            local t=$(time2s $inactivity_ts)
+            notify-send "Time Tracker: ${t%:*}: Autopause due to inactivity" -u 'critical'
+            isInactivePause=true
+            key="pause"
+            break
+          fi
+        fi # }}}
+      fi # }}}
+      if $isRlWrap; then # {{{
+        key=$(run_for_some_time --wait $waitForKey:10 \
+          --cmd "rlwrap $RLWRAP_OPTS -o -S '$prompt' -w 0 -C log-last -H /dev/null --histsize -1 -f <(echo '$cmdsCompl') cat -")
       else
-        read -t $LOOP_KEY key
+        read -t $waitForKey key
       fi && \
         if [[ -z $key ]] && ! $wasEnterPressed; then
           wasEnterPressed=true
+          prompt=' >> '
         else
+          keyFromKbd=true
           break
-        fi
-      if [[ -e $CMD_FILE ]]; then
-        key=$(head -n1 $CMD_FILE)
-        sed -i -e '1,1 d' $CMD_FILE
-        [[ ! -s $CMD_FILE ]] && rm -rf $CMD_FILE
-        [[ ! -z $key ]] && break
-      fi
-      delayed=$(($delayed + $LOOP_KEY))
-      [[ $delayed -ge $LOOP_TIME ]] && continue 2
-    done
-    # }}}
-    [[ -z $key ]] && __util_loglast_extra "new-loop"
+        fi # }}}
+      [[ $EPOCHSECONDS -ge $stopAtTS ]] && __util_loglast_extra "empty-loop" && continue 2
+    done # }}}
+    if $isDbg; then # {{{
+      isDbg=false
+      set +xv
+    fi # }}}
+    case $key in
+    . | '') __util_loglast_extra "new-loop";;
+    esac
     # Handle input # {{{
     set -- ${key}
     while [[ ! -z $1 ]]; do
-      local cmd="$1" cmdOrig="$1" cmds= already_paused=false value=
+      local cmd="$1" cmdOrig="$1" cmds= already_paused=false value= doLock= doUnpause=
       shift
       # Handle aliases/shortchuts # {{{
       case $cmd in
@@ -668,6 +890,8 @@ loglast() { # {{{
                     cmd='margin';;
       q)            cmd='quit';;
       p)            cmd='pause-toggle';;
+      pna)          cmd='pause'; doUnpause=false;;
+      pnl)          cmd='pause'; doLock=false;;
       P)            cmd='Pause';;
       p-msg)        cmd='pause-message';;
       c|C)          cmd='comment';;
@@ -677,28 +901,33 @@ loglast() { # {{{
       chk|st)       cmd='check';;
       bck|b)        cmd='backup';;
       r)            cmd='refresh';;
+      rsch)         cmd='reschedule';;
       R)            cmd='reset';;
       h)            cmd='help';;
       *)            cmd="$cmd";;
       esac # }}}
       # Handle additional actions # {{{
       case $cmd in
-      pause-toggle)
-        $paused && cmd='unpause' || cmd='pause';;&
-      pause-toggle | pause | unpause | pause-mod | margin | comment)
+      pause-toggle) # {{{
+        if $paused; then
+          cmd='unpause'
+        else
+          cmd='pause'
+        fi;;& # }}}
+      pause-toggle | pause | unpause | pause-mod | margin | comment) # {{{
         cmds="$cmd store"
         case $cmd in
         pause-toggle | pause | unpause)
           cmds+=' refresh';;
-        esac;;
-      suspend | shutdown)
+        esac;; # }}}
+      suspend | shutdown) # {{{
         [[ $cmdOrig != *! ]] && cmds+=" check"
-        cmds+=" unpause $cmd pause store"
-        ;;
-      reset)
-        cmds="$cmd refresh";;
-      *)
-        cmds="$cmd";;
+        doUnpause=false
+        cmds+=" unpause $cmd pause store";; # }}}
+      reset) # {{{
+        cmds="$cmd refresh";; # }}}
+      *) # {{{
+        cmds="$cmd";; # }}}
       esac # }}}
       for cmd in $cmds; do # {{{
         case $cmd in # {{{
@@ -707,6 +936,9 @@ loglast() { # {{{
           echo "Margin V C    | mV  C | m  V C     - Adjust margin (Value, Comment)"
           echo "Quit          | q                  - Quit"
           echo "Pause-Toggle  | p                  - Toggle pause"
+          echo "              | pna                - Toggle pause with NO-auto-unpause"
+          echo "              | pnl                - Toggle pause with NO-lock"
+          echo "              | pni                - Toggle inactivity pause"
           echo "Pause-Message | p-msg              - Hide pause message"
           echo "Unpause                            - Unpause"
           echo "Pause         | pause | P          - Pause"
@@ -720,6 +952,7 @@ loglast() { # {{{
           echo "Fetch                              - Fetch git repos"
           echo "Refresh       | r                  - Refresh"
           echo "Reset         | R                  - Reset"
+          echo "Reschedule    | rsch               - Reschedule"
           echo "Plot          | Plot-full          - Draw chart"
           echo "Stats         | Stats-full         - Show entries"
           echo "Help          | h                  - Help"
@@ -734,6 +967,9 @@ loglast() { # {{{
           ;; # }}}
         quit) # {{{
           break 3;; # }}}
+        dbg) # {{{
+          set -xv
+          isDbg=true;; # }}}
         margin) # {{{
           [[ -z $value ]] && value="$1" && shift
           user_margin="$value"
@@ -753,16 +989,17 @@ loglast() { # {{{
           fi
           shift $#;; # }}}
         check) # {{{
+          local waitCnt=5s
           echo 'System check:'
           echo '  Repositories:'
           $BIN_PATH/git-cmds.sh gitst | grep -v 'UP-TO-DATE' | sed 's/^/    /'
-          local cnt=10
-          [[ $cmd != check ]] && cnt=3
-          progress --dots --msg 'Ack' --cnt $cnt; [[ $? == 11 ]] && sleep 1 || sleep 0.3
-          case $? in
+          if [[ ${PIPESTATUS[0]} == 0 ]]; then
+            waitCnt=1s
+          elif [[ $cmd != check ]]; then
+            waitCnt=3s
+          fi
+          case $(progress --dots --msg 'Ack' --wait $waitCnt) in
           255) break;;
-          11)  sleep 1;;
-          *)   sleep 0.3;;
           esac;; # }}}
         backup) # {{{
           git backup --all;; # }}}
@@ -770,12 +1007,38 @@ loglast() { # {{{
           git sync   --all --reset;; # }}}
         fetch) # {{{
           git sync   --all --skip-backup;; # }}}
+        pni) # {{{
+          if $inactivity_pause_allowed || [[ ! -z $1 ]] || ! $keyFromKbd; then
+            inactivity_pause_allowed=false
+            if [[ ! -z $1 ]]; then
+              local mode='s'
+              [[ $1 == *:* ]] && mode='delta'
+              inactivity_pause_not_allowed_end=$((EPOCHSECONDS + $(time2s $1 -o $mode)))
+              shift
+            fi
+          else
+            inactivity_pause_allowed=${LOGLAST_USE_INACTIVITY_PAUSE:-true}
+            inactivity_pause_not_allowed_end=0
+          fi;; # }}}
         unpause) # {{{
           if $paused; then
             already_paused=true
+            inactivity_pause=false
+            if [[ ! -e "$inactivity_f" ]]; then
+              inactivity_pause_allowed=${LOGLAST_USE_INACTIVITY_PAUSE:-true}
+              inactivity_pause_not_allowed_end=0
+            else
+              inactivity_pause_allowed=false
+              touch "$inactivity_f"
+              inactivity_pause_not_allowed_end=$((EPOCHSECONDS + 5*60))
+            fi
+            pause_auto_unpause=true
             d_cur=$(command date +"%H:%M")
             d_cur_s=$(command date -d "$d_cur" '+%s')
+            local lastUnlock_time="$(loglast --nested --logins --today | tail -n1 | cut -c8-12)"
+            local lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s')
             local pt_s=$(command date -d "$paused_time" '+%s')
+            [[ $lastUnlock_s -gt $pt_s ]] && d_cur_s=$lastUnlock_s
             pt_s=$((($d_cur_s - $pt_s)/60))
             if [[ $pt_s -gt 2 ]]; then
               pause_margin=$(($pause_margin + $pt_s))
@@ -788,38 +1051,48 @@ loglast() { # {{{
             fi
             paused=false
             pause_msg_show=false
-            paused_last_time=
+            pause_locked=false
+            paused_last_time=-1
           fi;; # }}}
+        reschedule) # {{{
+          reschedule;; # }}}
         pause-mod) # {{{
           [[ -z $value ]] && value="$1" && shift
           pause_margin=$(($pause_margin + $value))
           [[ $pause_margin -lt 0 ]] && pause_margin=0
           [[ ! -z $1 ]] && user_comment+=", $@" && shift $#
           ;; # }}}
-        suspend|shutdown) # {{{
+        suspend | shutdown) # {{{
           end_margin=${LOGLAST_EMARGIN:-3}
+          pause_auto_unpause=false
           case $cmdOrig in # {{{
           e!|E!) # {{{
             end_delay=3;; # }}}
           *) # {{{
             echo $1 | command grep -q '[0-9]\+' && end_delay=$1 && shift
             if ! $already_paused; then
-              local left=$((59 - $(command date +"%S" | sed 's/^0\+//')))
+              local left=$((59 - 10#$(command date +"%S")))
               [[ $left -lt 5 ]] && left=5
-              trap "echo -e '\n${CGold}Waiting has been skipped${COff}' && sleep 2" INT
-              eval "(                                                          \
-                progress --pv --cnt $left                                      \
-                  --color \"${CGreen}\"                                        \
-                  --msg \"${CBlue}Waiting ${left}s for full minute...${COff}\" \
-              )"
-              trap - INT
+              if ! progress --wait $left --color "${CGreen}" --msg "${CBlue}Waiting ${left}s for full minute...${COff}"; then
+                echo -e "${CGold}Waiting has been skipped${COff}"
+                sleep 2
+              fi
             fi;; # }}}
           esac # }}}
           to_do_extra+=" $cmd";; # }}}
         Pause) # {{{
+          paused_last_time=;;& # }}}
+        pause) # {{{
           paused_last_time=-1;;& # }}}
         pause | Pause) # {{{
           if ! $paused; then
+            ${doLock:-true} && pause_locked=false || pause_locked=true
+            if $isInactivePause; then
+              inactivity_pause=true
+            elif $inactivity_pause; then
+              inactivity_pause=false
+            fi
+            pause_auto_unpause=${doUnpause:-true}
             paused_time=$(command date +"%H:%M")
             paused=true
             pause_msg_show=true
@@ -828,6 +1101,14 @@ loglast() { # {{{
             if [[ $cmd == 'pause' ]]; then
               [[ ! -z $1 ]] && user_comment+=", $@" && shift $#
             fi
+          else
+            if [[ ! -z $doLock ]]; then
+              $doLock && pause_locked=false || pause_locked=true
+            fi
+            if [[ ! -z $doUnpause ]]; then
+              pause_auto_unpause=$doUnpause
+            fi
+            ! $isInactivePause && $inactivity_pause && inactivity_pause=false
           fi;; # }}}
         pause-message) # {{{
           pause_msg_show=false
@@ -848,14 +1129,10 @@ loglast() { # {{{
         extra-*) # {{{
           __util_loglast_extra "${cmd#extra-}" $@
           ;; # }}}
-        +*) # {{{
-          local onTime="${cmd#+}"
-          ;;& # }}}
-        +) # {{{
-          local onTime="$1"; shift
-          ;;& # }}}
         + | +*) # {{{
-          local endTime="$($0 | grep "^End:" | awk '{print $2}')"
+          local onTime="${cmd#+}"
+          [[ $cmd == '+' && $1 =~ ^[0-9:hms]*$ ]] && onTime="$1" && shift
+          local endTime="$(loglast --remaining --show-end | awk '/^End:/ {print $2}')"
           local delta=$((5*60)) curTime_s="$EPOCHSECONDS" onTime_before=
           case $onTime in
           '' | -) # {{{
@@ -865,18 +1142,19 @@ loglast() { # {{{
             else
               onTime="$endTime"
             fi ;; # }}}
-          -* | +*) # {{{
-            local d="${onTime:1}"
-            if $ALIASES time2s --is-hms $d; then
-              d=$($ALIASES time2s $d -o s)
+          *) # {{{
+            d=$onTime
+            [[ $d == -* || +* ]] && d="${d:1}"
+            if time2s --is-hms $d; then
+              d=$(time2s $d -o s)
               [[ $onTime == +* ]] && d="-$d"
             fi
             onTime_before="$(($(command date -d "$endTime" +"%s") - d))"
             if [[ $onTime_before -gt $((curTime_s+60)) ]]; then
               onTime="$(command date -d @$onTime_before +"%H:%M")"
             else
-              echo "Reminder is in the past [${CRed}$(command date -d @$onTime_before +"%H:%M")${COff}]" >/dev/stderr
-              shift $#; sleep 3; continue
+              progress --msg "Reminder is in the past [${CRed}$(command date -d @$onTime_before +"%H:%M")${COff}]" --wait 5s
+              shift $#; continue
             fi
             ;; # }}}
           esac
@@ -887,17 +1165,17 @@ loglast() { # {{{
             onTime_before="$((onTime_before - delta))"
             if [[ $onTime_before -gt $((curTime_s+60)) ]]; then
               onTime_before="$(command date -d @$onTime_before +"%H:%M")"
-              $ALIASES reminder "Going home in 5m..." $onTime_before
+              reminder -s "-Going home in 5m..." $onTime_before
             fi
             arg='go-home.sh';; # }}}
-          'gh') arg='go-home.sh';;
-          'p' ) arg='pause.sh';;
+          'gh')  arg='go-home.sh';;
+          'p' )  arg='pause.sh';;
+          'pni') arg='ll-pni.sh';;
           esac
-          if [[ "$arg" == 'go-home.sh' ]]; then
-            end_at="$onTime"
-          fi
-          $ALIASES reminder $arg $@ $onTime
-          shift $#; sleep 3
+          [[ "$arg" == 'go-home.sh' ]] && end_at="$onTime"
+          reminder -s $arg $@ $onTime
+          progress --msg "$onTime: $arg" --wait 5s
+          shift $#
           ;; # }}}
         *) # {{{
           to_do_extra+=" $key";; # }}}
@@ -905,12 +1183,14 @@ loglast() { # {{{
       done # }}}
     done # }}}
     to_do_extra=" $to_do_extra "
-    save_info
-    # }}}
+    save_info # }}}
   done # }}}
   mutex_deinit
   unset is_to_be_done
 } # }}}
+export -f loglast
 
+export DBG_ID=loglast
+dbgF --init --all=show
 loglast "$@"
 

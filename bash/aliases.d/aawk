@@ -2,24 +2,35 @@
 # vim: fdl=0
 
 aawk() { # @@ # {{{
+  local scriptPath="$SCRIPT_PATH/bin/awk.script"
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
+    -f) getFileList '*.awk'; getFileList --pwd "$scriptPath" '*.awk';;
     -F) echo "\'[=\\ ]\'";;
-    *)  echo "1 2 3 -F";;
+    *)  echo "1 2 3 -F -f";;
     esac
     return 0
   fi # }}}
-  local params= print= pre=
+  local params= print= pre= script=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     /*)      pre="$1";;
     [0-9]*)  print+=",\$$1";;
-    *) params+="$1 ";;
-    esac
-    shift
+    -f)      script="$2"; shift;;
+    *)       params+="$1 ";;
+    esac; shift
   done # }}}
-  echorm "awk $params '$pre{print \"${print#,}\"}'"
-  eval awk $params "'$pre{print "${print#,}"}'"
+  if [[ -z $script ]]; then
+    echorm "awk $params '$pre{print \"${print#,}\"}'"
+    eval awk $params "'$pre{print "${print#,}"}'"
+  else
+    if [[ $script != /* ]]; then
+      [[ ! -e $script ]] && script="$scriptPath/$script"
+      [[ ! -e $script ]] && echorm -C 0 "script file [$script] %err:%s" "not found" && return 1
+    fi
+    echorm "awk $params -f $script"
+    eval awk $params -f $script
+  fi
 } # }}}
 
 export PHISTORY_IGNORED_COMMANDS+=":aawk"

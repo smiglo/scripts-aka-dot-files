@@ -8,11 +8,23 @@ l1="$(eval printf "─%.0s"  {1..$len})"
 l2="$(eval printf "═%.0s"  {1..$len})"
 multi=$((${#l1} / 4))
 multi="$(printf "\\\\0%.s" $(eval echo {1..$multi}))"
+colors= colorsOn=true
 if [[ $1 == '@@' ]]; then
-  echo -ne "$func" | sed -n -e '/^##\+ @ .*/s/##\+ @ \+\([^ ]*\)\( .*\)\?/\1/p'
+  echo -ne "$func" | sed -n -e '/^##\+ @ .*/s/##\+ @ \+\([^ ]*\)\( .*\)\?/\1/p' | tr '[A-Z]' '[a-z]'
+  echo "-c --colors --no-colors"
   exit 0
 fi
-[[ -t 1 ]] || unset $($BASH_PATH/colors --list)
+while [[ ! -z $1 ]]; do
+  case $1 in
+  -c | --colors) colors=true;;
+  --no-colors)   colors=false;;
+  *) break;;
+  esac; shift
+done
+if [[ -z $colors ]]; then
+  [[ -t 1 ]] || colors=false
+fi
+${colors:-true} || { unset $($BASH_PATH/colors --list); export colorsOn=false; }
 if [[ -z $1 ]]; then
   echo -ne "$func\n" | sed -e "s/^\(##\+ @\) .*}}[}]/\1/"
 else
@@ -26,17 +38,22 @@ else
       indent="$(echo -ne "$func\n" | command grep -a "^##\+ @ $s" | head -n1 | sed -e 's/^\(##\+\) .*/\1/')"
       max="$((${#indent}-1))"
       [[ $max -lt 2 ]] && max=2
-      echo -ne "$func\n" | sed -n -e "/^##\+ @ $s/,/^#\{2,$max\}$\|^$indent @\|^$indent @ }}[}]/p" \
-      | sed -e "s/##\+ @ $s/--@@\0/" -e "s/^#\{2,$max\}$\|^#\{2,${#indent}\} @.*/$indent @/" -e 's/^--@@//'
+      echo -ne "$func\n" | \
+        sed -n -e "/^##\+ @ $s/,/^#\{2,$max\}$\|^$indent @\|^$indent @ }}[}]/p" | \
+        sed -e "s/##\+ @ $s/--@@\0/" -e "s/^#\{2,$max\}$\|^#\{2,${#indent}\} @.*/$indent @/" -e 's/^--@@//'
     fi
     shift
   done
-fi | sed \
+fi | \
+sed \
   -e '/^"\+$/ d' \
   -e "/^'''$/ d" \
   -e "s/^---$/$l1/" -e "s/^===$/$l2/" -e "s/^\(.\)\1\{3\}$/$multi/" \
   -e 's/^## \([^@]*$\)/# \1/' \
   -e "s/^\(##\+\) @ \([a-zA-Z0-9][^ ]*\).*/\1 ${CGold}\2${COff}/g" \
   -e '/^##\+ [@#].*/ d' \
-  -e '/^##\+$/ d'
+  -e '/^##\+$/ d' | \
+while IFS= read -r l; do
+  printfc "$l"
+done
 

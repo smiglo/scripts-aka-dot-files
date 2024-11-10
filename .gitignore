@@ -3,3 +3,4 @@ core.*
 /test*
 /*tmp*
 
+.scripts-data.txt

@@ -112,7 +112,7 @@ show_notifications() { # @@ # {{{
       [[ $last_time != $first_time ]] && echo -n "/${CSearch}${last_time:0:2}:${last_time:2:2}${COff}"
       [[ "1$last_5m" -gt "1$last_time" ]] && echo -n "/${CRed}${last_5m:0:2}:${last_5m:2:2}${COff}"
       echo -n "]: "
-      $ALIASES progress --dots --cnt 10 --no-err --msg '' --end-msg ':'
+      progress --dots --cnt 10 --no-err --msg '' --end-msg ':'
       local last_msgs= add_msg=false
       while read l; do # {{{
         echo "$l" | command grep -q "^$today" || continue

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # vim: fdl=0
-# env:  ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
 
 ack_ag_wrapper() { # {{{
   if [[ $1 == @@ ]]; then
@@ -8,24 +7,29 @@ ack_ag_wrapper() { # {{{
     return 0
   fi
   local cmd=
-  local use_tee=true
-  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*ACK-AG-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
-  local fzf_params=
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+  local use_tee=true use_fzf= fzf_params=
   while [[ ! -z $1 ]]; do
     case $1 in
     --cmd-*) cmd=${1/--cmd-};;
     +tee=*)  use_tee=${1/+tee=};;
     +-fzf | +-f)
-              use_fzf=false;;
+             use_fzf=false;;
     +fzf | +f)
-              use_fzf=$FZF_INSTALLED;;
+             use_fzf=$FZF_INSTALLED;;
     +fzf=*)  use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
     +fzf-*)  fzf_params+=" $1";;
     *)       break;;
     esac
     shift
   done
+  if [[ -z $use_fzf ]]; then # {{{
+    if [[ ! -t 1 ]]; then
+      use_fzf=false
+    else
+      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*ACK-AG-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
+      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    fi
+  fi # }}}
   if [[ -z $cmd ]] || ! which $cmd >/dev/null 2>&1; then
     echo "Program [$cmd] not found, falling back to grep..." >/dev/stderr
     sleep 0.5
@@ -45,7 +49,6 @@ ack_ag_wrapper() { # {{{
   ag*)  params+=" --silent $AG_OPTIONS"; prompt="ag: ${@: -1}> ";;
   rg*)  prompt="rg: ${@: -1}> ";;
   esac
-  [[ ! -t 1 ]] && use_fzf=false
   if $use_tee && [[ -t 1 ]] && ! $use_fzf; then
     case $cmd in
     ack*) params+=" --color";;
@@ -54,7 +57,6 @@ ack_ag_wrapper() { # {{{
     esac
   fi
   output_to_file --no-sort $use_tee +fzf=$use_fzf $fzf_params +fzf-p "--prompt '$prompt'" $cmd $params $@
-  return $?
 } # }}}
 
 alias ack-grep='ack_ag_wrapper --cmd-ack' # @@

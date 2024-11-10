@@ -58,61 +58,71 @@ fzf_exe() { # @@ # {{{
   [[ ! -e $file ]] && file="${file%-*}"
   [[ -f $file || $cmd == 'prev' ]] || { echo "Canot open [$file]" >/dev/stderr; sleep 1; return 0; }
   case $cmd in # {{{
-  less)       params="-N";;&
-  vim)        params="-cl -c FastVim -c FastClipboard";;&
-  less | vim)
-              [[ ! -z $line ]] && params+=" +$line"
-              params+=" $file"
-              ;;&
-  vim)        params+=" -c 'normal! zv' ";;
-  less)       ;;
-  prev)       [[ -z $line ]] && line='1'
-              local first_line=$(($line-$prev_lines_before))
-              [[ $first_line -lt 1 ]] && first_line='1'
-              ;;
-  pane)       local ppid=$(tmux display-message -t $pane -p -F '#{pane_pid}')
-              if ! $IS_MAC; then
-                command pstree -Ac $ppid | command grep -q -e '---vim'
-              else
-                command pstree $ppid | command grep -q -i -e 'vim'
-              fi || { echo "Vim not found in pane '$pane'" >/dev/stderr; sleep 1; return 0; }
-              ;;
-  *)          { echo "Unknown command [$cmd]" >/dev/stderr; sleep 1; return 0; };;
+  less | vim) # {{{
+    case $cmd in
+    less)       params="-N";;
+    vim)        params="-cl -c FastVim";;
+    esac
+    [[ ! -z $line ]] && params+=" +$line"
+    params+=" $file"
+    case $cmd in
+    vim)        params+=" -c 'normal! zv' ";;
+    esac;; # }}}
+  prev) # {{{
+    [[ -z $line ]] && line='1'
+    local first_line=$(($line-$prev_lines_before))
+    [[ $first_line -lt 1 ]] && first_line='1';; # }}}
+  pane) # {{{
+    local ppid=$(tmux display-message -t $pane -p -F '#{pane_pid}')
+    if ! $IS_MAC; then
+      command pstree -Ac $ppid | command grep -q -e '---vim'
+    else
+      command pstree $ppid | command grep -q -i -e 'vim'
+    fi || { echo "Vim not found in pane '$pane'" >/dev/stderr; sleep 1; return 0; };; # }}}
+  *) # {{{
+    { echo "Unknown command [$cmd]" >/dev/stderr; sleep 1; return 0; };; # }}}
   esac # }}}
   case $cmd in # {{{
-  prev) [[ -h $file ]] && echo -e "File ${file##*/} links to $(readlink $file)\n" && file="$(readlink -f $file)"
-        if [[ -f $file ]]; then
-          local t="$(file --mime $file)"
-          [[ "$t" =~ binary ]] && echo "$file is a binary" && return 0
-          if which highlight >/dev/null 2>&1; then
-            [[ ${file##*/} != *.* && ( "$t" =~ shellscript || "$t" =~ text/plain ) ]] && t="-S bash" || t=""
-            highlight -O ansi $t $file 2>/dev/null || cat $file
-          else
-            cat $file
-          fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | $ALIASES hl +cY "^\s*$line\s"
-        elif [[ -d $file ]]; then
-          ! which tree >/dev/null 2>&1 && echo "$file is a directory" && return 0
-          tree -C $file 2>/dev/null | head -200
-        else
-          echo "Not supported entity [$file]"
-        fi;;
-  pane) [[ $file != /* ]] && file="$PWD/$file"
-        tmux send-keys -t $pane ":call RelTabEdit(\"$file\")"
-        if [[ ! -z $line ]]; then
-          tmux send-keys -t $pane "zR${line}gg"
-        fi;;
-  *)    $cmd $params </dev/tty >/dev/tty;;
+  prev) # {{{
+    [[ -h $file ]] && echo -e "File ${file##*/} links to $(readlink $file)\n" && file="$(readlink -f $file)"
+    if [[ -f $file ]]; then
+      local t="$(file --mime $file)"
+      [[ "$t" =~ binary ]] && echo "$file is a binary" && return 0
+      if which highlight >/dev/null 2>&1; then
+        [[ ${file##*/} != *.* && ( "$t" =~ shellscript || "$t" =~ text/plain ) ]] && t="-S bash" || t=""
+        highlight -O ansi $t $file 2>/dev/null || cat $file
+      else
+        cat $file
+      fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | hl +cY "^\s*$line\s"
+    elif [[ -d $file ]]; then
+      ! which tree >/dev/null 2>&1 && echo "$file is a directory" && return 0
+      tree -C $file 2>/dev/null | head -200
+    else
+      echo "Not supported entity [$file]"
+    fi;; # }}}
+  pane) # {{{
+    [[ $file != /* ]] && file="$PWD/$file"
+    if isInstalled realpath; then
+      local paneCwd="$(tmux display-message -p -t $pane -F '#{pane_current_path}')"
+      file="$(realpath --relative-to "$paneCwd" "$file")"
+    fi
+    tmux send-keys -t $pane ":call RelTabEdit(\"$file\")"
+    if [[ ! -z $line ]]; then
+      tmux send-keys -t $pane "zR${line}gg"
+    fi;; # }}}
+  *) # {{{
+    $cmd $params </dev/tty >/dev/tty;; # }}}
   esac # }}}
 } # }}}
 fzfwr() { # {{{
   local isInputRc=false
   [[ $1 == 'iRC' ]] && isInputRc=true && shift
-  local FZF_DEFAULT_COMMAND="fdfind" # -I"
-  if ! which ${FZF_DEFAULT_COMMAND% *} >/dev/null 2>&1; then
-    FZF_DEFAULT_COMMAND="command find -L . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
+  local cmd="fdfind -d ${FZF_MAX_DEPTH:-8}"
+  if ! which ${cmd%% *} >/dev/null 2>&1; then
+    cmd="command find -L . -mindepth 1 -maxdepth 8 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
   fi
-  FZF_DEFAULT_COMMAND+=" | sort"
-  local selected="$(fzf --height 80% "$@" | sed 's/^\|$/"/g' | tr '\n' ' ' | sed 's/ \+/ /')"
+  cmd+=" | sort"
+  local selected="$(__fzf_select__  --cmd "$cmd" "$@")" # | sed 's/^\|$/"/g' | tr '\n' ' ' | sed 's/ \+/ /')"
   if $isInputRc; then
     READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
     READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
@@ -202,9 +212,9 @@ vimg() { # {{{
 } # }}}
 vims() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
-    case $2 in
-    1) $ALIASES fzf_exe @@ - --pane;;
-    *) echo "@@-f";;
+    case $3 in
+    -t) fzf_exe @@ - --pane;;
+    *)  echo "@@-f -t -v";;
     esac
     return 0
   fi # }}}
@@ -228,9 +238,13 @@ vims() { # @@ # {{{
     done
   } # }}}
   local dst='.1' f= verb=false
-  [[ $1 == '-v' ]] && verb=true && shift
-  [[ $# -ge 2 ]] && dst="$1" && shift
-  f="$@"
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -v) verb=true;;
+    -t) dst="$2"; shift;;
+    *)  f="$@"; shift $#;;
+    esac; shift
+  done
   [[ $dst =~ .*\..* ]] || dst+=".1"
   if [[ ! -t 0 ]]; then
     f="$(cat - | xargs -n1 | __vims__find_files | fzf)"
@@ -240,7 +254,7 @@ vims() { # @@ # {{{
   [[ $? != 0 || -z $f ]] && return 0
   for i in $f; do
     if [[ -e "$i" ]]; then
-      $ALIASES fzf_exe -c pane --pane $dst -f "$i"
+      fzf_exe -c pane --pane $dst -f "$i"
     elif $verb; then
       echo "File [$f] does not exist" >/dev/stderr
     fi

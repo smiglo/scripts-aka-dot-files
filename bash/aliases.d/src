@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+src() { # @@ # {{{
+  echorm -M +?
+  local i= ii= verb=false
+  local list="$(find $SCRIPT_PATH/bash/aliases.d -maxdepth 1 -type f)"
+  for i in $BASH_PROFILES_FULL; do
+    [[ -e $i/aliases ]] && list+="\n$($i/aliases __util_src)"
+  done
+  if [[ $1 == '@@' ]]; then # {{{
+    echo -e "$list" | sed 's|.*/||'
+    echo "-1 -2 -5 -f -l -a"
+    return 0
+  fi # }}}
+  list="$(ls -t $(echo -e "$list"))"
+  i=$1
+  case $i in
+  -f) # {{{
+    for ii in $(find $BASHRC_RUNTIME_PATH -name 'aliases-*.dump'); do
+      echorm "source ${ii##*/}"
+      source $ii
+    done
+    return 0;; # }}}
+  -l) # {{{
+    echo -e "$list" | sed 's|.*/||'
+    return 0;; # }}}
+  -a) # {{{
+    i=$(echo -e "$list" | sed 's|.*/||' | fzf -m);; # }}}
+  '') # {{{
+    verb=true
+    local fm="$BASHRC_RUNTIME_PATH/aliases-main.dump"
+    [[ ! -e "$fm" ]] && return 1
+    local mod="$(stat -c %Y "$fm")"
+    i=""
+    for ii in $list; do
+      [[ $(stat -c %Y "$ii") -gt $mod ]] && i+=" $ii"
+    done
+    [[ -z $i ]] && return 0
+    ;; # }}}
+  -[0-9]*) # {{{
+    verb=true
+    i=${i#-}
+    i="$(echo -e "$list" | head -n${i:-1})"
+    ;; # }}}
+  *) # {{{
+    i=
+    for ii; do
+      i+=" $(echo -e "$list" | command grep "/$ii\$")"
+    done
+    ;; # }}}
+  esac
+  set - $i
+  local src_i= src_df=
+  for src_i; do
+    [[ -z $src_i ]] && continue
+    echorm "sourcing ${src_i/$HOME\//\~\/}"
+    source $src_i
+    local src_df="$(set +f; command grep -l "^#-#-# START: $src_i # {\{3\}" $BASHRC_RUNTIME_PATH/aliases*.dump 2>/dev/null | head -n1)"
+    [[ -z $src_df ]] && echorm "dump for '${src_i##*/}' not found" && continue
+    local i_sed="$(echo "$src_i" | sed 's:[]\[^$.*/&]:\\&:g')"
+    cp $src_df $src_df.tmp
+    touch "${src_df}.tmp"
+    sed -i '/#-#-# START: '$i_sed' # {{{/,/#-#-# END: '$i_sed' # }}}/d' "${src_df}.tmp"
+    {
+      echo "#-#-# START: $src_i # {{{"
+      cat "$src_i"
+      sed -n '/^# env: /s/# env: \(.*\)/\1/p' "$src_i"
+      echo "#-#-# END: $src_i # }}}"
+    } >>"${src_df}.tmp" # }}}
+    mv "${src_df}.tmp" "$src_df"
+  done
+  set +f
+} # }}}
+source-basic() { # {{{
+  source $HOME/.bashrc --do-basic
+} # }}}
+export HISTIGNORE+=":src:source-basic"

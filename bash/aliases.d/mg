@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # vim: fdl=0
-# env:  ! install 'output_to_file' && TO_INSTALL+=' output_to_file '
 
 mg() { # @@ # {{{
   if [[ $1 == @@ ]]; then
@@ -11,10 +10,7 @@ mg() { # @@ # {{{
   ! which $cmd >/dev/null 2>&1 && cmd="rg"
   ! which $cmd >/dev/null 2>&1 && cmd="ack"
   ! which $cmd >/dev/null 2>&1 && cmd="grep"
-  local tee=true
-  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*MG:[^,]\+,' | command grep -o 'true\|false')"
-  local fzf_params=
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+  local tee=true use_fzf= fzf_params=
   while [[ ! -z $1 ]]; do
     case $1 in
     +g)     cmd="grep";;
@@ -30,15 +26,21 @@ mg() { # @@ # {{{
     esac
     shift
   done
-  echorm "$cmd $@"
+  if [[ -z $use_fzf ]]; then # {{{
+    if [[ ! -t 1 ]]; then
+      use_fzf=false
+    else
+      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*MG:[^,]\+,' | command grep -o 'true\|false')"
+      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    fi
+  fi # }}}
   local err=
   case $cmd in
-  grep*) grep_wrapper   --cmd-grep +tee=$tee +fzf=$use_fzf $fzf_params -R "$@" *; err=$?;;
-  ack*)  ack_ag_wrapper --cmd-ack  +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
-  ag*)   ack_ag_wrapper --cmd-ag   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
-  rg*)   ack_ag_wrapper --cmd-rg   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ; err=$?;;
+  grep*) grep_wrapper   --cmd-grep +tee=$tee +fzf=$use_fzf $fzf_params -R "$@" *;;
+  ack*)  ack_ag_wrapper --cmd-ack  +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
+  ag*)   ack_ag_wrapper --cmd-ag   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
+  rg*)   ack_ag_wrapper --cmd-rg   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
   esac
-  return $err
 } # }}}
 
 alias _mg='mg +tee=false' # @@

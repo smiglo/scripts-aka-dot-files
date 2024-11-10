@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+echorm --name tt-setup
 func="$(getFunctionBody 'setup')"
 export func
 while [[ $1 == -* || $1 == @ ]]; do # {{{
@@ -40,8 +41,8 @@ case $1 in
     shift
   done # }}}
   if [[ -z $1 || $1 == --full ]]; then # {{{
-    ret="--on @"
-    [[ $orig_cmd == 'setup' ]] && ret+=" --loop ?"
+    ret="@"
+    [[ $orig_cmd == 'setup' ]] && ret+=" --loop ? --on"
     for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
       ret+=" $($ext $cmd "get-ext-commands" $1)"
       ret+=" $($ext $cmd "get-ext-switches")"
@@ -84,7 +85,7 @@ case $1 in
   esac
   ;; # }}}
 --loop | '') # {{{
-  $ALIASES set_title "$issue: setup"
+  set_title "$issue: setup"
   source $BASH_PATH/colors
   utils_cmd="#reload\n#show-all\n#travelsal\n"
   reload_cmds=true use_travelsal=
@@ -134,6 +135,7 @@ case $1 in
   for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-tool-ext.sh); do # {{{
     $ext $cmd "$@" && exit 0
   done # }}}
+  $TICKET_CONF_USE_NEW_ARGS && export scmd="$1" && shift
   [[ ! -z "$func" ]] && bash -c "$func" - "$@" ;; # }}}
 esac
 

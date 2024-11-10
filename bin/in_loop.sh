@@ -15,7 +15,7 @@ while [[ ! -z "$1" ]]; do
 done
 
 while true; do
-  echo -n "$($ALIASES date): "
+  echo -n "$(date): "
   eval "$FUNC"
   [[ $? != 0 ]] && break;
   sleep $DELAY

@@ -1,0 +1,391 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+date() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    +) echo "%Y-%m-%d %Y.%m.%d %H%M%S";;
+    *) echo "+ -d +t +d +dt --orig --ts -s --colors";;
+    esac
+    return 0
+  fi # }}}
+  local p="$DATE_FMT" showOrig=false addTs=false removeTs=false c=$CYellow c2=$CGreen coff=$COff sort=false autoColors=true
+  [[ -z $1 && -t 0 ]] && eval command date +$p && return
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    +t)       p="$TIME_FMT";;
+    +d)       p="$DATE2_FMT";;
+    +dt)      p="$DATE_FMT";;
+    +)        shift; p="$1";;
+    +*)       p="${1#+}";;
+    --orig)   showOrig=true;;
+    --ts)     addTs=true; removeTs=false;;
+    -s)       sort=true; ! $addTs && removeTs=true; addTs=true;;
+    --colors) autoColors=false;;
+    *)        break;;
+    esac
+    shift
+  done # }}}
+  if [[ -t 0 ]]; then # {{{
+    command date "+$p" "$@" # }}}
+  else # {{{
+    [[ ! -t 1 ]] && $autoColors && c= && c2= && coff=
+    local l= n= i= dFirst=0
+    cat - | while IFS= read -r l; do
+      n="$l"
+      for i in $(echo "$l" | command grep -o "\<[1-9][0-9]\{8,12\}\(\.[0-9]\+\)\?\>" | sed 's/\(.*\)\..*/\1/'); do
+        [[ $dFirst == 0 || $i -lt $dFirst ]] && dFirst=$i
+        local dd="$(command date "+$p" -d @$i)"
+        n=$(echo "$n" | sed 's/'$i'/'$c$dd$coff'/g');
+        [[ ! -z $c ]] && l=$(echo "$l" | sed 's/'$i'/'$c$i$coff'/g');
+      done
+      echo "$($addTs && [[ $dFirst != 0 ]] && echo "$c$dFirst$coff : ")$($showOrig && echo "$l :: ")$n" >/dev/stdout
+    done \
+      | { if $sort; then sort -k1,1n; else cat -; fi; } \
+      | { if $removeTs; then cut -d' ' -f3-; else cat -; fi; } \
+      | { if [[ ! -z $c2 ]]; then sed 's/\<[0-9]\{8\}-\?[0-9]\{6\}\>/'$c2'\0'$coff'/g'; else cat -; fi; }
+  fi # }}}
+} # }}}
+time2s() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    local t="now 0:00 15:00 @${EPOCHSECONDS:-$(epochSeconds)} 5m2s @"
+    case $3 in
+    --out | -o) echo "s abs abs-s delta";;
+    --now)      echo "- 15:00 15h";;
+    -s)         echo "$t";;
+    --to-hms)   echo "$t";;
+    --to-HMS)   echo "--utc --no-utc";;
+    -c) # {{{
+      if type colorList >/dev/null >&1; then
+        colorList
+      else
+        echo $COLORS_BASIC_LIST
+      fi;; # }}}
+    *) # {{{
+      case ${4:-$3} in
+      --diff) echo "$t";;
+      *)      echo "-s --diff --diff-HMS --is-hms --to-hms --to-HMS --now -o --out --hms-only -c $t 5m 1h2m3s";;
+      esac;; # }}}
+    esac
+    return 0
+  fi # }}}
+  local colorP= color= coff=
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -c) # {{{
+      colorP=$2; shift
+      color=$(getColor "$colorP")
+      [[ ! -z $color ]] && coff=$COff;;# }}}
+    -s) # {{{
+      if time2s --is-hms $2; then
+        time2s $([[ ! -z $colorP ]] && echo "-c $colorP") $2 -o s
+      else
+        echo "${color}$(command date '+%s' -d "${2:-now}")${coff}"
+      fi
+      return 0;; # }}}
+    --diff-HMS) # {{{
+      [[ -z $2 ]] && return 1
+      local diff=$(time2s --diff $2)
+      time2s $([[ ! -z $colorP ]] && echo "-c $colorP") --to-HMS --utc $diff
+      return 0;; # }}}
+    --diff) # {{{
+      local d1=$2
+      local d2=$3
+      [[ -z $d2 && ! -z $d1 ]] && d2=$d1 && d1="now"
+      if [[ -z $d1 ]]; then
+        d1="${EPOCHSECONDS:-$(epochSeconds)}"
+      elif [[ $d1 == @* || $d1 =~ ^([0-9]{7,})$ ]]; then
+        d1="${d1#@}"
+      else
+        d1="$(time2s -s "$d1")"
+      fi
+      if [[ -z $d2 ]]; then
+        d2="$(time2s -s "today 0:00")"
+      elif [[ $d2 == @* || $d2 =~ ^([0-9]{7,})$ ]]; then
+        d2="${d2#@}"
+      else
+        d2="$(time2s -s "$d2")"
+      fi
+      echo "${color}$((d1-d2))${coff}"
+      return 0;; # }}}
+    --is-hms) # {{{
+      [[ $2 =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]
+      return $?;; # }}}
+    --to-HMS) # {{{
+      shift
+      local dateP="--utc"
+      case $1 in
+      --utc)    dateP="--utc"; shift;;
+      --no-utc) dateP=""; shift;;
+      '')       dateP="";;
+      esac
+      local s=${1:-${EPOCHSECONDS:-$(epochSeconds)}} dir=
+      [[ $s == -* ]] && dir='-' && s=${s#-}
+      echo "${color}$dir$(command date $dateP +'%H:%M:%S' -d @$s)${coff}"
+      return 0;; # }}}
+    --to-hms) # {{{
+      local s=$2 h= m= dir=
+      [[ $s == *:* || $s == @* ]] && s=$(time2s --diff "$s")
+      [[ $s == -* ]] && dir='-' && s=${s#-}
+      h=$((s/3600)) && s=$((s-h*3600))
+      m=$((s/60))   && s=$((s-m*60))
+      [[ $h != 0 ]] && h="${h}h" || h=
+      [[ $m != 0 ]] && m="${m}m" || m=
+      [[ $s != 0 || ( -z $h && -z $m ) ]] && s="${s}s" || s=
+      echo "${color}$dir$h$m$s${coff}"
+      return 0;; # }}}
+    *) break;;
+    esac; shift
+  done
+  local ts= outForm= h= m= s= out= now=${EPOCHSECONDS:-$(epochSeconds)} dir=1 hms_is=false hms_only=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    @)          echo $now; return 0;;
+    --out | -o) outForm=$2; shift;;
+    --now)      [[ $2 != - ]] && now=${EPOCHSECONDS:-$(epochSeconds)}; shift;;
+    --hms-only) hms_only=true;;
+    *)          ts=$1; [[ $ts == -* ]] && dir=-1 && ts=${ts#-};;
+    esac
+    shift
+  done # }}}
+  [[ -z $ts ]] && ts='now' && [[ -z $outForm ]] && outForm='s'
+  [[ -z $outForm ]] && outForm='abs'
+  if [[ $ts =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then # {{{
+    h="${BASH_REMATCH[1]%h}" m="${BASH_REMATCH[2]%m}" s="${BASH_REMATCH[3]%s}"
+    out="$((${h:-0}*60*60 + ${m:-0}*60 + ${s:-0}))"
+    hms_is=true
+    # }}}
+  elif [[ $ts =~ ^([0-9]+)$ ]]; then # {{{
+    if [[ $ts =~ ^([0-9]{7,})$ ]]; then
+      now=$(time2s -s '0:00')
+      out=$(time2s --diff "@$ts" "@$now")
+    else
+      out="$ts"
+    fi # }}}
+  else # {{{
+    now=$(time2s -s '0:00')
+    out=$(time2s --diff "$ts" "@$now")
+  fi # }}}
+  $hms_only && ! $hms_is && return 0
+  case $outForm in # {{{
+  s)      echo "${color}$out${coff}";;
+  abs)    echo "${color}$(command date +$TIME_FMT -d "@$((now+dir*out))")${coff}";;
+  abs-s)  echo "${color}$(command date +%s        -d "@$((now+dir*out))")${coff}";;
+  delta)  echo "${color}$(time2s --diff "@$((now+dir*out))" "now")${coff}";;
+  *)      echo "Unknown output form [$outForm]" >/dev/stderr && return 1;;
+  esac # }}}
+}
+alias t2s='time2s' # @@
+export PHISTORY_IGNORED_COMMANDS+=":time2s:t2s" # }}}
+time-measure() { # @@ # {{{
+  local tNow="$(command date +"%s%N")"
+  if [[ $1 == '@@' ]]; then # {{{
+    case ${4:-$3} in
+    --test) echo "-v 50 100 200";;
+    --out)  echo "/dev/stderr /dev/stdout";;
+    -v | --var \
+      | -r | --reset | --end \
+      | --add-unit | --round=* | -s \
+      | --msg) echo "---";;
+    -u) echo "s ms us ns";;
+    *)
+      echo "--test --get-time -v --var -r --reset --end --add-unit --round=0 --round=1 --round=3 --round=6 --round= --msg --on-init"
+      echo "-s -u -p --plain --no-plain --out -0 --from-0 -0-abs --from-0-abs $(command date +%s%N) -?";;
+    esac
+    return 0
+  fi # }}}
+  local t0= tLast= unit=s round= addUnit=false msg= onInit=false silent=${TIME_MEASURE_SILENT} d= plain= out='/dev/stderr' from0Abs=false from0=false
+  local LC_NUMERIC=
+  local tLastVariable=${TIME_MEASURE_VARIABLE:-time-measure-var}
+  if [[ $1 == '--test' ]]; then # {{{
+    shift
+    local i= cnt=100 verify=false
+    while [[ ! -z $1 ]] || false; do
+      case $1 in
+      -v) verify=true;;
+      *)  cnt=$1;;
+      esac; shift
+    done
+    [[ ! -z $2 ]] && cnt=$2
+    [[ $3 == '-v' ]] && verify=true
+    TIME_MEASURE_OVERHEAD=
+    time-measure -v testOverhead -r
+    for ((i=0; i<$cnt; i++)); do # {{{
+      time-measure -v testTmp
+    done &>/dev/null # }}}
+    local diff=$(time-measure -v testOverhead -u ns --out /dev/stdout)
+    time-measure -v testTmp --end
+    time-measure -v testOverhead --end
+    export TIME_MEASURE_OVERHEAD="$(calc -qp "round($diff*0.70/$cnt)")"
+    if $verify; then # {{{
+      echo "# Without verify:" >/dev/stderr
+      echo "export TIME_MEASURE_OVERHEAD=$TIME_MEASURE_OVERHEAD # ns" >/dev/stderr
+      echo >/dev/stderr
+      local j=
+      for ((j=1; j<=5; j++)); do # {{{
+        echo "Adjusting #$j..." >/dev/stderr
+        local min=0 minAbove1=0 sleepTime_diff=
+        for ((i=0; i<10; i++)); do # {{{
+          time-measure -v sleepTime -r; sleep 1; sleepTime_diff=$(time-measure -v sleepTime -u ns --out /dev/stdout)
+          [[ $sleepTime_diff -lt 1000000000 && ( $min == 0       || $sleepTime_diff -lt $min       ) ]] && min=$sleepTime_diff
+          [[ $sleepTime_diff -gt 1000000000 && ( $minAbove1 == 0 || $sleepTime_diff -lt $minAbove1 ) ]] && minAbove1=$sleepTime_diff
+        done # }}}
+        if [[ $min -gt 0 ]]; then # {{{
+          min="$(calc -qp -- "(10^9-$min)")"
+          min=$(calc -qp -- "round(1.2*$min)")
+          echo "Adjusting overhead by ${min}ns" >/dev/stderr
+          export TIME_MEASURE_OVERHEAD="$(calc -qp -- "$TIME_MEASURE_OVERHEAD-($min)")"
+        elif [[ $minAbove1 -gt 0 ]]; then
+          minAbove1="$(calc -qp -- "($minAbove1-10^9)")"
+          echo "Adjusting(2) overhead by -${minAbove1}ns" >/dev/stderr
+          export TIME_MEASURE_OVERHEAD="$(calc -qp -- "$TIME_MEASURE_OVERHEAD+($minAbove1)")"
+        fi # }}}
+      done # }}}
+      for ((i=0; i<10; i++)); do # {{{
+        time-measure -v sleepTime -r; sleep 1; time-measure -v sleepTime -u ns
+      done # }}}
+      time-measure -v sleepTime --end
+    fi # }}}
+    echo "export TIME_MEASURE_OVERHEAD=$TIME_MEASURE_OVERHEAD # ns" >/dev/stderr
+    return 0
+  fi # }}}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -v | --var) # {{{
+      export TIME_MEASURE_VARIABLE="$2"
+      tLastVariable=$TIME_MEASURE_VARIABLE
+      shift;; # }}}
+    -r | --reset) # {{{
+      tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
+      local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 diff_s_last=${tName}_diff_s_last diff_s_0=${tName}_diff_s_0 accu_0=${tName}_accu_0
+      ns_last= ns_0= diff_s_last= diff_s_0= accu_0=;; # }}}
+    --end) # {{{
+      tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
+      unset TIME_MEASURE_VARIABLE ${tName}_ns_last ${tName}_ns_0 ${tName}_diff_s_last ${tName}_diff_s_0 ${tName}_accu_0
+      return 0;; # }}}
+    -\?) # {{{
+      tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
+      echo "TIME_MEASURE_VARIABLE=$TIME_MEASURE_VARIABLE" >/dev/stderr
+      vGet --all $tName >/dev/stderr
+      return 0;; # }}}
+    --add-unit)   addUnit=true;;
+    --round=*)    round=${1#--round=};;
+    --msg)        msg="$2"; silent=false; shift;;
+    --on-init)    onInit=true;;
+    --out)        out=$2; shift;;
+    -p | --plain) plain=true;;
+    --no-plain)   plain=false;;
+    -s)           silent=true;;
+    -u)           unit="$2"; shift;;
+    --get-time)   echo "$tNow"; return 0;;
+    -0-abs | --from-0-abs) from0Abs=true;; # does not change counters
+    -0     | --from-0)     from0=true;;    # does not change counters
+    [0-9]*)       tLast="$1"; t0="$1";;
+    esac; shift
+  done # }}}
+  tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
+  local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 diff_s_last=${tName}_diff_s_last diff_s_0=${tName}_diff_s_0 accu_0=${tName}_accu_0
+  [[ -z $tLast ]] && tLast=$ns_last
+  t0=$ns_0
+  if [[ -z $tLast ]]; then # First run: just collect time # {{{
+    [[ "$msg" == 'init' ]] && onInit=true
+    if [[ ! -z $msg ]] && $onInit; then
+      if [[ ( $out == '/dev/stdout' && ! -t 1 ) || ( $out == '/dev/stderr' && ! -t 2 ) ]]; then
+        [[ -z $plain ]] && plain=true
+      fi
+      ! $addUnit && unit=
+      if ! ${plain:-false}; then
+        printf "%s: %0.03f%s\n" "${msg:-$tLastVariable}" "0" "$unit" >$out
+      else
+        printf "%0.03f%s\n" "0" "$unit">$out
+      fi
+    fi
+    ns_last="$(command date +"%s%N")"
+    ns_0=$ns_last
+    accu_0=0
+    return 0
+  fi # }}}
+  local tDiffLast=$(calc -qp -- "($tNow - $tLast - (${TIME_MEASURE_OVERHEAD:-0}))")
+  local tDiff0=$(   calc -qp -- "($tNow - $t0    - (${TIME_MEASURE_OVERHEAD:-0}))")
+  [[ $tDiffLast == -* ]] && tDiffLast=$(calc -qp -- "($tNow - $tLast)")
+  [[ $tDiff0    == -* ]] && tDiff0=$(   calc -qp -- "($tNow - $t0)")
+  if ! ${silent:-false}; then # {{{
+    local tDiff=$tDiffLast
+    $from0Abs && tDiff=$tDiff0
+    $from0    && tDiff=$accu_0
+    case $unit in # {{{
+    s)   d=9; unit=s;  [[ -z $round ]] && round=3;;
+    ms)  d=6; unit=ms; [[ -z $round ]] && round=0;;
+    us)  d=3; unit=us; [[ -z $round ]] && round=0;;
+    ns)  d=0; unit=ns; [[ -z $round ]] && round=0;;
+    *)   d=0; unit=ns; [[ -z $round ]] && round=0;;
+    esac # }}}
+    tDiff=$(calc -qp -- "($tDiff/(10^$d))")
+    ! $addUnit && unit=
+    LC_NUMERIC=en_US.UTF-8
+    if [[ ( $out == '/dev/stdout' && ! -t 1 ) || ( $out == '/dev/stderr' && ! -t 2 ) ]]; then
+      [[ -z $plain ]] && plain=true
+    fi
+    if ! ${plain:-false}; then
+      printf "%s: %0.0${round}f%s\n" "${msg:-$tLastVariable}" "$tDiff" "$unit" >$out
+    else
+      printf "%0.0${round}f%s\n" "$tDiff" "$unit">$out
+    fi
+  fi # }}}
+  if $from0 || $from0Abs; then return 0; fi
+  diff_s_last=$(calc -qp -- "($tDiffLast / 1000000000)")
+  diff_s_0=$(   calc -qp -- "($tDiff0    / 1000000000)")
+  accu_0=$(     calc -qp -- "($accu_0    + $tDiffLast)")
+  ns_last="$(command date +"%s%N")"
+  return 0
+} # }}}
+sleep-precise() { # @@ # {{{
+  local var="SLEEP_PRECISE_$$" keep=false save=false printTime=false
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "-v --var -k --keep -r --reset -s --save -i --info"
+    return 0
+  fi # }}}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -v | --var)   var+="_$2"; shift;;
+    -k | --keep)  keep=true;;
+    -r | --reset) keep=false;;
+    -s | --save)  save=true;;
+    -i | --info)  printTime=true;;
+    *) break;;
+    esac; shift
+  done # }}}
+  local rt=${EPOCHREALTIME/[,.]}
+  [[ -z $rt ]] && rt=$(( $(command date +%s%N) / 1000 ))
+  local -n v=$var
+  if [[ -z $v || $v == 0 ]] || $save; then # {{{
+    v=$rt
+    return 0
+  fi # }}}
+  local sTime=${1:-1.0} m=${SLEEP_PRECISE_MARGIN:-3000} s2us=1000000
+  [[ $sTime == *.* ]] || sTime="$sTime.0"
+  sTime=$(( ${sTime%.*} * s2us + ${sTime#*.} * s2us / 10 ))
+  sTime=$(( sTime - ($rt - v) - m ))
+  if [[ $sTime -gt 0 ]]; then # {{{
+    local skip=false
+    while [[ ${#sTime} -lt 6 ]]; do sTime="0$sTime"; skip=true; done
+    if $skip; then
+      sTime="0.$sTime"
+    elif [[ $sTime =~ ^(.*)([0-9]{6})$ ]]; then
+      sTime="${BASH_REMATCH[1]:-0}.${BASH_REMATCH[2]}"
+    fi
+    if $printTime; then
+      echo $sTime
+    else
+      sleep $sTime
+    fi
+  elif $printTime; then
+    echo 0
+  fi # }}}
+  if $keep; then
+    eval export $var=$((rt + 10#${sTime/[,.]} + m))
+  else
+    eval export $var=0
+  fi
+} # }}}
+

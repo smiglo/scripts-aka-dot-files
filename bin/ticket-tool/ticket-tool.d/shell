@@ -42,7 +42,7 @@ execute() { # {{{
       echo "${cmd_TT##*/} "$issue" $cmd"
     else
       local c="${cmd#@@}" && c="${c# }"
-      eval $c
+      echo "$c"
     fi
   fi # }}}
   local line=
@@ -129,12 +129,14 @@ export TICKET_CONF_SHELL_IN=true
 title="${TICKET_CONF_SHELL_TITLE:-$TICKET_CONF_TITLE}"
 if [[ ! -z $title ]]; then
   if [[ $title == \$* ]]; then
-    $ALIASES set_title "$(eval $title)"
+    set_title "$(eval $title)"
   else
-    $ALIASES set_title "$title"
+    set_title "$title"
   fi
 fi
-[[ ! -z "$histFile" && ! -e "$histFile" ]] && touch "$histFile"
+if [[ ! -z "$histFile" && ! -e "$histFile" ]]; then
+  [[ -e "$(dirname "$histFile")" ]] && touch "$histFile" || histFile=
+fi
 # [[ ! -z "$histFile" && -s "$histFile" && "$(tail -n1 "$histFile")" != '---' ]] && echo "---" >>"$histFile"
 emptyInput=false
 completionMethod='short'
@@ -161,17 +163,18 @@ while true; do # {{{
     [[ "$input" == '---' || "$input" == "#"* ]] && continue
     case "$input" in
     help | hh) # {{{
-      echo "q    - quit"
-      echo "!*   - skip extra-interpretation"
-      echo "ct   - toggle complete (short vs full list)"
-      echo "@@*  - evaluate INPUT as entered, not as ticket command"
-      echo "@ *  - execute as 'wait-on @ INPUT'"
-      echo "@*   - if provided subcommand not present, then fallback to secondary/helper command: FALLBACK_CMD INPUT"
+      echo "q        - quit"
+      echo "!*       - skip extra-interpretation, invoke as a subcommand"
+      echo "^*       - skip extra-interpretation, invoke as a full command for current ticket"
+      echo "ct       - toggle complete (short vs full list)"
+      echo "@@*      - evaluate INPUT as entered, not as ticket command"
+      echo "@ *      - execute as 'wait-on @ INPUT'"
+      echo "@*       - fallback to secondary/helper command: FALLBACK_CMD INPUT"
       echo
       echo "Changing command:"
-      echo "c      - restore original command"
-      echo "-c     - choose command from a list"
-      echo "c CMD  - change command to CMD"
+      echo "c        - restore original command"
+      echo "-c       - choose command from a list"
+      echo "c CMD    - change command to CMD"
       echo
       echo "Changing ticket:"
       echo "j              - restore original ticket"
@@ -179,7 +182,8 @@ while true; do # {{{
       echo "j@ticket [CMD] - change ticket and optionally change command"
       echo "j ticket [CMD] - change ticket and optionally change command"
       continue;; # }}}
-    q | quit ) break;;
+    q | quit ) # {{{
+      break;; # }}}
     !*) # {{{
       input="${input#!}"; input="${input# }";; # }}}
     compl-toggle | ct) # {{{
@@ -202,7 +206,7 @@ while true; do # {{{
       continue
       ;; # }}}
     @*) # {{{
-      if [[ " $completion " == *\ $input\ * ]]; then
+      if [[ " $completion " == *\ ${input%% *}\ * ]]; then
         execute $cmd "$input"
       elif [[ ! -z "$TICKET_CONF_SHELL_FALLBACK_CMD" ]]; then
         execute $TICKET_CONF_SHELL_FALLBACK_CMD "${input#@}"
@@ -244,8 +248,12 @@ while true; do # {{{
         [[ ! -z "$subcmd" ]] && input=
       fi # }}}
       ;; # }}}
+    ^*) # {{{
+      input="${input#^}"
+      execute "$input"
+      continue;; # }}}
     *) # {{{
-      if [[ -z "$subcmd" && " $completion " != *" $input "* ]]; then # {{{
+      if [[ -z "$subcmd" && " $completion " != *" ${input%% *} "* ]]; then # {{{
         for i in $commands; do
           if [[ "$input" == "$i" ]]; then
             setCmd "$input"

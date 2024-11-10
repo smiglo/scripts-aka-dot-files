@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+completionCacheInvocation() { # {{{
+  echo "declare complName=compl_${issue//-/_}; declare -A \$complName; declare -n complMap=\$complName"
+} # }}}
+completionCacheLoad() { # {{{
+  export complUpdate=false complCacheFile="$TMP_MEM_PATH/tt-${TICKET_PATH##*/}.ccache" complKey=
+  if [[ -e $complCacheFile ]]; then
+    source $complCacheFile
+    [[ ! -z $issue_file && ${complMap[TS]} -lt $(stat -c %Y $issue_file) ]] && complMap=()
+  else
+    touch $complCacheFile
+  fi
+} # }}}
+completionCacheUpdate() { # {{{
+  local k="$1"; k="${k// /-}"
+  [[ -e $complCacheFile ]] && source $complCacheFile
+  complMap[$k]="$(echo $2)"
+  complMap[TS]=$EPOCHSECONDS
+  sed -i '/'$complName'/d' $complCacheFile
+  declare -p $complName >>$complCacheFile
+} # }}}
+completionCacheGet() { # {{{
+  local k="$1"; k="${k// /-}"
+  echo "${complMap[$k]}"
+} # }}}
+export -f completionCacheInvocation completionCacheLoad completionCacheUpdate completionCacheGet
+

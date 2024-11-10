@@ -9,8 +9,8 @@ export RCSTUFF_RUNTIME_POST_INSTALLED=true
 # Runtime file # {{{
 RUNTIME_POST_FILE=$RUNTIME_PATH/runtime-post.bash
 [[ -e $RUNTIME_POST_FILE ]] && source $RUNTIME_POST_FILE
-for i in $BASH_PROFILES; do
-  [[ -e $RUNTIME_POST_FILE.$i ]] && source $RUNTIME_POST_FILE.$i
+for profi in $BASH_PROFILES; do
+  [[ -e $RUNTIME_POST_FILE.$profi ]] && source $RUNTIME_POST_FILE.$profi
 done
 unset RUNTIME_POST_FILE
 # }}}
@@ -23,20 +23,13 @@ while read l; do
 done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
 unset l TMUX_STATUS_RIGHT_EXTRA
 # }}}
-# Source profiles' runtimes {{{
-for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/runtime-post ]] && source $i/runtime-post
+# Source profiles' runtimes # {{{
+for profi in $BASH_PROFILES_FULL; do
+  [[ -e $profi/runtime-post ]] && source $profi/runtime-post
 done # }}}
-if ${CHANGE_UTILS_PATHS:-false}; then # {{{
-  [[ ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
-  [[ ! -e $VIM_UNDOES_PATH ]] && command mkdir -p $VIM_UNDOES_PATH
-  [[ ! -e $VIM_SESSIONS_PATH ]] && command mkdir -p $VIM_SESSIONS_PATH
-fi
-unset CHANGE_UTILS_PATHS
-# }}}
 # Remote changes # {{{
 src_dir="$SHARED_BASH_PATH/to-apply"
-if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH ]]; then
+if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && $UID != 0 ]]; then
   now="${EPOCHSECONDS:-$(epochSeconds)}" rmt_chngs_file="$TMP_MEM_PATH/.remote.changes"
   if [[ -z $REMOTE_CHANGES_LAST || $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
     REMOTE_CHANGES_LAST=0
@@ -75,7 +68,7 @@ if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH ]]; then
           echo "Missing passphrase for [$file]"
           continue
         fi
-        if ! eval $ALIASES encryptor $p "$i" "$j"; then
+        if ! eval encryptor $p "$i" "$j"; then
           echo "Cannot decrypt [$file]"
           continue
         fi
@@ -107,7 +100,74 @@ if [[ ! -z "$UNICODE_EXTRA_CHARS_FILE" && ! -e "$UNICODE_EXTRA_CHARS_FILE" ]]; t
   } >"$UNICODE_EXTRA_CHARS_FILE"
   unset i
 fi # }}}
+# fzf override # {{{
+__fzf_select__() { # {{{
+  local walker="file,dir,follow,hidden" dirMode=false
+  FZF_DEFAULT_COMMAND=${FZF_CTRL_T_COMMAND:-}
+  local opts="${FZF_CTRL_T_OPTS-}"
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --cmd) # {{{
+      FZF_DEFAULT_COMMAND="$2"; shift;; # }}}
+    --dir) # {{{
+      dirMode=true
+      walker="dir,follow,hidden"
+      FZF_DEFAULT_COMMAND=${FZF_ALT_C_COMMAND:-}
+      opts="${FZF_ALT_C_OPTS-}";; # }}}
+    *) break;;
+    esac; shift
+  done # }}}
+  FZF_DEFAULT_OPTS=$(__fzf_defaults "--reverse --walker=$walker --scheme=path" "$opts -m")
+  (
+    FZF_DEFAULT_COMMAND="$FZF_DEFAULT_COMMAND | sed 's|^\./||'"
+    p="$PWD"; origPath="$PWD"
+    while true; do
+      command cd "$p"
+      prompt="> "
+      [[ $PWD != $origPath ]] && prompt="${PWD/$HOME/\~}> "
+      key_upper="ctrl-u" key_home="ctrl-h" key_into="ctrl-e" key_orig="ctrl-o"
+      list="$(FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd) "$@" --prompt "$prompt" --expect $key_upper --expect $key_home --expect $key_into --expect $key_orig)"
+      case $(echo "$list" | sed -n '1p') in
+      $key_upper) p="$(cd ..; pwd)"; continue;;
+      $key_home)  p="$HOME"; continue;;
+      $key_orig)  p="$origPath"; continue;;
+      $key_into)  # {{{
+        p="$(echo "$list" | sed -n '2p')"
+        $dirMode || p="$(dirname "$p")"
+        p="$PWD/$p"
+        continue;; # }}}
+      esac
+      echo "$list" | sed '1d' |
+      while read -r item; do # {{{
+        printf '%q\n' "$PWD/$item"  # escape special chars
+      done # }}}
+      break
+    done
+  ) | sed -e 's|'"$PWD/"'||' | tr '\n' ' '
+} # }}}
+fzf-dir-widget() { # {{{
+  local selected="$(__fzf_select__ --dir "$@")"
+  READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+  READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
+} # }}}
+if $FZF_INSTALLED; then # {{{
+  bind -x '"\C-t": "fzf-dir-widget"'
+fi # }}}
+# }}}
 if $IS_MAC; then # {{{
   [[ -z $PS1_CURSOR_COLOR ]] && PS1_CURSOR_COLOR=false
 fi # }}}
+if ${TMUX_POPUP:-false}; then # {{{
+  if ! $TMUX_POPUP_SILENT; then
+    echorm --name popup
+    echorv -nl -e s d
+    echorm --name -
+  fi
+  export BASH_PHISTORY_FILE=
+  export TMUX_SESSION=POPUP
+  if [[ ! -z $d ]]; then
+    set-utils -h "$d" +basic +hist +remember-conf-dir=.remb +note-file=notes.txt
+  fi
+fi # }}}
+unset -f set-utils
 

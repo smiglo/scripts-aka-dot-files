@@ -31,7 +31,7 @@ while [[ ! -z $1 ]]; do
   esac
   shift
 done # }}}
-# Prepare #{{{
+# Prepare # {{{
 ROOT=$(cd $ROOT; pwd)
 if [[ -e $ROOT/local ]]; then
   suffix=

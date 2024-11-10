@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# Configure {{{
+# Configure # {{{
 export BASH_ALIASES_FROM_CMD=false
-if [[ "${BASH_SOURCE[0]}" == "$0" && ! -z $1 ]]; then
+if [[ "${BASH_SOURCE[0]}" == "$0" && ! -z $1 ]]; then # {{{
   export BASH_ALIASES_FROM_CMD=true
   if [[ $1 == '--clean' ]]; then # {{{
     shift
@@ -30,9 +30,11 @@ else
   export RCSTUFF_ALIASES_INSTALLED=true
   ___rcstuff_aliases_markup() { : ; }
   export -f ___rcstuff_aliases_markup
-fi
-install() { # {{{
+fi # }}}
+install() { # START: install # {{{
   $BASH_ALIASES_FROM_CMD && return 0
+  local doCheck=true
+  [[ $1 == --force-yes ]] && doCheck=false && shift
   local tool="$1"
   local add_completion=
   if [[ "$tool" == *:@@* ]]; then
@@ -40,14 +42,17 @@ install() { # {{{
     tool="${tool%:@@*}"
     [[ -z $add_completion ]] && add_completion="$tool"
   fi
-  [[ $TO_INSTALL != *\ $tool\ * ]] && return 1
+  $doCheck && [[ $TO_INSTALL != *\ $tool\ * ]] && return 1
   [[ ! -z $add_completion ]] && export COMPLETION_GENERIC_FUNCTIONS+=" ${add_completion//:/ }"
   return 0
 }
 export -f install
-# }}}
-installExtensions() { # {{{
-  local dumpFile="$BASHRC_RUNTIME_PATH/aliases-$2.dump" complFile="$BASHRC_RUNTIME_PATH/aliases.compl" lockDir="$BASHRC_RUNTIME_PATH/.lock-$2.lock"
+# END: install # }}}
+installExtensions() { # START: installExtensions # {{{
+  local ask=true
+  [[ $1 == --no-ask ]] && ask=false && shift
+  local name="$2"
+  local dumpFile="$BASHRC_RUNTIME_PATH/aliases-$name.dump" complFile="$BASHRC_RUNTIME_PATH/aliases.compl" lockDir="$BASHRC_RUNTIME_PATH/.lock-$name.lock"
   $BASH_ALIASES_FROM_CMD && [[ ! -e "$dumpFile" ]] && dumpFile="${dumpFile%.dump}-local.dump"
   if [[ ! -e "$dumpFile" || ! -e "$complFile" ]]; then # {{{
     local i= fi= compl= list= wdir=$1
@@ -59,17 +64,20 @@ installExtensions() { # {{{
     fi
     local complOrig="$COMPLETION_GENERIC_FUNCTIONS"
     COMPLETION_GENERIC_FUNCTIONS=""
-    for i in $(command cd $wdir; find . -maxdepth 1 -type f \( -name '*.ign' -prune -o -print \) | sed 's|^\./||' | sort -n); do # {{{
+    for i in $(command cd $wdir; find . -maxdepth 1 -type f \( -name '*.ign' -prune -o -name '*~' -prune -o -print \) | sed 's|^\./||' | sort -n); do # {{{
       fi="$wdir/$i"
+      [[ "$(head -n1 $fi)" == "#!"* ]] || { echor "Skipping file [$i] because of missing shebang"; continue; }
       [[ $i =~ ^[0-9]+\..* ]] && i="${i#*.}"
+      local ask_i=$ask
+      [[ $i == -* ]] && ask_i=true && i=${i#-}
       compl= && list=
       [[ -e $complFile ]] && compl="$(awk '/^'"${fi##*/}"': / {print $2}' "$complFile")"
       if [[ -z $compl ]]; then # {{{
-        list+=" $(sed -n 's/\(^[a-zA-Z].*\)()\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi" | tr '\n' ' ')"
-        list+=" $(sed -n 's/^function \([a-zA-Z].*\)\(()\)\?\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi" | tr '\n' ' ')"
-        list+=" $(sed -n '/# @@:/s/.*# @@:\s*\([^ ]*\).*/\1/p' "$fi" | tr '\n' ' ')"
+        list+=" $(sed -n 's/^\s*\([a-zA-Z].*\)()\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi")"
+        list+=" $(sed -n 's/^\s*function \([a-zA-Z].*\)\(()\)\?\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi")"
+        list+=" $(sed -n '/# @@:/s/.*# @@:\s*\([^ ]*\).*/\1/p' "$fi")"
         list+=" $(awk -F'[ =]' '/^alias .*# @@$/ {print $2}' "$fi")"
-        list="$(echo $list)"
+        list="$(echo $list | tr '\n' ' ')"
         if command grep -q "^# complete" "$fi"; then
           list+=" $(sed -n '/^# complete:/s/^[^:]*://p' "$fi")"
           list="$(echo $list)"
@@ -84,7 +92,7 @@ installExtensions() { # {{{
         compl=""
       fi # }}}
       command grep -q "^# env:" "$fi" && eval "$(sed -n '/# env: /s/# env: \(.*\)/\1/p' "$fi")"
-      if install "$i$compl"; then # {{{
+      if install $(! $ask_i && echo "--force-yes") "$i$compl"; then # {{{
         if [[ ! -e "$dumpFile" ]]; then
           cat >"$dumpFile" <<-EOF
 						#!/usr/bin/env bash
@@ -102,33 +110,34 @@ installExtensions() { # {{{
     done # }}}
     local complNew="$COMPLETION_GENERIC_FUNCTIONS"
     export COMPLETION_GENERIC_FUNCTIONS="$complOrig"
-    echo "#-#-# ---- END ----" >>"$dumpFile"
-    echo "export COMPLETION_GENERIC_FUNCTIONS+=\" $complNew\"" >>"$dumpFile"
+    echo >>"$dumpFile"
+    echo "export COMPLETION_GENERIC_FUNCTIONS+=\" $complNew\"" | sed 's/\s\+/ /g' >>"$dumpFile"
     rm -rf "$lockDir"
   fi # }}}
   if [[ -e "$dumpFile" ]]; then # {{{
+    if $BASH_ALIASES_FROM_CMD; then # {{{
+      for i in $BASH_ALIASES_DUMMY; do
+        eval "$i() { :; }; export -f $i"
+      done
+    fi # }}}
     source "$dumpFile"
   fi # }}}
+  if [[ $dumpFile != *'-local.dump' ]]; then
+    local name=${2//-/_}
+    export ALIASES_TS_${name^^}="$(command stat -c %Y "$dumpFile")"
+  fi
 }
 export -f installExtensions
-# }}}
-# Check ALIASES_MAP {{{
+# END: installExtensions # }}}
+# Check ALIASES_MAP # {{{
 TO_INSTALL=''
-ALIASES_MAP_BASIC="cmatrix vim-aliases ls-colors rsync less cp-recur cd-stuff date du df zipf find-short diff rmf-basic grep hl mkdir \
-  ack-wrapper mg extract tmux-tools logout exit sshh ps1-tools bash-phistory set-title progress weather bash-hist mutex-locking \
-  run_for_some_time update-file for-do clear-screen smart-alias get-file-list remember cpp lolcat kb-open kill-rec oth-aliases unicode-chars \
-  src aawk time2s repo-browse xargs-tools note net status prefixVars simple-dbg echor share actions"
-$FZF_INSTALLED && ALIASES_MAP_BASIC+=' fzf-tools'
-ALIASES_MAP_EXT="gitst truecrypt shlock clang grc clipboard rmf-trash print-colors encryptor www sshh-add \
-  simple-http auto-sudo radare2 reminder sudo dum"
-! $IS_MAC && ALIASES_MAP_EXT+=" caps-ctrl"
-[[ $ALIASES_MAP == 'NONE' ]] && exit 0
-TO_INSTALL=" $ALIASES_MAP_BASIC $ALIASES_MAP_EXT "
+if [[ $ALIASES_MAP == 'NONE' ]]; then
+  [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 0 || return 0
+fi
 if [[ ! -z $ALIASES_MAP ]]; then # {{{
   a_map=" $ALIASES_MAP "
   if [[ $a_map == *\ BASIC\ * ]]; then
     a_map="${a_map//' BASIC '/ }"
-    TO_INSTALL=" $ALIASES_MAP_BASIC "
   fi
   for i in $a_map; do
     case $i in
@@ -139,1027 +148,27 @@ if [[ ! -z $ALIASES_MAP ]]; then # {{{
   unset a_map
 fi # }}}
 TO_INSTALL=" $TO_INSTALL "
+declare -F echor >/dev/null 2>&1 || source $HOME/.bashrc --do-min
 echorm "To alias: [$TO_INSTALL]"
 # }}}
 # }}}
-# Aliases {{{
-if install 'vim-aliases'; then # {{{
-  alias vv='vim --Fast'
-  export PHISTORY_IGNORED_COMMANDS+=":vv"
-fi # }}}
-if install 'cmatrix' && which cmatrix >/dev/null 2>&1; then # {{{
-  export CMATRIX_COLORS=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' )
-  alias cmatrix="cmatrix -u ${CMATRIX_SPEED:-5} -b -C "'${CMATRIX_COLORS[$(($RANDOM % ${#CMATRIX_COLORS[*]}))]}'
-fi # }}}
-if install 'ls-colors'; then # {{{
-  # Enable color support of ls and also add handy aliases {{{
-  if [ -x /usr/bin/dircolors ] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    export LS_COLORS='di=36;40:ln=35;40:so=37;40:pi=33;40:ex=32;40:bd=0;43:cd=0;43:su=0;45:sg=0;45:tw=4;36:ow=4;36:'
-    alias ls='ls --color=auto -B'
-    alias ll='ls --color=auto -ABlhv'
-    alias l.='ls --color=auto -ABlvhd .*'
-  else
-    alias ll='ls -ABlhv'
-    alias l.='ls -ABlhvd .*'
-  fi
-  # }}}
-fi # }}}
-if install 'rsync'; then # {{{
-  alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
-  alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
-  alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
-  alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
-fi # }}}
-if install 'less'; then # {{{
-  alias more='less'
-fi # }}}
-if install 'cp-recur'; then # {{{
-  alias cp='cp -R'
-fi # }}}
-if install 'du'; then # {{{
-  alias du='du -sh'
-fi # }}}
-if install 'df'; then # {{{
-  if $IS_MAC; then
-    alias df='df -h'
-  else
-    alias df='df -Th'
-  fi
-fi # }}}
-if install 'gitst'; then # {{{
-  alias gitst='git-cmds.sh gitst'
-fi # }}}
-if install 'truecrypt'; then # {{{
-  alias truecrypt='truecrypt -t'
-fi # }}}
-if install 'shlock'; then # {{{
-  alias shlock='sshh-add --lock'
-fi # }}}
-if install 'diff'; then # {{{
-  if type colordiff >/dev/null 2>&1; then
-    alias diff='\colordiff -u'
-    alias diff-sbs='\colordiff -y --suppress-common-lines'
-  else
-    alias diff='\diff -u --suppress-common-lines'
-    alias diff-sbs='\diff -y --suppress-common-lines'
-  fi
-fi # }}}
-if install 'clang'; then # {{{
-  alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
-  alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
-fi # }}}
-if install 'fix-mouse'; then # {{{
-  alias fix_mouse='unclutter -idle 1 -root -grab -visible'
-fi # }}}
-if install 'grc'; then # {{{
-  if type grc >/dev/null 2>&1; then
-    grc_prgs=''
-    grc_prgs+="mount\n"
-    if type column >/dev/null 2>&1; then
-      for i in $(echo -e "$grc_prgs"); do
-        alias ${i/:*}="__util_grc_f() { [[ -z \$1 && -t 1 ]] && { command ${i//:/ } | column -t | grcat conf.${i/:*}; } || command ${i//:/ } "\$@"; }; __util_grc_f"
-      done
-      grc_prgs=''
-    fi
-    grc_prgs+="traceroute ::google.pl\nconfigure\ngcc\nnetstat\nwdiff\nlast\nps\ndig\n"
-    grc_prgs+="mtr ::google.pl @@case \\\$1 in 8) arg='8.8.8.8';; esac;\n"
-    grc_prgs+="ping ::-c:5:8.8.8.8 @@case \\\$1 in 8) arg='8.8.8.8';; esac;\n"
-    if ! $IS_MAC; then
-      grc_prgs+="ifconfig\n"
-    else
-      grc_prgs="${grc_prgs/mtr/sudo-mtr}"
-    fi
-    while read cmd i; do
-      [[ -z $cmd ]] && continue
-      sudo= def= code=":" params=
-      [[ $cmd == sudo-* ]] && cmd="${cmd#sudo-}" && sudo="sudo"
-      while [[ ! -z $i ]]; do
-        ii="${i%% *}"
-        case $ii in
-        ::*) def="${ii#::}"; def="${def//:/ }";;
-        @@*) code="${i#@@}"; break;;
-        *)   params+="$ii ";;
-        esac
-        i="${i#$ii}" && i="${i# }"
-      done
-      alias $cmd="__util_grc_f() { arg=\"\$@\"; ${code%;}; if [[ -t 1 ]]; then $sudo grc $cmd \${arg:-$def}; else $sudo command $cmd \${arg:-$def}; fi; }; __util_grc_f"
-    done <<<"$(echo -e "$grc_prgs")"
-    unset grc_prgs cmd i ii sudo def code params
-  fi
-fi # }}}
-if install 'clipboard'; then # {{{
-  if which xclip >/dev/null 2>&1; then
-    xclip() { # {{{
-      if [[ -z $1 ]]; then
-        [[ ! -t 0 ]] && command xclip -in  -selection clipboard
-        [[ ! -t 1 ]] && command xclip -out -selection clipboard
-        return 0
-      fi
-      command xclip $@
-    } # }}}
-  elif which pbcopy >/dev/null 2>&1; then
-    if which reattach-to-user-namespace >/dev/null 2>&1; then
-      xclip() { # {{{
-        if [[ -z $1 ]]; then
-          [[ ! -t 0 ]] && reattach-to-user-namespace pbcopy
-          [[ ! -t 1 ]] && reattach-to-user-namespace pbpaste
-          return 0
-        fi
-        reattach-to-user-namespace pbcopy $@
-      } # }}}
-    else
-      xclip() { # {{{
-        if [[ -z $1 ]]; then
-          [[ ! -t 0 ]] && pbcopy
-          [[ ! -t 1 ]] && pbpaste
-          return 0
-        fi
-        reattach-to-user-namespace pbcopy $@
-      } # }}}
-    fi
-  else
-    xclip() { echor "xclip not defined"; cat -; }
-  fi
-  ccopy()  { cat - | xclip;  }
-  cpaste() { xclip | cat -; }
-  export -f xclip ccopy cpaste
-  alias xc='xclip'
-fi # }}}
-if install 'bash-hist'; then # {{{
-  hist() {
-    if [[ ! -z $1 ]]; then
-      history $@
-      return
-    fi
-    if $FZF_INSTALLED; then
-      history | fzf --no-sort --tac
-    else
-      history | hl +cG \"^\s\+[0-9]\+\" +cB -e \"[0-9]\+-[0-9]\+\" | grep_wrapper --cmd-grep +tee=false +cY -e
-    fi
-  }
-  alias h="hist"
-  alias H="phist"
-  alias l="fc -s"
-  export HISTIGNORE+=":h:h *:H:H *:hist:hist *:history*"
-fi # }}}
-if install 'mkdir'; then # {{{
-  alias mkdir='mkdir -pv'
-fi # }}}
-if install 'lolcat' && which lolcat >/dev/null 2>&1; then # {{{
-  export LOLCAT_PARAMS="-F 0.2 -p 3"
-  export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
-  lc() {
-    local p="$@"
-    if [[ -z $p ]]; then
-      p="$LOLCAT_PARAMS"
-    elif [[ $p == '-a' ]]; then
-      p="$LOLCAT_PARAMS_A"
-    fi
-    lolcat $p
-  }
-  alias lll='ll | lc'
-fi # }}}
-if install 'radare2' && which r2 >/dev/null 2>&1; then # {{{
-  alias r2help="r2 -q -c '?*~...' -"
-fi # }}}
-if install 'auto-sudo'; then # {{{
-  if [[ $UID != 0 ]] ; then
-    ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
-    if $IS_MAC; then
-      alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
-    else
-      alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt -y"
-      alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get -y"
-      alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
-      alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
-      alias snap="$ALIASES_AUTO_SUDO_PROMPT && sudo snap"
-    fi
-  fi
-fi # }}}
-if install 'oth-aliases'; then # {{{
-  alias gg='git cba 1'
-  alias gG='git cba -1'
-  which rlwrap >/dev/null 2>&1 && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
-  which mc     >/dev/null 2>&1 && alias mc='mc -u'
-  if [[ ! -z $RUN_AS_ROOT ]]; then
-    alias suspend="$RUN_AS_ROOT suspend"
-    alias reboot="$RUN_AS_ROOT reboot"
-    alias shutdown="$RUN_AS_ROOT shutdown"
-  else
-    alias suspend='sudo systemctl suspend'
-    alias reboot='  read -t5 -p "Reboot [NY] ? "  k && case $k in Y) sudo /usr/sbin/reboot;;   esac || true'
-    alias shutdown='read -t5 -p "Shutdown [NY] ? "k && case $k in Y) sudo /usr/sbin/shutdown;; esac || true'
-  fi
-fi # }}}
+# Functions # {{{
+if ! ${BASH_ALIASES_FROM_CMD} || ! declare -F $1 >/dev/null 2>&1; then
+  installExtensions --no-ask "$SCRIPT_PATH/bash/aliases.d" main
+fi
 # }}}
-# Functions {{{
-if install 'sudo'; then # {{{
-  sudo() { # {{{
-    if [[ ! -z $1 ]]; then
-      command sudo $@
-    else
-      command sudo --preserve-env=HOME -s
-    fi
-  } # }}}
-fi # }}}
-if install 'unicode-chars'; then # {{{
-  getUnicodeChar() { # {{{
-    [[ ! -e "$UNICODE_EXTRA_CHARS_FILE" ]] && return 1
-    source "$UNICODE_EXTRA_CHARS_FILE"
-    local i= v= len= width=
-    if [[ $1 == '--check' ]]; then # {{{
-      for i in $(echo ${!UNICODE_EXTRA_CHARS[*]} | tr ' ' '\n' | sort); do
-        v="${UNICODE_EXTRA_CHARS[$i]}"
-        len="${#v}"
-        width="$(echo -en "$v" | wc -L)"
-        if [[ $len != $width ]]; then
-          echo "UNICODE_EXTRA_CHARS[$i]=\"$v\" # l:$len vs w:$width"
-        fi
-      done # }}}
-    elif [[ $1 == '--fill' ]]; then # {{{
-      shift
-      v="${UNICODE_EXTRA_CHARS[$1]}"
-      len="${#v}"
-      width="$(echo -en "$v" | wc -L)"
-      while [[ $len -lt $width ]]; do
-        v+=" "
-        len="${#v}"
-      done
-      echo "$v" # }}}
-    else # {{{
-      echo "${UNICODE_EXTRA_CHARS[$1]}"
-    fi # }}}
-  } # }}}
-fi # }}}
-if install 'status:@@'; then # {{{
-  status() { # {{{
-    local tmpPath=$TMP_MEM_PATH sharedPath=$SHARABLE_PATH/tmp
-    if [[ $1 == '@@' ]]; then # {{{
-      if [[ " $@ " == *" --shared "* ]]; then
-        [[ -e $sharedPath ]] && getFileList --pwd $sharedPath 'status-*.txt'
-      else
-        [[ -e $tmpPath ]] && getFileList --pwd $tmpPath 'status-*.txt'
-      fi | sed -e 's/^status-//' -e 's/\.txt//'
-      echo "--shared -f -F -n --new NAME -ts -ts-abs --no-ts"
-      return 0
-    fi # }}}
-    local shared=false new=false f= n= name= tsAdd=true tsRel=true showFileName=false
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      --shared) shared=true;;
-      --new)    new=true;;
-      --no-ts)  tsAdd=false;;
-      -ts)      tsAdd=true;;
-      -ts-abs)  tsAdd=true; tsRel=false;;
-      -f)       f=$2; shift;;
-      -F)       showFileName=true;;
-      -n)       n=$2; shift;;
-      *)        name=$1;;
-      esac; shift
-    done # }}}
-    if [[ -z $f ]]; then # {{{
-      $shared && f=$sharedPath || f=$tmpPath
-      mkdir -p $f
-      f+="/status-${name:-$$}.txt"
-    fi # }}}
-    if $showFileName; then # {{{
-      echo $f
-      return 0
-    fi # }}}
-    if $new; then # {{{
-      rm -f $f
-      touch $f
-      [[ -t 0 ]] && return 0
-    fi # }}}
-    if [[ ! -t 1 || -t 0 ]]; then # {{{
-      if [[ $n == '-' ]]; then
-        set_title "status: $name"
-        tail -F -q $f 2>/dev/null
-      elif [[ ! -e $f ]]; then
-        return 1
-      else
-        tail -n${n:-1} $f
-      fi
-      return 0
-    fi # }}}
-    [[ -t 0 ]] && return 1
-    local in="$(cat -)"
-    [[ -z $in ]] && return 0
-    if [[ ! -z $n ]]; then # {{{
-      local lines="$(echo "$in" | wc -l)" linesF=0
-      n=$((n+lines-1))
-      [[ -e $f ]] || touch $f
-      linesF=$(cat $f | wc -l)
-      if [[ $((lines + linesF)) -gt $n ]] && type ed >/dev/null 2>&1; then # {{{
-        ed $f >/dev/null <<-EOF
-					1,${lines}d
-					wq
-				EOF
-      fi # }}}
-    fi # }}}
-    if $tsAdd; then
-      if $tsRel; then
-        echo "$(time2s --to-HMS $(time2s --diff $(stat -c %W $f))): $in"
-      else
-        echo "$(command date +$TIME_FMT): $in"
-      fi
-    else
-      echo "$in"
-    fi >>$f
-    return 0
-  } # }}}
-  export -f status
-fi # }}}
-if install 'kill-rec:@@:kr'; then # {{{
-  kill-rec() { # {{{
-    if [[ "$1" == '@@' ]]; then # {{{
-      command ps --no-headers -o pid,comm
-      echo "true false"
-      echo "-SIGTERM -SIGKILL -SIGABRT -9"
-      return 0
-    fi # }}}
-    local pid= pids= and_self=true signal='-SIGTERM'
-    while [[ ! -z $1 ]]; do
-      case $1 in
-      true | false) and_self="$1";;
-      -*)           signal="$1";;
-      *)            break;;
-      esac
-      shift
-    done
-    [[ -z $1 ]] && and_self=false
-    for pid in ${@:-$PPID}; do
-      if ! command ps --no-headers -o pid | command grep -q "^\s*$pid$"; then # {{{
-        pid="$(command ps --no-headers -o pid,comm | command grep " $pid$" | awk '{print $1}')"
-        [[ -z $pid ]] && return 1
-      fi # }}}
-      pids="$(pgrep -P "$pid")"
-      [[ ! -z $pids ]] && kill-rec true $signal $pids
-      $and_self && kill $signal "$pid" >/dev/null 2>&1
-    done
-    return 0
-  } # }}}
-  alias kr='kill-rec'
-  export PHISTORY_IGNORED_COMMANDS+=":kill-rec:kr"
-fi # }}}
-if install 'smart-alias'; then # {{{
-  smart_alias() { # {{{
-    local cmd= store=
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      --title) set_title "$2"; shift;;
-      --cmd)   cmd="$2"; shift;;
-      --store) store="$2"; shift;;
-      --)      shift; break;;
-      *)       break;;
-      esac
-      shift
-    done # }}}
-    [[ -z $cmd ]] && echo "Command is missing" >/dev/stderr && return 1
-    if [[ ! -z $store ]]; then # {{{
-      if [[ -z $1 ]]; then
-        [[ ! -z $store ]] && set -- ${!store}
-      else
-        export $store="$@"
-      fi
-    fi # }}}
-    eval "$cmd"
-  } # }}}
-  alias mcd="smart_alias --cmd 'command mkdir -pv \"\$1\" && cd_wrapper -- \"\$1\"'"  # Syntax fix for Vim in OS/X'"
-  alias mcdd="smart_aliast --cmd 'command mkdir -pv \"\$1\" && pushd \"\$1\"'"  # Syntax fix for Vim in OS/X'"
-  alias ll*="smart_alias --store 'SMART_AL_LL_ASTER' --cmd 'ls -Alhv | command grep --color=yes \"\$1\"'"  # Syntax fix for Vim in OS/X'"
-  alias chmod="smart_alias --cmd '[[ ! -f \"\$1\" ]] && command chmod \"\$@\" || command chmod +x \"\$@\"'"  # Syntax fix for Vim in OS/X'"
-fi # }}}
-if install 'xargs-tools:@@:xaa'; then # {{{
-  xaa() { # {{{
-    if [[ $1 == '@@' ]]; then # {{{
-      find . -maxdepth 1 -type f -perm -u+x
-      declare -F | awk '{print $3}' | sed -n -e '/^_/d' -e '/^\(.\)\{,6\}$/p'
-      return 0
-    fi # }}}
-    local cmd= args=
-    while [[ ! -z 1 ]]; do # {{{
-      case $1 in
-      -v) echorm +;;
-      *)  cmd=$1; shift; break;;
-      esac
-      shift
-    done # }}}
-    eval local $(echorm -f?var)
-    args="$@"
-    [[ -z $cmd ]] && cmd="echo"
-    if [[ -e "$cmd" ]]; then # {{{
-      $dbg && echorm -m $module -l1 -xv
-      xargs -r -n1 -I{} "$cmd" $args "{}"
-      $dbg && echorm -m $module -l1 +xv
-      # }}}
-    elif declare -F "$cmd" >/dev/null 2>&1; then # {{{
-      $dbg && echorm -m $module -l1 -xv
-      xargs -r -n1 -I{} $(which bash) -c "$(declare -f $cmd); $cmd $args {}"
-      $dbg && echorm -m $module -l1 +xv
-      # }}}
-    else # {{{
-      if [[ $cmd != *{}* && $cmd != *\$1* && $cmd != *\$@* ]]; then
-        if [[ -z $args ]]; then
-          cmd+=" \$1"
-        else
-          cmd+=" {}"
-        fi
-      fi
-      args="${args# }" && args="${args% }"
-      $dbg && echorm -m $module -l1 -xv
-      xargs -r -n1 -I{} $(which bash) -c 'f() { '"eval $cmd"'; }; f '"$args"' {}'
-      $dbg && echorm -m $module -l1 +xv
-    fi # }}}
-  } # }}}
-  alias xa='xargs -r -n1 -I{}'
-  export PHISTORY_IGNORED_COMMANDS+=":xaa:xa"
-fi # }}}
-if install 'clear-screen:@@:clr'; then # {{{
-  clr() { # {{{
-    local scr=true
-    local reset=false
-    local hist=true
-    if [[ $1 == '@@' ]]; then
-      local ret=""
-      $scr   && ret+=" --no-scr"   || ret+=" --scr"
-      $reset && ret+=" --no-reset" || ret+=" --reset"
-      if [[ -n $TMUX ]]; then
-        $hist && ret+=" --no-hist" || ret+=" --hist"
-      fi
-      echo "$ret"
-      return 0
-    fi
-    while [[ ! -z $1 ]]; do
-      case $1 in
-        --reset)    reset=true;;
-        --no-reset) reset=false;;
-        --scr)      scr=true;;
-        --no-scr)   scr=false;;
-        --hist)     hist=true;;
-        --no-hist)  hist=false;;
-      esac
-      shift
-    done
-    if $scr; then
-      $reset && reset || clear
-    fi
-    $hist && [[ -n $TMUX ]] && tmux clear-history
-    return 0
-  } # }}}
-fi # }}}
-if install 'run_for_some_time:@@'; then # {{{
-  run_for_some_time() { # {{{
-    if [[ $1 == @@ ]]; then
-      case $3 in
-      --wait) echo 15{,:10} 30s{,:2,:10} 2m30s{,:2,:10};;
-      *)      echo "--cmd --watchdog-cmd --initial-sleep --dbg --wait";;
-      esac
-      return 0
-    fi
-    local cmd= watchdog_cmd= cnt=30 sleep_for=1 initial_sleep=2 fallback=true
-    local dbg=false
-    while [[ ! -z $1 ]]; do
-      case $1 in
-      --cmd)           shift; cmd="$1";;
-      --watchdog-cmd)  shift; watchdog_cmd="$1";;
-      --initial-sleep) shift; initial_sleep=$1;;
-      --no-fallback)   falback=false;;
-      --wait) # {{{
-        shift
-        local s=0
-        s=$($ALIASES time2s ${1%:*} -o s)
-        cnt="${1#*:}"
-        [[ -z $cnd || $cnt == 0 ]] && cnt="1"
-        sleep_for="$(echo "1 $cnt" | awk '{print $1/$2}')"
-        cnt="$((${s:-0}*$cnt))"
-        [[ -z $cnt ]] && cnt=30
-        ;; # }}}
-      --dbg)           dbg=true;;
-      esac
-      shift
-    done
-    if false && $fallback && type timeout >/dev/null 2>&1; then # {{{
-      timeout $s $cmd
-      return $?
-    fi # }}}
-    [[ -z $cmd ]] && echo "Command to execute is missing" >/dev/stderr && return 1
-    watchdog() { # {{{
-      local process_pid=
-      initial_sleep=$(( $initial_sleep * 10 ))
-      for (( ; $initial_sleep > 0; initial_sleep-- )); do
-        sleep 0.1
-        command ps | command grep -q "$watchdog_cmd" 2>/dev/null && break
-      done
-      local first=true
-      for (( ; $cnt > 0; cnt-- )); do
-        process_pid=$(command ps | command grep "$watchdog_cmd" | sed -e 's/^ *//' | cut -d\  -f1)
-        if [[ $? != 0 || -z $process_pid ]]; then
-          ! $first && return 1
-          sleep 1
-        fi
-        first=false
-        sleep $sleep_for
-      done
-      local err=0
-      if ps | command grep -q "$process_pid" 2>/dev/null; then
-        kill $process_pid >/dev/null 2>&1
-      else
-        err=2
-      fi
-      return $err
-    } # }}}
-    [[ -z $watchdog_cmd ]] && watchdog_cmd=$(echo "$cmd" | sed -e 's/^\(command\|eval\) \+//' -e 's/ .*//')
-    watchdog &
-    local watchdog_pid=$!
-    local cmd_return=0
-    ! $dbg && { exec 3>&2; exec 2> /dev/null; true; } || set -xv
-    eval $cmd
-    cmd_return=$?
-    ! $dbg && { exec 2>&3; exec 3>&-; true; } || set +xv
-    wait $watchdog_pid
-    local interrupted_by_watchdog=$(test $? == 0 && echo true || echo false)
-    ps | command grep -q $watchdog_pid && kill $watchdog_pid
-    unset watchdog
-    $interrupted_by_watchdog && return 255
-    [[ $cmd_return != 0 ]] && return 1
-    return 0
-  } # }}}
-fi # }}}
-if install 'weather:@@'; then # {{{
-  weather() { # {{{
-    if [[ $1 == '@@' ]]; then
-      echo "--loop -1 -2"
-      return 0
-    fi
-    local LOOP_TIME=$(( 4 * 60 * 60 ))
-    local loop=false org_city='Wroclaw' c= day= params= ver=
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-        --loop) loop=true; echo "$2" | command grep -q '^[0-9]\+' && LOOP_TIME=$(($2 * 60 * 60)) && shift;;
-        -1)     ;;
-        -2)     ver="format=v2";;
-        -d)     day=$2;            shift;;
-        +)      params+="&$2";     shift;;
-        +*)     params+="&${1#+}"       ;;
-        *)      org_city="$@";     break;;
-      esac
-      shift
-    done # }}}
-    local city="$org_city"
-    [[ ! -z $params ]] && params="?${params:1}"
-    while true; do # {{{
-      clear
-      for c in ${city:-$org_city}; do # {{{
-        c="$(echo ${c:0:1} | tr '[a-z]' '[A-Z]')${c:1}"
-        [[ $c == '-' ]] && c=
-        set_title "${c:-$org_city}"
-        if [[ ! -z $day ]]; then # {{{
-          case $day in
-          Mon|Tue|Wed|Thu|Fri|Sat|Sun);;
-          *) day="${day,,}"
-             day="$(echo ${day:0:1} | tr '[a-z]' '[A-Z]')${day:1}";;&
-          esac
-          case $day in
-            Mon|Tue|Wed|Thu|Fri|Sat|Sun);;
-            *) day=;;
-          esac
-        fi # }}}
-        local p=
-        [[ ! -z $params ]] && p+="$params"
-        [[ ! -z $ver ]] && p+="&$ver"
-        [[ ! -z $p ]] && p="?${p:1}"
-        if [[ ! -n $TMUX || "$(tmux display-message -t $TMUX_PANE -p -F '#{pane_width}')" -ge 125  ]]; then
-          if [[ -z $day ]]; then
-            curl -s -4 http://wttr.in/$c$p
-          else
-            curl -s -4 http://wttr.in/$c$p | sed -n -e "1p" -e "/\<$day\>/,+9 {x;p;d;}; x"
-          fi | { [[ ! -z "$WEATHER_2CHAR_ICONS" ]] && sed 's/\('"$WEATHER_2CHAR_ICONS"'\)/\0 /g' || cat -; }
-        else
-          echo "Pane is too small"
-        fi
-      done # }}}
-      ! $loop && break
-      local key= # {{{
-      read -t $LOOP_TIME key
-      [[ $? != 0 ]] && continue
-      set -- $key
-      [[ -z $1 ]] && ver=
-      while [[ ! -z $1 ]]; do # {{{
-        case $1 in
-        q)  break 2;;
-        1)  ver=;;
-        2)  ver='format=v2';;
-        c)  city="$org_city";;
-        -)  city="-";;
-        d | d*)
-            if [[ $1 == 'd' ]]; then
-              day="$2"
-              shift
-            else
-              c="${1:1}"
-              case ${c,,} in
-              mon | tue | wed | thu | fri | sat | sun) day="$c";;
-              *) city="$@"; break;;
-              esac
-            fi;;
-        *)  city="$@"; break;;
-        esac
-        shift
-      done # }}} # }}}
-    done # }}}
-  } # }}}
-  alias pogoda='weather'
-fi # }}}
-if install 'kb-open:@@:kb-open:kb'; then # {{{
-  kb-open() {
-    local i= p=
-    if [[ $1 == '@@' ]]; then # {{{
-      local ret=
-      for i in $KB_PATHS; do
-        ret+=" ${i%%:*}"
-      done
-      echo "$ret"
-      return 0
-    fi # }}}
-    [[ -z $1 ]] && echo "Missing KB name" >/dev/stderr && return 1
-    if tmux list-sessions -F '#S' | command grep -q "^${1^^}$"; then # {{{
-      tmux switch-client -t ${1^^}
-      return 0
-    fi # }}}
-    for i in $KB_PATHS; do # {{{
-      [[ $1 == ${i%%:*} ]] && p="${i#*:}" && break
-    done # }}}
-    [[ -z $p ]]  && echo "Could not find path of KB [$i]" >/dev/stderr && return 1
-    if [[ ! -e $p/.env ]]; then # {{{
-      echo "The .env file for KB [$i] could not be found" >/dev/stderr
-      cat  >$p/.env <<-EOF
-				#!/bin/bash
-				if [[ -n \$TICKET_TOOL_PATH && -e \$TICKET_TOOL_PATH/session-init.sh ]]; then
-				  source \$TICKET_TOOL_PATH/session-init.sh "$p" "${1^^}"
-				fi
-			EOF
-    fi # }}}
-    (
-      command cd "$p"
-      source .env
-      r="$(alias \
-        | command grep "^alias init-session=" \
-        | awk -F'=' '{$1=""; print $0}' \
-        | sed -e "s/^\s*'//" -e "s/'\s*$//" -e "s/'\\\''/'/g"\
-      )"
-      eval $r
-    )
-  }
-  alias kb='kb-open'
-fi # }}}
-if install 'simple-http:@@:simple_http'; then # {{{
-  simple_http() { # {{{
-    if [[ $1 == '@@' ]]; then
-      echo '-t --timeout -p --port -f --file'
-      return 0
-    fi
-    ! type nc >/dev/null 2>&1 && echo "\"nc\" not installed" >/dev/stderr && return 1
-    local file=
-    local port=8080
-    local timeout=$((5*60))
-    while [[ ! -z $1 ]]; do
-      case $1 in
-        -p|--port)    shift; port=$1;;
-        -t|--timeout) shift; timeout=$1;;
-        -f|--file)    shift; file=$1;;
-        *)            file=$1;;
-      esac
-      shift
-    done
-    [[ -z $file ]] && echo "File name is missing" >/dev/stderr && return 1
-    echo -e "Serving file [$file] on port [$port], waiting for [$timeout] second for any connection...\n" >/dev/stderr
-    { echo -ne "HTTP/1.0 200 OK\r\n\r\n"; cat "$file"; } | nc -kl -q $timeout -p $port
-  } # }}}
-fi # }}}
-if install 'for-do'; then # {{{
-  for_do() { # {{{
-    local arg= cmd=
-    if [[ "$@" == *\ --\ * ]]; then
-      arg="$@"
-      cmd="$@"
-      args="$(echo "${arg/ -- *}" | sed -e 's/^\s\+//' -e 's/\s\+$//')"
-      cmd="$( echo "${cmd/* -- }" | sed -e 's/^\s\+//' -e 's/\s\+$//')"
-    else
-      arg="$1"
-      shift
-      cmd="$@"
-    fi
-    arg="${arg// /\\n}"
-    echo -e "$arg\n" | xargs -n1 $cmd
-  } # }}}
-  alias for-do='for_do'
-fi #}}}
-if install 'caps-ctrl'; then # {{{
-  fix_caps() { # {{{
-    which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
-    if which xcape >/dev/null 2>&1; then
-      killall xcape >/dev/null 2>&1
-      xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
-    fi
-  } # }}}
-fi #}}}
-if install 'date:@@'; then # {{{
-  date() { # {{{
-    if [[ $1 == '@@' ]]; then # {{{
-      case $3 in
-      +) echo "%Y-%m-%d %Y.%m.%d %H%M%S";;
-      *) echo "+ -d +t +d +dt --orig --ts -s --colors";;
-      esac
-      return 0
-    fi # }}}
-    local p="$DATE_FMT" showOrig=false addTs=false removeTs=false c=$CYellow c2=$CGreen coff=$COff sort=false autoColors=true
-    [[ -z $1 && -t 0 ]] && eval command date +$p && return
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      +t)       p="$TIME_FMT";;
-      +d)       p="$DATE2_FMT";;
-      +dt)      p="$DATE_FMT";;
-      +)        shift; p="$1";;
-      +*)       p="${1#+}";;
-      --orig)   showOrig=true;;
-      --ts)     addTs=true; removeTs=false;;
-      -s)       sort=true; ! $addTs && removeTs=true; addTs=true;;
-      --colors) autoColors=false;;
-      *)        break;;
-      esac
-      shift
-    done # }}}
-    if [[ -t 0 ]]; then # {{{
-      command date "+$p" "$@" # }}}
-    else # {{{
-      [[ ! -t 1 ]] && $autoColors && c= && c2= && coff=
-      local l=
-      cat - | while read l; do
-        local n="$l" i= dFirst=0
-        for i in $(echo "$l" | command grep -o "\<[0-9]\{9,10\}\>"); do
-          [[ $dFirst == 0 || $i -lt $dFirst ]] && dFirst=$i
-          local dd="$(command date "+$p" -d @$i)"
-          n=$(echo "$n" | sed 's/'$i'/'$c$dd$coff'/g');
-          [[ ! -z $c ]] && l=$(echo "$l" | sed 's/'$i'/'$c$i$coff'/g');
-        done
-        echo "$($addTs && [[ $dFirst != 0 ]] && echo "$c$dFirst$coff : ")$($showOrig && echo "$l : ")$n" >/dev/stdout
-      done \
-        | { if $sort; then sort -k1,1n; else cat -; fi; } \
-        | { if $removeTs; then cut -d' ' -f3-; else cat -; fi; } \
-        | { if [[ ! -z $c2 ]]; then sed 's/\<[0-9]\{8\}-\?[0-9]\{6\}\>/'$c2'\0'$coff'/g'; else cat -; fi; }
-    fi # }}}
-  } # }}}
-fi # }}}
-if install 'rmf-basic'; then # {{{
-  alias rmf='rm -rf'
-  rm-b() { # {{{
-    local i
-    for i; do
-      mv $i $i.del && rm -rf $i.del &
-    done
-  } # }}}
-fi # }}}
-if install 'print-colors:@@:printColors'; then # {{{
-  printColors() { # {{{
-    if [[ $1 == '@@' ]]; then # {{{
-      local ret="--txt --fg --bg --all --show --pairs"
-      case $3 in
-      --show) ret="full ids";;
-      esac
-      echo "$ret"
-      return 0
-    fi # }}}
-    local text= fgs= bgs= show_colors= pairs= tmp_text= b= f= cb= cf= p=
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      --txt)   text="$2"; shift;;
-      --fg)    fgs="$2"; shift;;
-      --bg)    bgs="$2"; shift;;
-      --all)   fgs=$(echo {0..255}); bgs=$(echo {0..255});;
-      --show)  show_colors="$2"; shift;;
-      --pairs) pairs="$2"; shift;;
-      esac
-      shift
-    done # }}}
-    if [[ -z $pairs ]]; then # {{{
-      [[ -z $fgs ]] && fgs=$(echo {0..255})
-      [[ -z $bgs ]] && bgs="0"
-      for b in $bgs; do
-        for f in $fgs; do
-          pairs+="$b;$f "
-        done
-      done
-    fi # }}}
-    tmp_text="$text"
-    for p in $pairs; do # {{{
-      b=$(printf "%03d" ${p%;*})
-      f=$(printf "%03d" ${p#*;})
-      cb="[48;5;${b}m"
-      cf="[38;5;${f}m"
-      [[ -z $text ]] && tmp_text="Colour:$f($b)"
-      case $show_colors in # {{{
-      full) printf "| ^[%s ^[%s | " "$cb" "$cf";;
-      ids)  printf "| %3d %3d | "   "${p%;*}"  "${p#*;}";;
-      esac # }}}
-      printf "\x1b%s\x1b%s%s[0m\n" "$cb" "$cf" "$tmp_text"
-    done # }}}
-  } # }}}
-fi # }}}
-if install 'zipf'; then # {{{
-  zipf() { # {{{
-    [ -d "$1" ] && zip -r $1.zip $@ && return 0
-    [ "$1" == '-' ] && shift && zip -r $1.zip $@ && return 0
-    while [ -f "$1" ]; do gzip $1; shift; done
-  } # }}}
-fi # }}}
-if install 'logout'; then # {{{
-  logout() { # {{{
-    if [[ ! -n $TMUX ]]; then
-      command logout 2>/dev/null || command exit
-    else
-      echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
-      tmux detach -P
-    fi
-  } # }}}
-fi # }}}
-if install 'exit'; then # {{{
-  Exit() { # {{{
-    if [[ ! -n $TMUX ]]; then
-      command exit $@
-    else
-      local title="$TMUX_SESSION"
-      tmux detach -P
-      tmux kill-session -t $title
-    fi
-  } # }}}
-fi # }}}
-if install 'www'; then # {{{
-  www() { # {{{
-    local params="-s" query= site="${WWW_DEFAULT_SITE:-"www.google.pl"}" title="www"
-    while [[ ! -z "$1" ]]; do
-      case "$1" in
-      --)         shift; params+="$@"; break;;
-      www* | *.*) params+=" -N $1"; title+=" $1";;
-      -*)         params+=" $1";;
-      *)
-        [[ ! -z $query ]] && query+="%20"
-        query+="${1// /%20}"
-        [[ $title == "www" ]] && title+=" ?"
-        title+=" $1";;
-      esac
-      shift
-    done
-    [[ ! -z $query ]] && params+=" -N $site/search?q=$query"
-    if [[ -z $params ]]; then
-      params="-N $site"
-      title+=" $site"
-    fi
-    set_title "$title"
-    ( set -x; w3m $params )
-  } # }}}
-  export HISTIGNORE+=":www:www *"
-fi # }}}
-if install 'ovpn'; then # {{{
-  ovpn() { # {{{
-    local p="/mnt/truecrypt/qv"
-    local mount_cmd="mnt.sh -D qv"
-    local mounted=false
-    local config=$p/ovpn/ovpn/$1.ovpn
-    local err=0
-    if [[ ! -d $p || ! "$(ls -A $p)" ]]; then
-      $mount_cmd
-      mounted=true
-    fi
-    if [[ -e $config ]]; then
-      sudo openvpn --config $config
-    else
-      echorm 0 "Configuration file ($config) does not exist"
-      err=1
-    fi
-    $mounted && $mount_cmd
-    return $err
-  } # }}}
-fi # }}}
-if install 'dum:@@'; then # {{{
-  dum() { # {{{
-    if [[ $1 == @@ ]]; then # {{{
-      local ret=
-      if $IS_MAC; then # {{{
-        local i=
-        for i in $(command mount | awk '/\/Volumes\// { print $3 }'); do
-          [[ $i == *MobileBackups ]] && continue
-          ret+=" $i"
-        done
-        for i in $(command mount | awk '/\/Volumes\// { print $1 }'); do
-          [[ $i == localhost* ]] && continue
-          ret+=" $i"
-        done # }}}
-      else # {{{
-        ret="$(command mount | awk '/\/media\/'$USER'\// { print $3 }')"
-      fi # }}}
-      echo "${ret:----}"
-      return 0
-    fi # }}}
-    local src="$1" err=
-    [[ -z $src ]] && ! $IS_MAC && src="$($ALIASES getFileList -t -1 "/media/$USER/*")"
-    [[ -z $src ]] && echor "Mountpoint not specified" && return 1
-    [[ ! -e $src ]] && echor "Mountpoint does not exist [$src]" && return 1
-    $ALIASES progress --mark --msg "Unmounting $src" --dots --delay 0.1
-    if $IS_MAC; then # {{{
-      if [[ $src == /dev/* ]]; then
-        diskutil unmountDisk $src >/dev/null && diskutil eject $src >/dev/null
-      elif [[ $src == /Volumes/* ]]; then
-        diskutil unmount "$src" >/dev/null
-      fi # }}}
-    else # {{{
-      if [[ $src == /dev/* ]]; then
-        umount $src
-      elif [[ $src == /media/* ]]; then
-        umount $src
-      else
-        ( set -xv
-          sudo umount $src
-        )
-      fi
-    fi # }}}
-    err=$?
-    $ALIASES progress --unmark --err=$err
-    return $err
-  } # }}}
-fi # }}}
-if install 'src:@@'; then # {{{
-  src() {
-    echorm -M +?
-    local i= ii= verb=false
-    local list="$(find $SCRIPT_PATH/bash/aliases.d -maxdepth 1 -type f)"
-    for i in $BASH_PROFILES_FULL; do
-      [[ -e $i/aliases ]] && list+="\n$($i/aliases __util_src)"
-    done
-    if [[ $1 == '@@' ]]; then # {{{
-      echo -e "$list" | sed 's|.*/||'
-      echo "-1 -2 -5"
-      return 0
-    fi # }}}
-    list="$(ls -t $(echo -e "$list"))"
-    i=$1
-    case $i in
-    '') # {{{
-      verb=true
-      local fm="$BASHRC_RUNTIME_PATH/aliases-main.dump"
-      [[ ! -e "$fm" ]] && return 1
-      local mod="$(stat -c %Y "$fm")"
-      i=""
-      for ii in $list; do
-        [[ $(stat -c %Y "$ii") -gt $mod ]] && i+=" $ii"
-      done
-      [[ -z $i ]] && return 0
-      ;; # }}}
-    -[0-9]*) # {{{
-      verb=true
-      i=${i#-}
-      i="$(echo -e "$list" | head -n${i:-1})"
-      ;; # }}}
-    *) # {{{
-      i=
-      for ii; do
-        i+=" $(echo -e "$list" | command grep "/$ii\$")"
-      done
-      ;; # }}}
-    esac
-    set - $i
-    for i; do
-      echorm "source ${i//$HOME\//\~/}"
-      source $i
-      local df="$(command grep -l "^#-#-# START: $i # {{{" $BASHRC_RUNTIME_PATH/aliases*.dump 2>/dev/null | head -n1)"
-      [[ -z $df ]] && continue
-      local i_sed="$(echo "$i" | sed 's:[]\[^$.*/&]:\\&:g')"
-      sed -n '1,/^#-#-# ---- END ----/{ /#-#-# ---- END ----/d; p }' "$df" >"${df}.tmp"
-      sed -i '/#-#-# START: '$i_sed' # {{{/,/#-#-# END: '$i_sed' # }}}/d' "${df}.tmp"
-      {
-        echo "#-#-# START: $i # {{{"
-        cat "$i"
-        sed -n '/^# env: /s/# env: \(.*\)/\1/p' "$i"
-        echo "#-#-# END: $i # }}}"
-      } >>"${df}.tmp" # }}}
-      sed -n '/^#-#-# ---- END ----/,$p' "$df" >>"${df}.tmp"
-      mv "${df}.tmp" "$df"
-    done
-    set +f
-  }
-fi # }}}
-installExtensions "$SCRIPT_PATH/bash/aliases.d" main
-# }}}
-# MAIN {{{
+# MAIN # {{{
 # Source profiles # {{{
-for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/aliases ]] && source $i/aliases ''
+if ! declare -F compl-add >/dev/null 2>&1; then
+  source "$BASH_ESSENTIALS_PATH/completion.basic" ""
+fi
+for profi in $BASH_PROFILES_FULL; do
+  [[ -e $profi/aliases ]] && source $profi/aliases ''
 done # }}}
-# Check if not sourced and called with params {{{
+# Check if not sourced and called with params # {{{
 if $BASH_ALIASES_FROM_CMD; then # {{{
-  echorm "cmd=[$@]"
   # ALIASES_SILENT=true
+  ${ALIASES_SILENT:-true} || echorm "cmd=[$@]"
   cmd=$1 err=0
   shift
   case $cmd in
@@ -1187,17 +196,17 @@ else # {{{
     done;; # }}}
   *) # {{{
     if ${__aliases_do_env:-false} && $IS_MAC; then
-      while read f; do
-        type $f | command grep -q ";&" && echo "Function '$f() not exported'" >/dev/stderr && continue
-        export -f $f
+      while read __aliases_f; do
+        type $__aliases_f | command grep -q ";&" && echo "Function '$__aliases_f() not exported'" >/dev/stderr && continue
+        export -f $__aliases_f
       done < <(declare -F | command grep " -f [^_]" | awk '{print $3}')
-      unset f
+      unset __aliases_f
     fi
     unset __aliases_do_env;; # }}}
   esac
 fi # }}} # }}}
 # }}}
 # Cleaning # {{{
-unset TO_INSTALL ALIASES_MAP_BASIC ALIASES_MAP_EXT i install BASH_ALIASES_FROM_CMD ALIASES_AUTO_SUDO_PROMPT
+unset TO_INSTALL i BASH_ALIASES_FROM_CMD ALIASES_AUTO_SUDO_PROMPT
 set +f; shopt -s extglob
 # }}}

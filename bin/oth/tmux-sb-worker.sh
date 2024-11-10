@@ -5,7 +5,8 @@
 verbose=false
 log_level=I
 
-info_file=$TMP_MEM_PATH/.tmux-sb.info
+info_file=$BASHRC_RUNTIME_PATH/tmux-sb.info
+err_dev="/dev/stderr"
 
 default_interval=120
 default_sleep=10
@@ -16,11 +17,13 @@ lockstatus_interval=${TMUX_SB_LOCKSTATUS_DELTA:-$((30))}
 mic_interval=${TMUX_SB_MIC_DELTA:-$((60))}
 net_interval=${TMUX_SB_NET_DELTA:-$((30))}
 notifications_interval=${TMUX_SB_NOTIFICATIONS_DELTA:-$((30))}
+reminder_interval=${TMUX_SB_REMINDER_DELTA:-$((60))}
 ssh_interval=${TMUX_SB_MIC_DELTA:-$((15))}
+temp_interval=${TMUX_SB_TEMP_DELTA:-$((30))}
 usb_interval=${TMUX_SB_USB_DELTA:-$((15))}
 weather_interval=${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}
 # }}}
-battery_tmux_sb_worker() { # @@ {{{
+battery_tmux_sb_worker() { # @@ # {{{
   is_ac() { # {{{
     if $IS_MAC; then
       pmset -g batt  | command grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
@@ -68,7 +71,7 @@ battery_tmux_sb_worker() { # @@ {{{
   unset is_ac get_percentage
   printf "%b" "$value"
 } # }}}
-cpu_tmux_sb_worker() { # @@ {{{
+cpu_tmux_sb_worker() { # @@ # {{{
   local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
   local value= cpu_1m= cpu_5m= c= i=
   if ! $IS_MAC; then # {{{
@@ -114,23 +117,24 @@ lockstatus_tmux_sb_worker() { # @@ # {{{
   printf "%b" "$value"
 } # }}}
 mic_tmux_sb_worker() { # {{{
-  local level=80 isInternal=false
-  local TMUX_SB_WORKER_MIC_USE_INTERNAL_MIC_BOOST=true
-  if ${TMUX_SB_WORKER_MIC_USE_INTERNAL_MIC_BOOST}; then
-    local v="$(amixer sget 'Internal Mic Boost' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
-    [[ $v -gt 0 ]] && isInternal=true
-  else
-    if ! amixer sget 'Headset Mic' 1>/dev/null 2>&1 || amixer sget 'Headset Mic' | command grep -q "Mono:.*\[off\]"; then
+  local level=80 isInternal=false amixerP="-D pulse"
+  case ${TMUX_SB_WORKER_MIC_INTERNAL_MIC_BOOST:-skip} in
+  skip) ;;
+  true)
+    local v="$(amixer $amixerP sget 'Internal Mic Boost' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    [[ $v -gt 0 ]] && isInternal=true;;
+  false)
+    if ! amixer $amixerP sget 'Headset Mic' 1>/dev/null 2>&1 || amixer $amixerP sget 'Headset Mic' | command grep -q "Mono:.*\[off\]"; then
       return
     fi
-  fi
+  esac
   local mic="$(getUnicodeChar 'mic')" mute="$(getUnicodeChar 'mute')"
   local value=
-  if amixer sget 'Capture' | command grep -q "Front Left:.*\[off\]"; then
+  if amixer $amixerP sget 'Capture' | command grep -q "Front Left:.*\[off\]"; then
     value="#[fg=colour9]$mic$mute"
   else
     $isInternal && return
-    local v="$(amixer sget 'Capture' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    local v="$(amixer $amixerP sget 'Capture' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
     if [[ $v -le $level ]]; then
       value="#[fg=colour11]$mic$mute"
     elif ! $isInternal; then
@@ -140,32 +144,53 @@ mic_tmux_sb_worker() { # {{{
   printf "%b" "$value"
 } # }}}
 net_tmux_sb_worker() { # {{{
-  local value= char=$(getUnicodeChar 'link') con="#[bg=colour124]#[fg=colour226,bold]" coff="#[bg=default,none]"
-  ping -c1 8.8.8.8 -w1 >/dev/null 2>&1 && value=0 || value=$(fromAliases net -s; echo $?)
+  local value= char=$(getUnicodeChar 'link') con="#[bg=colour124]#[fg=colour226,bold]" coff="#[bg=default,none]" isNet=false
+  ping -c1 8.8.8.8 -w1 >/dev/null 2>&1 && value=0 || value=$(net -s; echo $?)
   case $value in
-  0)  value="";;
+  0)  value=""; isNet=true;;
   1)  value="$char$con 8 $coff";;
-  2)  value="$con$char$con D $coff";;
-  10) value="$con$char$con G $coff";;
-  *)  value="$con$char$con ? $value$coff";;
+  2)  value="$char$con DNS $coff";;
+  10) value="$char$con GW $coff";;
+  11) value="$char$con $(getUnicodeChar 'icon-err') GW $coff";;
+  *)  value="$char$con ? $value$coff";;
   esac
+  if $isNet; then
+    echo "connectivity=true"  >$BASHRC_RUNTIME_PATH/net.status
+  else
+    echo "connectivity=false" >$BASHRC_RUNTIME_PATH/net.status
+  fi
   printf "%b" "$value"
 } # }}}
-notifications_tmux_sb_worker() { # @@ {{{
+notifications_tmux_sb_worker() { # @@ # {{{
   local delta=$((5*60)) ntf_file="${NOTIFICATION_FILE_TMUX:-$TMP_MEM_PATH/notifications-tmux.txt}" icon= value=
   if [[ ! -e "$ntf_file" ]]; then
-    icon='#'
+    icon='##'
   elif [[ "$(stat -c "%Y" "$ntf_file")" -ge "$(($now - $delta))" ]]; then
     icon=" ${UNICODE_EXTRA_CHARS[envelope]} "
   fi
-  [[ ! -z $icon ]] && value="$(printf "#[bg=colour124]#[fg=colour226,bold]%b#[bg=colour235,none]" "$icon")"
+  [[ ! -z $icon ]] && value="$(printf "#[bg=colour124]#[fg=colour226,bold]%b#[bg=default,none]" "$icon")"
+  printf "%b" "$value"
+} # }}}
+reminder_tmux_sb_worker() { # {{{
+  local ts= what= rest=
+  read ts what rest <<<$(reminder -l)
+  ts=${ts%:}
+  [[ -z $ts ]] && return
+  local icon="${UNICODE_EXTRA_CHARS[bell]} "
+  case $what in
+  P)  icon="${UNICODE_EXTRA_CHARS[pause]}";;
+  GH) icon="${UNICODE_EXTRA_CHARS[home]}";;
+  esac
+  local value="$(printf "#[fg=colour12]%b %s#[fg=default,none]" "$icon" "$ts")"
   printf "%b" "$value"
 } # }}}
 ssh_tmux_sb_worker() { # {{{
   local w="$(w -h -i)" isRoot=false isSsh=false moreThanOne=false d="${TMUX_SB_WORKER_SSH_FROM_NO:-:0}"
+  $IS_DOCKER && w="$(w -h -i | grep -v tmux)"
+  local lines="$(echo "$w" | wc -l)"
   echo "$w" | command grep -q "^root" && isRoot=true
   w="$(echo "$w" | cut -c19- | command grep -v "^$d")"
-  if ! $IS_MAC; then
+  if ! $IS_MAC && [[ $lines -gt 1 ]]; then
     if [[ ! -z $w ]]; then
       moreThanOne=true
       echo "$w" | command grep -q "^[0-9\.:]\+ " && isSsh=true
@@ -185,11 +210,22 @@ usb_tmux_sb_worker() { # {{{
   local prefix="/media/$USER" value=
   $IS_MAC && prefix="/Volumes"
   if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
-    value="#[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
+    if ! $IS_MAC || [[ $(echo $prefix/*) != "$prefix/Macintosh HD" ]]; then
+      value="#[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
+    fi
   fi
   printf "%b" "$value"
 } # }}}
-weather_tmux_sb_worker() { # @@ {{{
+temp_tmux_sb_worker() { # {{{
+  which temperature-monitor.sh >/dev/null 2>&1 || { vSet temp ignored true; return 1; }
+  local value=$(temperature-monitor.sh -1)
+  [[ ! -z $value ]] || return 1
+  value=${value%% *}
+  [[ $value -ge ${TMUX_SB_TEMP_THRESHOLD:-80} ]] || return 0
+  value="#[fg=colour208]${value%% }°C"
+  printf "%b" "$value"
+} # }}}
+weather_tmux_sb_worker() { # @@ # {{{
   local value=
   weather_icon() { # {{{
     # Icons: [ 🌣  (  🌞  )  🌤  🌥  ☁️  🌦  🌧  🌨  ⛈  🌩  🌪  🌫  🌬  ]
@@ -259,7 +295,7 @@ weather_tmux_sb_worker() { # @@ {{{
   local err=false
   if [[ -z $WEATHER_API_KEY ]]; then
     ERR "Error: No API key"
-    err=true
+    return 1
   fi
   while ! $err; do # {{{
     if [[ -z ${WEATHER_INFO[1]} ]]; then
@@ -299,7 +335,7 @@ weather_tmux_sb_worker() { # @@ {{{
     value="$(printf "%s %s #[fg=colour72]%s" "$(weather_icon "${WEATHER_INFO[6]}")" "$(weather_temp_color "${WEATHER_INFO[3]}")" "$(weather_wind_arrow ${WEATHER_INFO[5]} ${WEATHER_INFO[4]})")"
     weather_interval="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}"
   else
-    value="#[fg=colour124]✗☁️ #[fg=default,none]"
+    value="#[fg=colour124]$(getUnicodeChar 'icon-err')☁️ #[fg=default,none]"
     weather_interval=60
   fi
   unset weather_icon weather_wind_arrow weather_temp_color
@@ -338,9 +374,9 @@ tryToDo() { # {{{
   fi
   [[ $now -gt $(($last+$interval)) ]] || return 1
   if $isFunction; then
-    eval ${var}_tmux_sb_worker
+    eval ${var}_tmux_sb_worker 2>$err_dev
   else
-    eval "$(vGet $var tmux_sb_worker)"
+    eval "$(vGet $var tmux_sb_worker)" 2>$err_dev
   fi
   vSet $var last $now
 } # }}}
@@ -353,13 +389,14 @@ fromAliases() { # {{{
 } # }}}
 worker() { # {{{
   source "$UNICODE_EXTRA_CHARS_FILE"
-  fromAliases --source getUnicodeChar
+  # fromAliases --source getUnicodeChar
   local fTmpSingle=$info_file.single.tmp  fTmp=$info_file.tmp markIgn='--IGNORED--' markLU='_last_update'
   local i= now=
   declare -A data
   for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
     data[$i]=""
   done
+  INF - "list: $TMUX_STATUS_RIGHT_EXTRA_SORTED"
   while true; do
     now=${EPOCHSECONDS:-$(epochSeconds)}
     data[$markLU]=$now
@@ -378,13 +415,13 @@ worker() { # {{{
     done
     (
       echo "declare -A data"
-      echo "data[$markLU]=\"${data[$markLU]}\" # $(command date +$DATE_FMT -d @$now)"
+      echo "data[$markLU]=${data[$markLU]} # $(command date +$DATE_FMT -d @$now)"
       for i in $(printf '%s\n' ${!data[*]} | sort); do
         [[ ${data[$i]} == "$markIgn" || $i == "$markLU" ]] && continue
         echo "data[$i]=\"${data[$i]}\""
       done
     ) >$fTmp
-    $lock mv $fTmp $info_file
+    $lock mv $fTmp $info_file 2>/dev/null
     if $verbose; then
       echo "---"
       cat $info_file
@@ -396,7 +433,7 @@ worker() { # {{{
 
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
-  ---tmux);;
+  ---tmux) err_dev="/dev/null";;
   -v) verbose=true;;
   -s) verbose=false; log_level=W;;
   -f) info_file=$2; shift;;
@@ -443,12 +480,11 @@ case $1 in # {{{
 --tmux | --kill) # {{{
   ps a | awk '/tmux-sb-worker\.sh ---tmux/ {print $1}' | xargs -r kill -9 2>/dev/null
   if [[ $1 == '--tmux' ]]; then
-    $0 ---tmux -s --out "$TMP_MEM_PATH/.tmux-sb.err" --prefix &
+    $0 ---tmux -s --out "${info_file}.err" --prefix &
     disown
   fi;; # }}}
 *) # {{{
-  DBG --init --ts-add $log_level $@
-  INF -
+  DBG --init --ts=show $log_level $@
   INF - "Start: $(command date +"$DATE_FMT")"
   worker
   DBG --deinit;; # }}}

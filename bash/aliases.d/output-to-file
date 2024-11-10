@@ -8,10 +8,8 @@ output_to_file() { # @@ # {{{
   fi
   local use_tee=true
   local ignoreErr=false
-  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*OUTPUT-TO-FILE:[^,]\+,' | command grep -o 'true\|false')"
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
-  local colors= sort_params=
-  local fzf_params="--exit-0 --layout=reverse-list --no-sort --multi --height 100%" errout="/dev/stderr"
+  local colors= sort_params= errout="/dev/stderr"
+  local use_fzf= fzf_params="--exit-0 --layout=reverse-list --no-sort --multi --height 100% --expect 'ctrl-p' --expect 'ctrl-s'"
   while [[ ! -z $1 ]]; do
     case $1 in
     true|false)   use_tee=$1;;
@@ -19,6 +17,8 @@ output_to_file() { # @@ # {{{
     --ignore-err) ignoreErr=true;;
     --sort-*)     sort_params+=" ${1#--sort-}";;
     --no-sort)    sort_params='NO-SORT';;
+    --colors)     colors="--color=always";;
+    --no-colors)  colors="--color=never";;
     +-fzf | +-f)  use_fzf=false;;
     +fzf  | +f)   use_fzf=$FZF_INSTALLED;;
     +fzf=*)       use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
@@ -29,8 +29,16 @@ output_to_file() { # @@ # {{{
     esac
     shift
   done
-  [[ -z $sort_params && ! -z $OUTPUT_TO__SORT_PARAMS ]] && sort_params="$OUTPUT_TO__SORT_PARAMS"
+  [[ -z $sort_params ]] && sort_params="$OUTPUT_TO__SORT_PARAMS"
   [[ -z $cmd || $cmd == '-' ]] && cmd='cat -'
+  if [[ -z $use_fzf ]]; then # {{{
+    if [[ ! -t 1 ]]; then
+      use_fzf=false
+    else
+      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*OUTPUT-TO-FILE:[^,]\+,' | command grep -o 'true\|false')"
+      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    fi
+  fi # }}}
   local use_eval=
   if [[ $cmd == eval\ * ]]; then
     use_eval="eval "
@@ -40,59 +48,63 @@ output_to_file() { # @@ # {{{
     case $cmd in
     ag* | ack* ) colors="--nocolor";;
     *grep*)      colors="--color=never";;
-  esac
+    esac
   fi
-  local err=
+  local err= tmpFile=$TMP_MEM_PATH/otf-$$.tmp file="/dev/null"
   [[ ! -z $GREP_LAST_PATH && ! -e $GREP_LAST_PATH ]] && command mkdir -p $GREP_LAST_PATH
   if $use_tee; then # {{{
-    local file="/dev/null"
     if [[ ! -z $GREP_LAST_PATH ]]; then
       file="$GREP_LAST_PATH/last-$(date).txt"
       [[ -n $TMUX ]] && file="$GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')-$(date).txt"
     fi
     (
-      echo "$cmd $@"
-      echo "# "${PWD/$HOME/~}
-      echo "# "${file/$HOME/~}
+      echo "$cmd $@" | sed 's/--[^ ]*//g' | sed 's/  \+/ /g' | sed 's/ \+$//'
+      echo "# "${PWD/$HOME/\~}
+      echo "# "${file/$HOME/\~}
+      echo "# sum"
       echo
     ) >$file
-    if $use_fzf; then # {{{
-      if [[ $sort_params == 'NO-SORT' ]]; then
-        $use_eval command $cmd $colors "$@" 2>$errout | tee -a $file | { eval fzf $fzf_params; }
-      else
-        $use_eval command $cmd $colors "$@" 2>$errout | tee -a $file | sort $sort_params -st':' -k1,1 -k2,2n | { eval fzf $fzf_params; }
-      fi
-      # }}}
-    else # {{{
-      $use_eval command $cmd "$@" 2>$errout | tee -a $file
-    fi # }}}
+  fi # }}}
+  ${DBG_SHOW_CMD:-false} && echor "$use_eval command $cmd $colors \"$@\""
+  if $use_fzf; then # {{{
+    $use_eval command $cmd $colors "$@" 2>$errout | { [[ $sort_params == 'NO-SORT' ]] && cat - || sort -st':' -k1,1 -k2,2n $sort_params; } >$tmpFile
     err=${PIPESTATUS[0]}
-    if [[ ! -z $GREP_LAST_PATH ]]; then # {{{
-      if [[ $err == 0 ]] || $ignoreErr; then
-        sed -i "s/\x1B\[[0-9;]*[mGK]//g" $file
+    if [[ $err == 0 ]]; then
+      local res="$(cat $tmpFile | { $use_tee && tee -a $file || cat -; }  | { eval fzf $fzf_params; })"
+      local key="$(echo "$res" | sed -n 1p)"
+      res="$(echo "$res" | sed  1d)"
+      case $key in
+      ctrl-p) cat $tmpFile;;
+      ctrl-s) [[ ! -z $res ]] && echo "$res" | xc; [[ ! -t 1 ]] && echo "$res";;
+      '')     [[ ! -z $res ]] && echo "$res";;
+      esac
+    fi # }}}
+  else # {{{
+    $use_eval command $cmd $colors "$@" 2>$errout \
+    | { [[ $sort_params == 'NO-SORT' ]] && cat - || sort -st':' -k1,1 -k2,2n $sort_params; } \
+    | { $use_tee && tee -a $file || cat -; }
+    err=${PIPESTATUS[0]}
+  fi # }}}
+  if $use_tee; then # {{{
+    if [[ ! -z $GREP_LAST_PATH ]] && ( [[ $err == 0 ]] || $ignoreErr ) && [[ -e $tmpFile ]]; then
+      local sum="$(cat $tmpFile | sort | sha1sum | cut -d' ' -f1)" i= found=false
+      for i in $(find $GREP_LAST_PATH -type f | sort); do
+        [[ "$(sed -n '4{p;q}' $i)" == "# sum: $sum" ]] && rm $file && file=$i && found=true && break
+      done
+      if ! $found; then
+        sed -i -e '4s/.*/# sum: '"$sum"'/' -e "s/\x1B\[[0-9;]*[mGK]//g" $file
         if [[ -n $TMUX ]]; then
           ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I-#P')
           ln -sf $file $GREP_LAST_PATH/$(tmux display-message -p -t $TMUX_PANE -F '#S-#I')
           ln -sf $file $GREP_LAST_PATH/$TMUX_SESSION
         fi
         ln -sf $file $GREP_LAST_PATH/last
-      else
-        rm $file
-      fi
-    fi # }}}
-    # }}}
-  else # {{{
-    if $use_fzf; then
-      if [[ $sort_params == 'NO-SORT' ]]; then
-        $use_eval command $cmd $colors "$@" | fzf --exit-0 --sort --multi --height 100%
-      else
-        $use_eval command $cmd $colors "$@" | sort $sort_params | fzf --exit-0 --sort --multi --height 100%
       fi
     else
-      $use_eval command $cmd "$@"
+      rm $file
     fi
-    err=$?
   fi # }}}
+  rm -f $tmpFile
   return $err
 } # }}}
 last_grep() { # @@ # {{{
@@ -151,12 +163,12 @@ last_grep() { # @@ # {{{
     local out=$TMP_MEM_PATH/grep-last-list-$f.txt
     rm -f $out
     for i in $(ls -t $GREP_LAST_PATH/${f}*.txt); do
-      echo ${i/$HOME/~}": $(head -n1 $i)" >>$out
+      echo ${i/$HOME/\~}": $(head -n1 $i)" >>$out
     done
     if $use_fzf; then
       cat $out | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
     else
-      vim --scratch $out
+      vim --scratch -c 'setlocal conceallevel=2' $out
     fi
     return 0
   fi
@@ -180,7 +192,7 @@ last_grep() { # @@ # {{{
     if $use_fzf; then
       cat $($follow_link && echo $(readlink -f $f) || echo $f) | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
     else
-      vim --scratch $($follow_link && echo $(readlink -f $f) || echo $f)
+      vim --scratch -c 'setlocal conceallevel=2' $($follow_link && echo $(readlink -f $f) || echo $f)
     fi
     return $?
   else
@@ -200,7 +212,7 @@ last_grep() { # @@ # {{{
         if $use_fzf; then
           cat $($follow_link && echo $(readlink -f $f) || echo $f) | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
         else
-          vim --scratch $($follow_link && echo $(readlink -f $f) || echo $f)
+          vim --scratch -c 'setlocal conceallevel=2' $($follow_link && echo $(readlink -f $f) || echo $f)
         fi
         return $?
       fi
@@ -211,3 +223,4 @@ last_grep() { # @@ # {{{
 
 alias of='output_to_file' # @@
 alias l-grep='last_grep' # @@
+alias lgr='last_grep' # @@

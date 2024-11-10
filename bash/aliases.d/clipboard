@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+# [[ -z $CLIPBOARD_FORCE_TMUX_CLIPBOARD ]] && $IS_DOCKER && CLIPBOARD_FORCE_TMUX_CLIPBOARD=true
+
+if $IS_DOCKER; then # {{{
+  __xclip() {
+    [[ -z $CLIP_FILE ]] && return 1
+    if [[ $1 == --put ]]; then
+      cat - >$CLIP_FILE
+    elif [[ $1 == --get ]]; then
+      cat $CLIP_FILE
+    elif [[ $1 == '--tmux' ]]; then
+      tmux set-buffer -b clipboard "$(cat $CLIP_FILE)"
+    else
+      return 1
+    fi
+  } # }}}
+elif which xclip >/dev/null 2>&1 && ! ${CLIPBOARD_FORCE_TMUX_CLIPBOARD:-false}; then # {{{
+  __xclip() {
+    if [[ $1 == --put ]]; then
+      command xclip -in -selection clipboard
+    elif [[ $1 == --get ]]; then
+      command xclip -out -selection clipboard
+    else
+      command xclip $@
+    fi
+  } # }}}
+elif which pbcopy >/dev/null 2>&1 && ! ${CLIPBOARD_FORCE_TMUX_CLIPBOARD:-false}; then # {{{
+  __xclip() {
+    local rattach=
+    which reattach-to-user-namespace >/dev/null 2>&1 && reatach="reattach-to-user-namespace"
+    if [[ $1 == --put ]]; then
+      $reattach pbcopy
+    elif [[ $1 == --get ]]; then
+      $reattach pbpaste
+    else
+      $reattach pbcopy $@
+    fi
+  } # }}}
+elif [[ -n $TMUX ]]; then # {{{
+  __xclip() {
+    if [[ $1 == --put ]]; then
+      tmux set-buffer -b clipboard "$(cat -)"
+    elif [[ $1 == --get ]]; then
+      tmux paste-buffer -b clipboard
+    else
+      return 1
+    fi
+  } # }}}
+else # {{{
+  __xclip() { echor "xclip not defined"; cat -; }
+fi # }}}
+export -f __xclip
+xclip() { # {{{
+  if [[ -z $1 ]]; then
+    if [[ ! -t 0 ]]; then
+      xclip --put
+    else
+      xclip --get
+    fi
+    return 0
+  elif [[ $1 == --put ]]; then
+    sed -u -z '$ s/\n$//' | __xclip --put
+  elif [[ $1 == --get ]]; then
+    __xclip --get
+  else
+    __xclip $@
+  fi
+} # }}}
+xc()     { xclip "$@"; }
+ccopy()  { cat - | xclip --put; }
+cpaste() { xclip --get | cat -; }
+

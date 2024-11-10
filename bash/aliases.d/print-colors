@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+printColors() { # @@ # {{{
+  local i= cf=
+  for ((i=0;i<16;i++)); do
+    [[ $((i%8)) == 0 ]] && printf "\n"
+    cf=$(printf "[38;5;%03dm" $i)
+    printf " \x1b%s%03d[0m " "$cf" $i
+  done
+  printf "\n"
+  for ((i=16;i<232;i++)); do
+    if [[ $(((i-16)%12)) == 0 ]]; then
+      printf "\n"
+      [[ $(((i-16)%(12*6))) == 0 ]] && printf "\n"
+    elif [[ $(((i-16)%6))  == 0 ]]; then
+      printf "   "
+    fi
+    cf=$(printf "[38;5;%03dm" $i)
+    printf " \x1b%s%03d[0m " "$cf" $i
+  done
+  printf "\n"
+  for ((i=232;i<256;i++)); do
+    [[ $(((i-232)%8)) == 0 ]] && printf "\n"
+    cf=$(printf "[38;5;%03dm" $i)
+    printf " \x1b%s%03d[0m " "$cf" $i
+  done
+  printf "\n"
+} # }}}
+printColorsFull() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    local ret="--txt --fg --bg --all --show --pairs"
+    case $3 in
+    --show) ret="full ids";;
+    esac
+    echo "$ret"
+    return 0
+  fi # }}}
+  local text= fgs= bgs= show_colors= pairs= tmp_text= b= f= cb= cf= p=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --txt)   text="$2"; shift;;
+    --fg)    fgs="$2"; shift;;
+    --bg)    bgs="$2"; shift;;
+    --all)   fgs=$(echo {0..255}); bgs=$(echo {0..255});;
+    --show)  show_colors="$2"; shift;;
+    --pairs) pairs="$2"; shift;;
+    esac
+    shift
+  done # }}}
+  if [[ -z $pairs ]]; then # {{{
+    [[ -z $fgs ]] && fgs=$(echo {0..255})
+    [[ -z $bgs ]] && bgs="0"
+    for b in $bgs; do
+      for f in $fgs; do
+        pairs+="$b;$f "
+      done
+    done
+  fi # }}}
+  tmp_text="$text"
+  for p in $pairs; do # {{{
+    b=$(printf "%03d" ${p%;*})
+    f=$(printf "%03d" ${p#*;})
+    cb="[48;5;${b}m"
+    cf="[38;5;${f}m"
+    [[ -z $text ]] && tmp_text="Colour:$f($b)"
+    case $show_colors in # {{{
+    full) printf "| ^[%s ^[%s | " "$cb" "$cf";;
+    ids)  printf "| %3d %3d | "   "${p%;*}"  "${p#*;}";;
+    esac # }}}
+    printf "\x1b%s\x1b%s%s[0m\n" "$cb" "$cf" "$tmp_text"
+  done # }}}
+} # }}}
+

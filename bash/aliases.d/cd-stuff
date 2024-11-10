@@ -2,6 +2,7 @@
 # vim: fdl=0
 
 __cd_util() { # {{{
+  local fileStored="$TMP_MEM_PATH/.cd.stored"
   case $1 in
   --list-parents) # {{{
     shift
@@ -60,6 +61,29 @@ __cd_util() { # {{{
     local dst=$2 prompt=
     [[ $dst == $HOME ]] && prompt="~" || prompt="$(basename $dst)"
     echo "$prompt";; # }}}
+  --del-from-cache) # {{{
+    [[ -e $fileStored ]] || return 1
+    sed -i '/^'"$1"' '"${PWD//\//@}"' # {\{3\}/,/^# }\{3\}/d' $fileStored;; # }}}
+  --find-in-cache) # {{{
+    [[ -e $fileStored ]] || return 1
+    shift
+    local c=${2:-5} p="$PWD" ret=
+    while true; do
+      ret="$(sed -n '/^'"$1"' '"${p//\//@}"' # {\{3\}/,/^# }\{3\}/p' $fileStored | sed -e '1d' -e '$d')"
+      [[ ! -z $ret ]] && break
+      p=${p%/*}
+      [[ -z $p ]] && break
+      c=$((c - 1))
+      [[ $c == 0 ]] && break
+    done
+    echo "$ret";; # }}}
+  --add-to-cache) # {{{
+    shift
+    (
+      echo "$1 ${PWD//\//@} # {{{"
+      echo "$2"
+      echo "# }}}"
+    ) >>$fileStored;; # }}}
   esac
 } # }}}
 __cd_util_mode_parent() { # {{{
@@ -79,13 +103,8 @@ __cd_util_mode_parent() { # {{{
         dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Parent> ')" || return 0
         dst="$(__cd_util --update-dst "$dst" 'eval dst="${dst%%. *}" && eval printf ../%.0s {1..$dst}')"
       else
-        echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
-        $in_pipe && return 0
-        read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-        case ${i^^} in
-        Q|N|'') return 0;;
-        esac
-        dst="$(eval printf "../%.0s" {1..$i})"
+        echo "$stdout"
+        return 0
       fi
     else
       dst="../$2" && shift
@@ -118,13 +137,8 @@ __cd_util_mode_previous() { # {{{
         dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Last> ')" || return 0
         dst="$(__cd_util --update-dst "$dst")"
       else
-        echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
-        $in_pipe && return 0
-        read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-        case ${i^^} in
-        Q|N|'') return 0;;
-        esac
-        dst="${CD_LAST_DIRS[$(($len-$i-1))]}"
+        echo "$stdout"
+        return 0
       fi
       [[ -z $dst ]] && return 1
     else
@@ -134,37 +148,41 @@ __cd_util_mode_previous() { # {{{
   echo "$dst"
 } # }}}
 __cd_util_mode_stored() { # {{{
-  local dst=
+  local dst= stdout=
   while true; do # while for implementation of completion with a form of ': ...'
     case $1 in
-    :) # {{{
+    : | ::) # {{{
       [[ $2 == :* ]] && shift && continue
-      [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
-      cd_list=$CD_LAST_DIRS_STORED
-      local list="$(for i in $BASH_PROFILES_FULL; do
-        [[ -e $i/aliases ]] && $i/aliases __util_cd_param @@ | tr ' ' '\n' | sed 's/$/@--cd-spec/' | tr '\n' ':' 2>/dev/null
-      done)"
-      list="$(echo "$cd_list:$list" | tr ':' '\n' | sed '/^ *$/d' | sort -u | tr '\n' ':')"
-      IFS=':' && read -ra cd_list < <(echo -e "$list") && IFS=$oldIFS
-      [[ -z $cd_list ]] && return 1
-      $ALIASES progress --mark --msg "Obtaining dirs" --out /dev/stderr
-      stdout=$(for i in ${!cd_list[*]}; do
-        key="${cd_list[$i]/@*}"
-        p="$(__cd_util --cd-param "$key" "${cd_list[$i]/*@}")"
-        [[ ! -z $p ]] && printf "%2d. %12s: %s\n" "$(($i+1))" "${key:0:12}" "$(echo "$p" | sed "s|^$HOME|~|")"
-      done)
-      $ALIASES progress --unmark
+      local fileStored="$TMP_MEM_PATH/.cd.stored"
+      if [[ $1 == :: ]]; then
+        __cd_util --del-from-cache F
+      else
+        stdout="$(__cd_util --find-in-cache F 5)"
+      fi
+      if [[ -z $stdout ]]; then
+        [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
+        cd_list=$CD_LAST_DIRS_STORED
+        local list="$(for i in $BASH_PROFILES_FULL; do
+          [[ -e $i/aliases ]] && $i/aliases __util_cd_param @@ | tr ' ' '\n' | sed 's/$/@--cd-spec/' | tr '\n' ':' 2>/dev/null
+        done)"
+        list="$(echo "$cd_list:$list" | tr ':' '\n' | sed '/^ *$/d' | sort -u | tr '\n' ':')"
+        IFS=':' && read -ra cd_list < <(echo -e "$list") && IFS=$oldIFS
+        [[ -z $cd_list ]] && return 1
+        progress --mark --msg "Obtaining dirs" --out /dev/stderr
+        stdout=$(ii=0; for i in ${!cd_list[*]}; do
+          key="${cd_list[$i]/@*}"
+          p="$(__cd_util --cd-param "$key" "${cd_list[$i]/*@}")"
+          [[ ! -z $p ]] && ii=$((ii + 1)) && printf "%2d. %12s: %s\n" "$ii" "${key:0:12}" "$(echo "$p" | sed "s|^$HOME|~|")"
+        done)
+        progress --unmark
+        __cd_util --add-to-cache F "$stdout"
+      fi
       if $use_fzf; then
         dst="$(echo "$stdout" | fzf $fzf_common_params  --prompt='Stored> ')" || return 0
         dst="$(__cd_util --update-dst "$dst" '${dst#*: }')"
       else
-        echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
-        $in_pipe && return 0
-        read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-        case ${i^^} in
-        Q|N|'') return 0;;
-        esac
-        dst="$(__cd_util --cd-param "${cd_list[$(($i-1))]/@*}" "${cd_list[$(($i-1))]/*@}")"
+        echo "$stdout"
+        return 0
       fi
       ;; # }}}
     :+|:++)  # {{{
@@ -210,7 +228,7 @@ __cd_util_mode_stored() { # {{{
       [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
       dst="env:export CD_LAST_DIRS_STORED='$CD_LAST_DIRS_STORED';$dst"
       return 0;; # }}}
-    # Search: :?* :??* {{{
+    # Search: :?* :??* # {{{
     :\?* ) # {{{
       case $1 in
       :\?\?*) # {{{
@@ -242,13 +260,8 @@ __cd_util_mode_stored() { # {{{
           dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
           dst="$(__cd_util --update-dst "$dst")"
         else
-          echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
-          $in_pipe && return 0
-          read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-          case ${i^^} in
-          Q|N|'') return 0;;
-          esac
-          dst="${out[$(($i-1))]}"
+          echo "$stdout"
+          return 0
         fi
         [[ -z $dst ]] && return 1
       fi;; # }}}
@@ -300,13 +313,8 @@ __cd_util_mode_children() { # {{{
       dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
       dst="$(__cd_util --update-dst "$dst")"
     else
-      echo "$stdout" | { ! $in_pipe && hl --lines || cat -; }
-      $in_pipe && return 0
-      read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-      case ${i^^} in
-      Q|N|'') return 0;;
-      esac
-      dst="${out[$(($i-1))]}"
+      echo "$stdout"
+      return 0
     fi
     [[ -z $dst ]] && return 1
   fi
@@ -329,7 +337,7 @@ __cd_util_mode_interactive() { # {{{
     # }}}
     [[ $1 == -[0-9]* ]] && md="${1#-}"
     dst="." && shift
-    local res= tmux_p= list= prompt= cd_list= tmp= k= v= paths= predefined_list= user_list= fixed_list= query= first=true
+    local res= tmux_p= list= prompt= cd_list= tmp= k= v= predefined_list= user_list= fixed_list= query= first=true
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
       [0-9]*)             md="$1";;
@@ -357,17 +365,19 @@ __cd_util_mode_interactive() { # {{{
     fi # }}}
     # Filter stored dirs # {{{
     if [[ $add_stored != 'none' ]]; then
-      for i in $(IFS=':'; echo $CD_LAST_DIRS_STORED); do
-        k="${i%%@*}" v="${i#*@}"
-        [[ -z $k || -z $v ]] && continue
-        echo " $CD_LAST_DIRS_INTERACTIVE_IGNORE " | command grep -q " $k " && continue
-        v="$(__cd_util --cd-param "$k" "$v")"
-        [[ ! -d "$(__cd_util --tilde-conv "$v")" ]] && continue
-        cd_list+="$(printf ":%-6s --> %s" "$k" "${v/$HOME/~}")\n"
-        paths+=":$k@$v"
-      done
-      cd_list="$(echo -e "$cd_list" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
-      paths="${paths:1}"
+      cd_list="$(__cd_util --find-in-cache I 5)"
+      if [[ -z $cd_list ]]; then # {{{
+        for i in $(IFS=':'; echo $CD_LAST_DIRS_STORED); do
+          k="${i%%@*}" v="${i#*@}"
+          [[ -z $k || -z $v ]] && continue
+          echo " $CD_LAST_DIRS_INTERACTIVE_IGNORE " | command grep -q " $k " && continue
+          v="$(__cd_util --cd-param "$k" "$v")"
+          [[ ! -d "$(__cd_util --tilde-conv "$v")" ]] && continue
+          cd_list+="$(printf ":%-6s --> %s" "$k" "${v/$HOME/~}")\n"
+        done
+        cd_list="$(echo -e "$cd_list" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
+        __cd_util --add-to-cache I "$cd_list"
+      fi # }}}
       if [[ "$add_stored" == "smart" ]]; then # {{{
         [[ -z $root ]] && root="$tmux_p"
         [[ -z $root ]] && root="$PWD"
@@ -418,23 +428,20 @@ __cd_util_mode_interactive() { # {{{
       done
       user_list="$(echo -e "$user_list" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
     fi # }}}
-    # fzf-wrapper # {{{
-    if $use_fzf; then
-      fzf_wrapper() { # {{{
-        local mode="$1" wd="$3" dir=
-        [[ $2 == '---' || -z $2 ]] && dir="$wd"
-        [[ -z $dir ]] && dir="$(echo "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
-        dir="$(echo $(__cd_util --tilde-conv "$dir"))"
-        [[ $dir != /* ]] && dir="$wd/$dir" && dir="$(command cd "$dir"; pwd)"
-        case $mode in
-        prev)    $ALIASES fzf_exe -c prev --prev 10 -f "$dir" ;;
-        split-v) tmux split-window -v -p 30 -d -c "$dir";;
-        split-h) tmux split-window -h -p 50 -d -c "$dir";;
-        new-wnd) tmux new-window   -a       -d -c "$dir";;
-        esac
-      } # }}}
-      export -f fzf_wrapper __cd_util
-    fi # }}}
+    fzf_wrapper() { # {{{
+      local mode="$1" wd="$3" dir=
+      [[ $2 == '---' || -z $2 ]] && dir="$wd"
+      [[ -z $dir ]] && dir="$(echo "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
+      dir="$(echo $(__cd_util --tilde-conv "$dir"))"
+      [[ $dir != /* ]] && dir="$wd/$dir" && dir="$(command cd "$dir"; pwd)"
+      case $mode in
+      prev)    fzf_exe -c prev --prev 10 -f "$dir" ;;
+      split-v) tmux split-window -v -p 30 -d -c "$dir";;
+      split-h) tmux split-window -h -p 50 -d -c "$dir";;
+      new-wnd) tmux new-window   -a       -d -c "$dir";;
+      esac
+    } # }}}
+    export -f fzf_wrapper __cd_util
     local empty=false hidden=false fzf_key_show_hidden='ctrl-f'
     while true; do # {{{
       dst="$(command cd "$(__cd_util --tilde-conv "$dst")"; pwd)"
@@ -467,7 +474,7 @@ __cd_util_mode_interactive() { # {{{
         local i=0 pdir= tmp
         while read tmp pdir; do
           i=$((i+1))
-          list+="..${i}/ : $pdir\n"
+          list+="...${i}/ --> $pdir\n"
         done < <(__cd_util --list-parents "$dst")
       fi # }}}
       list+='\n'
@@ -512,33 +519,27 @@ __cd_util_mode_interactive() { # {{{
         res="$(echo "$res" | sed -n '2p')"
         [[ -z $res ]] && return 0
         [[ ! -z "$query" ]] && query="-"
-        case $res in
-        ..[0-9]*/\ :\ *) res="$(__cd_util --tilde-conv "$(echo "$res" | cut -d' ' -f3-)")";;
-        esac
+        if [[ $res =~ ^\.\.\.[0-9]+'/ --> '(.*) ]]; then
+          res="${BASH_REMATCH[1]}"
+          if [[ $res == .../* ]]; then
+            if [[ $dst =~ (.*)/${res#.../}.* ]]; then
+              res="${BASH_REMATCH[1]}/${res#.../}"
+            else
+              echorm 0 "res starts with .../ but cannot obtain full path"
+              echorv -M 0 -nl res dst
+            fi
+          fi
+        fi
+        res="$(__cd_util --tilde-conv "$res")"
         case $key in # {{{
         $fzf_key_step_in) ;;
         $fzf_key_show_hidden) $hidden && hidden=false || hidden=true; continue;;
-        '') # {{{
-          if [[ $res == '---' ]]; then
-            break
-          elif [[ $res == /* && -e $res ]]; then
-            dst="$res"
-          else
-            dst+="/$res"
-          fi
-          [[ $dst == //* ]] && dst="${dst:1}"
-          [[ ! -d "$dst" ]] && return 1
-          break;; # }}}
+        '') loop=false;;
         esac # }}}
         # }}}
       else # {{{
-        echo "$stdout" | cat -n | cut -c4- | { ! $in_pipe && hl --lines || cat -; }
-        $in_pipe && return 0
-        read -p "cd (1-$(echo "$stdout" | wc -l | xargs))? " i
-        case ${i^^} in
-        Q|N|'') return 0;;
-        esac
-        res="$(echo -e "$stdout" | sed "${i}q;d")"
+        echo "$stdout"
+        return 0
       fi # }}}
       case $res in # {{{
       ---)  break;;
@@ -639,11 +640,7 @@ function cd_wrapper { # @@ # {{{
   fi # }}}
   [[ ! -t 1 ]] && in_pipe=true
   local colors= COff=
-  if ! $in_pipe; then # {{{
-    colors=("[48;5;12m" "${COnBlack}")
-    COff='[0m'
-  fi # }}}
-  if [[ ! -e "$dst" || $1 == '.' || $1 == '--' ]]; then
+  if [[ ! -e "$dst" || $1 == '.' || $1 == '--' ]]; then # {{{
     dst=
     [[ $1 == '--' ]] && shift
     local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*CD-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
@@ -667,6 +664,10 @@ function cd_wrapper { # @@ # {{{
       *)   break;;
       esac; shift
     done # }}}
+    if ! $in_pipe; then # {{{
+      colors=("[48;5;12m" "${COnBlack}")
+      COff='[0m'
+    fi # }}}
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
       . | .[0-9]*) # Parents # {{{
@@ -682,7 +683,11 @@ function cd_wrapper { # @@ # {{{
         dst="$(__cd_util_mode_children "$@")"
         break;; # }}}
       -i | -[0-9]*) # Interactive # {{{
-        dst="$(__cd_util_mode_interactive "$@")"
+        if [[ -z "$dst" && "$@" =~ "--query="\ *.+$ ]]; then
+          local dstConv=$(__cd_util --tilde-conv "${@: -1}")
+          [[ -d "$dstConv" || ( -h "$dstConv" && -d "$(readlink -f "$dstConv")" ) ]] && dst="$dstConv"
+        fi
+        [[ -z "$dst" ]] && dst="$(__cd_util_mode_interactive "$@")"
         break;; # }}}
       *) # {{{
         dst="$1"
@@ -703,9 +708,12 @@ function cd_wrapper { # @@ # {{{
       eval "${env#env:}"
     fi # }}}
     [[ -z $dst ]] && return 0
-  fi
+  fi # }}}
   dst="$(__cd_util --tilde-conv "$dst")"
-  $in_pipe && echo "$dst" && return 0
+  if $in_pipe; then
+    command cd "$dst"
+    return 0
+  fi
   cmd="$cmd ${dst// /\\ }"
   [[ "$dst" == '-' && -z $OLDPWD ]] && echo "OLDPWD not set" >/dev/stderr && return 1
   if $verbose && [[ $cmd == cd* ]]; then # {{{
@@ -766,9 +774,9 @@ cd_no_expansion() { # @@ { # {{{
 } # }}}
 
 alias cd='set -f;cd_no_expansion' # @@
-alias cdd='cd -- -i 3 --loop --stored-none --fzf-params "-e -x --query="'
+alias cdd='cd -- -i 8 --loop --stored-none --fzf-params "-e -x --query="'
 alias c='cd -- -i 5 --loop --stored-none --fzf-params "-e -x --query="'
-alias cD='cd -- -i 3 --loop --stored-all --fzf-params "-e -x --query="'
+alias cD='cd -- -i 8 --loop --stored-all --fzf-params "-e -x --query="'
 alias cdp='cd -- -P'
 alias po='cd -- -po'
 alias pu='cd -- -pu'

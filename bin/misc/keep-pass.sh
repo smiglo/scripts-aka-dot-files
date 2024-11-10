@@ -17,6 +17,14 @@ if [[ $1 == '--complete' ]]; then # {{{
   [[ "${BASH_SOURCE[0]}" == "${0}" ]] && echo "Must be sourced (source $0 --complete)" >/dev/stderr && exit 1
   __complete_keep_pass() { # {{{
     local cur=${COMP_WORDS[COMP_CWORD]} opts= first="${COMP_WORDS[1]}" i=2
+    if [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then
+      local KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
+    fi
+    if [[ -z $KEEP_PASS_JOURNAL ]]; then
+      if [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
+        local KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
+      fi
+    fi
     while true; do
       case $first in
       -v | -vv | -vvv | --journal) first="${COMP_WORDS[i]}"; i=$((i+1));;
@@ -28,14 +36,12 @@ if [[ $1 == '--complete' ]]; then # {{{
     --cnt) # {{{
       opts+=" $(echo {1..10})";; # }}}
     --journal) # {{{
-      local journalFiles="$KEEP_PASS_JOURNALS"
-      [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+      local journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED"
       [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
       opts="$journalFiles"
       ;; # }}}
     --key | --save) # {{{
-      local journalFiles="$KEEP_PASS_JOURNALS" f=
-      [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+      local journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED" f=
       [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles+=" $PWD/keep-pass.journal"
       for f in $journalFiles; do
         [[ -e "$f" ]] || continue
@@ -47,6 +53,10 @@ if [[ $1 == '--complete' ]]; then # {{{
       done;; # }}}
     -t) # {{{
       opts+="- 0 60 120";; # }}}
+    -p | --parts) # {{{
+      [[ $first == '--gen-ios-pass' ]] && opts+="2 3 4 5 10";; # }}}
+    -l | --seg-len) # {{{
+      [[ $first == '--gen-ios-pass' ]] && opts+="3 5 6 10";; # }}}
     *) # {{{
       case $first in
       --gen) # {{{
@@ -61,9 +71,11 @@ if [[ $1 == '--complete' ]]; then # {{{
         opts+=" -d -dd";; # }}}
       --set-master-key) # {{{
         opts+=" -t";; # }}}
+      --gen-ios-pass) # {{{
+        opts+="-p --parts -l --seg-len";; # }}}
       *) # {{{
         opts+=" -v -vv -vvv --journal"
-        opts+=" --gen --get --key --save --has-key --list-keys --list-all-keys --set-master-key --help";; # }}}
+        opts+=" --gen --get --key --save --has-key --list-keys --list-all-keys --set-master-key --help --gen-ios-pass";; # }}}
       esac;; # }}}
     esac
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
@@ -85,6 +97,7 @@ dbg() { # {{{
 err() { # {{{
   echorm -F + "ERR: $@"
 } # }}}
+echorm --name keep-pass
 LC_ALL=C
 dictFile="${KEEP_PASS_DICT:-$(dirname "$(readlink -f "$0")")/keep-pass.dict}"
 journalMainFile=
@@ -97,19 +110,35 @@ digits=(65434 65435 65436 65441 65442 65443 65444 65445 65446 65451)
 specials=(66563 66564 66565 66566 66611 66612 66613 66614 66615 66616 66621 66622 66623 66624 66625 66626 66631 66632 66634 66635 66641 66643 66645 66646 66652 66653 66655 66656 66661 66662 66663 66664 66666)
 # info  : space     `     ~     ^     _     {     }     [     ]     \     |     '     <     >     ,     .     /    !     "     #     $     %     &     (     )     *     +     -     :     ;     =     ?     @
 verbose=0
+if [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then
+  export KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
+else
+  echorm 1 "No shared journal"
+fi
+if [[ -z $KEEP_PASS_JOURNAL ]]; then
+  if [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
+    export KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
+  else
+    echorm 1 "No apps journal"
+  fi
+fi
+[[ -z $KEEP_PASS_KEYS ]] && export KEEP_PASS_KEYS="$APPS_CFG_PATH/keep-pass/keep-pass.keys"
+[[ -e $APPS_CFG_PATH/keep-pass ]] || command mkdir -p $APPS_CFG_PATH/keep-pass/
 if [[ ! -z "$KEEP_PASS_KEYS" ]]; then # {{{
   if [[ -e "$KEEP_PASS_KEYS" ]]; then
     source "$KEEP_PASS_KEYS"
   elif [[ "$KEEP_PASS_KEYS" != /* || "$KEEP_PASS_KEYS" == //* ]]; then
-    source <(eval "$KEEP_PASS_KEYS")
+    source <(eval "${KEEP_PASS_KEYS#//}")
+  else
+    echorm 1 "No keys"
   fi
 fi # }}}
 
 getJournals() { # {{{
   [[ ! -z $journalMainFile ]] && echo "$journalMainFile" && return 0
-  local journalFiles="$KEEP_PASS_JOURNALS"
-  [[ -z $journalFiles ]] && journalFiles="$KEEP_PASS_JOURNAL"
+  local journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED"
   [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
+  echorv -M 1 journalFiles
   echo "$journalFiles"
 } # }}}
 getRand() { # {{{
@@ -255,7 +284,6 @@ getMasterkey() { # {{{
   [[ ! -z $mkey ]] && echo "$mkey" && return 0
   $interactive || return 1
   read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echor
-  echor
   [[ -z $mkey ]] && return 1
   if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
     dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
@@ -267,6 +295,8 @@ getMasterkey() { # {{{
         $python -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(\"utf-8\"), sys.argv[2].encode(\"utf-8\")));' \"\$1\" \"\$2\"; \
       }; f '$mkey' '$KEEP_PASS_MASTER_KEY_SALT'" \
     )"
+  else
+    mkey="$(echo "$mkey" | sha1sum | cut -d' ' -f1)"
   fi # }}}
   echo "$mkey"
 } # }}}
@@ -315,6 +345,7 @@ getPass() { # {{{
     esac
     shift
   done # }}}
+  dbg 1 "seq-0 : $seq ph: $phrase"
   if [[ ! -z $phrase ]]; then # {{{
     local f= line=
     for f in $(getJournals); do
@@ -323,29 +354,34 @@ getPass() { # {{{
       [[ ! -z $line ]] && break
     done
     seq="$(echo "$line" | sed 's/.*:\s\+//')"
+    dbg 3 "seq-p : $seq"
     [[ -z $seq ]] && return 1
     if [[ ${seq:0:1} == '*' && -z $pass ]]; then
       local passV="$(echo "$line" | sed 's/\(.*\):\s\+.*$/\1/')"
       passV="${passV#*:}"
       passV="KEEP_PASS_KEY_${passV^^}"
+      dbg 3 "passV: $passV"
       passV="${passV//-/_}"
       pass="${!passV}"
+      dbg 3 "pass: $pass"
     fi
   fi # }}}
   [[ ${seq:0:1} == '*' ]] && use_pass=true && seq="${seq:1}"
   if $use_pass; then # {{{
     seq="$(encrypt -d "$seq" "$pass" "$interactive")"
     [[ $? != 0 || -z $seq ]] && err "Error during decryption" && return 1
-    dbg 1 "$seq"
+    dbg 3 "seq-dp: $seq"
     [[ $seq == '---' ]] && echo "$seq" && return 0
   fi # }}}
   [[ ${seq:0:1} != '+' ]] && seq="$(encode -d "$seq")" || { seq="${seq:1}"; do_encode=false; }
-  dbg 2 "$seq"
+  dbg 2 "seq-de: $seq"
   IFS=":" read -r seq upper spaces upper_first padding <<< "$seq"
+  dbg 3 "seq-sp: s: $seq u: $upper sp: $spaces uf: $upper_first p: $padding"
   IFS="$oldIFS"
   [[ -z $seq ]] && return 0
   if $do_encode; then # {{{
     seq="$(echo "${seq// }" | sed 's/.\{5\}/& /g')"
+    dbg 3 "seq-se: $seq"
     [[ $spaces == 1 ]] && spaces=true || spaces=false
     [[ $upper_first == 1 ]] && upper_first=true || upper_first=false
     ! $spaces && words='-'
@@ -357,6 +393,7 @@ getPass() { # {{{
       words+="$w"
     done # }}}
     words="${words:1}"
+    dbg 3 "words: $words"
     if [[ ! -z $upper ]]; then # {{{
       for upper in ${upper//,/ }; do
         upper="$(($upper%${#words}))"
@@ -371,6 +408,7 @@ getPass() { # {{{
           i="${words:$upper:1}"
         done
         t="${words:$(($upper+1))}"
+        dbg 3 "upper: $upper: [$f|$i|$t]"
         words="${f}${i^^}${t}"
       done
     fi # }}}
@@ -378,7 +416,7 @@ getPass() { # {{{
   else # {{{
     words="$seq"
   fi # }}}
-  echo "$words"
+  echo -n "$words"
 } # }}}
 genPass() { # {{{
   local cnt=4 i= v= seq= words= pass= params= input= info= \
@@ -553,12 +591,12 @@ genPass() { # {{{
     fi # }}}
   fi # }}}
   if [[ $verbose -ge 1 ]]; then
-    dbg 1 -e "$(basename "$0") ${params:-\b} --seq $seq"
+    dbg 1 "$(basename "$0") ${params:-\b} --seq $seq"
   else
     ! $save && echo "$seq"
   fi
   check="$(getPass $params --seq $seq)"
-  dbg 1 "$check"
+  dbg 1 "check: [$check]"
   check="$(echo "$check" | tail -n1)"
   if [[ "$check" != "$input" && ! -z $input ]]; then # {{{
    err "Decrypted phrase does not match input"
@@ -568,7 +606,7 @@ genPass() { # {{{
   fi # }}}
   if $save; then # {{{
     [[ -z $info ]] && info="$(command date +"%Y%m%d-%H%M%S")"
-    local entry="${info// /-}:" journalFile="$KEEP_PASS_JOURNAL"
+    local entry="${info// /-}:" journalFile="${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}"
     if [[ ! -z $journalMainFile ]]; then
       journalFile="$journalMainFile"
     elif [[ -e "$PWD/keep-pass.journal" ]]; then
@@ -601,7 +639,7 @@ hasKey() { # {{{
   return 1
 } # }}}
 listKeys() { # {{{
-  local f= i= d= files="$KEEP_PASS_JOURNAL" all=false details=0
+  local f= i= d= files="${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}" all=false details=0
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --all) all=true;;
@@ -635,6 +673,48 @@ listKeys() { # {{{
     done # }}}
   done | sort -u # }}}
 } # }}}
+# IOS like pass # {{{
+iosDigits='0123456789'
+iosVovels='aeiouy'
+iosConsonants='bcdfghjklmnpqrstvwz'
+iosGetChar() { # {{{
+  local i=$(getRangeValue ${#1})
+  echo "${1:$i:1}"
+} # }}}
+iosIsVovel() { # {{{
+  [[ ! -z $1 && $iosVovels == *$1* ]]
+} # }}}
+genIOSLikePass() { # {{{
+  local parts=3 charsInPart=6
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -p | --parts) parts="$2"; shift;;
+    -l | --seg-len) charsInPart="$2"; shift;;
+    esac; shift
+  done # }}}
+  local charCount=$((parts * charsInPart))
+  local idxDigit=$(getRangeValue $charCount)
+  local idxUpper=$(((idxDigit + 1 + $(getRangeValue $((charCount - 1)))) % charCount))
+  local idx=0 l= out=
+  for ((;parts>0;parts--)); do # {{{
+    local i=$charsInPart next='letter'
+    for ((i=0; i <$charsInPart; i++)); do # {{{
+      [[ $idx == $idxDigit ]] && next='digit'
+      case $next in
+      'letter') l=$(iosGetChar "$iosVovels$iosConsonants"); iosIsVovel $l && next='conso' || next='vovel';;
+      'conso')  l=$(iosGetChar "$iosConsonants"); next='letter';;
+      'vovel')  l=$(iosGetChar "$iosVovels"); next='conso';;
+      'digit')  l=$(iosGetChar "$iosDigits"); next='letter';;
+      esac
+      [[ $idx == $idxUpper ]] && l=$(echo "$l" | tr '[a-z]' '[A-Z]')
+      out+="$l"
+      idx=$((idx + 1))
+    done # }}}
+    [[ $parts -gt 1 ]] && out+='-'
+  done # }}}
+  echo "$out"
+} # }}}
+# }}}
 set -- $KEEP_PASS_PARAMS "$@"
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -646,13 +726,15 @@ while [[ ! -z $1 ]]; do # {{{
   esac
   shift
 done # }}}
-echorm -f $verbose
+echorm -f?
+[[ $? == 10 ]] && echorm -f $verbose
 case $1 in
 --help) # {{{
   echor "Usage:"
   echor "  $(basename "$0") --gen [--save] name:env-pwd phrase"
   echor "  $(basename "$0") --gen [--key name:env-pwd] phrase"
   echor "  $(basename "$0") [--get] [--key] name"
+  echor "  $(basename "$0") [--gen-ios-pass [-p|--parts number] [-l|--seg-len number]"
   # echor "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
   exit 0;; # }}}
 --get)             shift; getPass "$@";;
@@ -663,6 +745,7 @@ case $1 in
 --list-all-keys)   shift; listKeys --all $@;;
 --set-master-key)  shift; setMasterKey $@;;
 --test)            shift; $@;;
+--gen-ios-pass)    shift; genIOSLikePass $@;;
 *)                 getPass "$@";;
 esac
 

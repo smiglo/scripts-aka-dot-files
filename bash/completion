@@ -2,12 +2,12 @@
 # vim: fdl=0
 
 # Is installed # {{{
-${RCSTUFF_COMPLETION_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
+${RCSTUFF_COMPLETION_INSTALLED:-false} && [[ $1 != '--force' ]] && ! $RCSTUFF_FORCE && return 0
 export RCSTUFF_COMPLETION_INSTALLED=true
 [[ $1 == '--force' ]] && shift
 if [[ -e $BASHRC_RUNTIME_PATH/completion-list ]]; then
   source $BASHRC_RUNTIME_PATH/completion-list
-  [[ $1 != '--do-full' ]] && return 0
+  [[ $1 != '--do-full' ]] && ! $RCSTUFF_FORCE && return 0
 fi
 [[ $1 == '--do-'* ]] && shift
 # }}}
@@ -90,13 +90,22 @@ compl-short() { # {{{
 export -f compl-short
 compl-add compl-short # }}}
 compl-help() { # {{{
-  if [[ $1 == @@ ]]; then
+  if [[ $1 == @@ ]]; then # {{{
     echo "$EXPORTED_FUNCTIONS"
-    echo "@@-f @@-d"
+    echo "-s --short -l --long @@-f @@-d"
     return 0
-  fi
-  local cmd="$1"
-  if [[ -e "$cmd" ]]; then
+  fi # }}}
+  local cmd= short=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -l | --long)  short=false;;
+    -s | --short) short=true;;
+    *) cmd="$1"; shift $#;;
+    esac; shift
+  done # }}}
+  if [[ -z $cmd && ! -t 0 ]]; then
+    cmd="$(cat -)"
+  elif [[ -e "$cmd" ]]; then
     cmd="$(cat "$cmd")"
   elif ! declare -F "$cmd" >/dev/null 2>&1; then
     cmd="$(which "$cmd")"
@@ -112,12 +121,14 @@ compl-help() { # {{{
   parser="$(echo "$parser" | sed -n "$caseS,$caseE p" | cut -c9-)"
   indent="$(echo "$parser" | head -n1 | command grep -o "^ *")"
   parser="$(echo "$parser" | sed 's/^'"$indent"'//')"
-  echo "$parser" | $ALIASES hl +c=Search "^[^ ][^)]*)"
+  if $short; then
+    echo "$parser" | command grep "^[^ ][^)]*)" | sed 's/).*//' | { if [[ -t 1 ]] && isInstalled column; then column -t; else cat -; fi; }
+  else
+    echo "$parser" | sed -e '/^;;/d' -e 's/;$//' | hl +c=Search "^[^ ][^)]*)"
+  fi
 }
-export -f compl-help
 alias ch='compl-help'
-compl-add compl-help ch
-# }}}
+compl-add compl-help ch # }}}
 _completion_git_cmds() { # {{{
   local cur opts
   COMPREPLY=()
@@ -140,17 +151,13 @@ _completion_git_cmds() { # {{{
     esac
   fi
   COMPREPLY=( $(compgen -W "$opts" -- $cur) )
-}
-export -f _completion_git_cmds
-# }}}
+} # }}}
 _completion_vim() { # {{{
   COMPREPLY=()
   local cmd=${COMP_WORDS[0]}
   [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
   _completion_generic
-}
-export -f _completion_vim
-# }}}
+} # }}}
 _do_vim_completion() { # {{{
   local i=
   for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
@@ -172,25 +179,20 @@ if $IS_MAC; then
     if [[ -e /usr/local/etc/bash_completion ]]; then
       source <(sed -n '/^\(have()\|__ltrim_colon_completions\)/,/^}/p' /usr/local/etc/bash_completion)
     fi
-    export -f have __ltrim_colon_completions
+    declare -F have >/dev/null 2>&1 && export -f have
+    export -f __ltrim_colon_completions
     if [[ -e /usr/local/etc/profile.d/bash_completion.sh ]]; then
       source /usr/local/etc/profile.d/bash_completion.sh
     fi
     unset cf
   fi
 fi # }}}
-# Completion for git aliases defined in git-cmds.sh {{{
-_git_sync()     { _completion_generic; }
-_git_backup()   { _completion_generic; }
-_git_gitst()    { _completion_generic; }
-_git_ch_pick()  { _completion_generic; }
-_git_userset()  { _completion_generic; }
-_git_cba()      { _completion_generic; }
-_git_l()        { _completion_generic; }
-_git_lf()       { _completion_generic; }
-_git_lgo()      { _completion_generic; }
+# Completion for git aliases defined in git-cmds.sh # {{{
+for i in $($SCRIPT_PATH/git/git-cmds.sh --comply); do
+  eval "_git_${i}() { _completion_generic; }"
+done
 # }}}
-# Set generic completion {{{
+# Set generic completion # {{{
 COMPLETION_GENERIC_UTILS+=" fix_ssh_agent.sh mk_tar.sh asciidoc2html.sh gitst do_sync.sh tmux-startup.sh vim-enc.sh"
 COMPLETION_GENERIC_UTILS+=" repo.sh repo-get-diff.sh repo-update.sh"
 for i in $COMPLETION_GENERIC_UTILS $TO_INSTALL_BIN_MISC; do
@@ -204,6 +206,12 @@ for i in $(echo "$COMPLETION_GENERIC_FUNCTIONS" | tr ' ' '\n' | sort -u | tr '\n
   else
     echo "Function [$i] not found" >/dev/stderr
   fi
+done
+list="$(complete)"
+set +f
+for i in $HOME/.bin/*.sh; do
+  i="${i##*/}"
+  compl-add "$i"
 done
 unset COMPLETION_GENERIC_FUNCTIONS
 # }}}
@@ -219,13 +227,13 @@ _do_vim_completion
 unset _do_vim_completion
 # }}}
 # Oth # {{{
-complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$($ALIASES cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
+complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
 # }}}
 # tldr # {{{
 if [[ -e $HOME/.local/share/tldr ]]; then
   complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
 fi # }}}
-# Source additional completions {{{
+# Source additional completions # {{{
 if [[ -e $BASH_PATH/completion.d ]]; then
   for i in $(ls $BASH_PATH/completion.d); do
     [[ -f $BASH_PATH/completion.d/$i ]] && source $BASH_PATH/completion.d/$i
@@ -237,9 +245,9 @@ if [[ -e $RUNTIME_PATH/completion.d ]]; then
   done
 fi
 # }}}
-# Source profile specic completions {{{
-for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/completion ]] && source $i/completion
+# Source profile specic completions # {{{
+for profi in $BASH_PROFILES_FULL; do
+  [[ -e $profi/completion ]] && source $profi/completion
 done
 # }}}
 true

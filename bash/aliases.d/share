@@ -192,6 +192,7 @@ share() { # @@ # {{{
       ;; # }}}
     esac;; # }}}
   vim) # {{{
+    [[ ! -e $fName ]] && command mkdir -p $fName
     vim --fast $fName/notes.txt </dev/tty;; # }}}
   cd) # {{{
     (

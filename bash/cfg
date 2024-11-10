@@ -6,21 +6,24 @@ ${RCSTUFF_CFG_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 export RCSTUFF_CFG_INSTALLED=true
 [[ $1 == '--force' ]] && shift
 # }}}
-# Exports {{{
-# Term {{{
-[[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
-if [[ -e $TMP_MEM_PATH/.alacritty-is ]] || ( pidof 'alacritty' && infocmp 'alacritty' )>/dev/null 2>&1; then
-  TERM="alacritty"
-  [[ -e $TMP_MEM_PATH/.alacritty-is ]] || touch $TMP_MEM_PATH/.alacritty-is
-else
-  case $TERM_ORIG in
-  *) [[ ! -n $TMUX ]] && export TERM="xterm" || export TERM="screen" ;;&
-  linux) export TERM+="-16color";;
-  *)     export TERM+="-256color";;
-  esac
+# Exports # {{{
+# Term # {{{
+if ! ${TERM_ALREADY_SET:-false}; then
+  [[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
+  if [[ -e $TMP_MEM_PATH/.alacritty-is ]] || ( pidof 'alacritty' && infocmp 'alacritty' )>/dev/null 2>&1; then
+    TERM="alacritty"
+    [[ -e $TMP_MEM_PATH/.alacritty-is ]] || touch $TMP_MEM_PATH/.alacritty-is
+  else
+    case $TERM_ORIG in
+    *) [[ ! -n $TMUX ]] && export TERM="xterm" || export TERM="screen" ;;&
+    linux) export TERM+="-16color";;
+    *)     export TERM+="-256color";;
+    esac
+  fi
+  export TERM_ALREADY_SET=true
 fi
 # }}}
-# Git {{{
+# Git # {{{
 export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWSTASHSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
@@ -29,30 +32,51 @@ export GIT_PS1_DESCRIBE_STYLE="branch"
 export GIT_PS1_SHOWCOLORHINTS=true
 export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
 # }}}
-# Ack {{{
-export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match yellow"
+# Ack # {{{
+export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match=yellow"
 export ACK_PAGER="less"
 export ACK_PAGER_COLOR="less"
 # }}}
-# Ag {{{
-export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match 38;5;214"
+# Ag # {{{
+export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;214"
 # }}}
-# FZF {{{
-export FZF_INSTALLED=false
-if [[ -f ~/.fzf.bash ]]; then
+# Bat # {{{
+export BAT_INSTALLED=false
+if which bat >/dev/null 2>&1; then
+  BAT_INSTALLED=true
+  export BAT_PRG="bat"
+elif which batcat >/dev/null 2>&1; then
+  BAT_INSTALLED=true
+  export BAT_PRG="batcat"
+fi
+if $BAT_INSTALLED; then
+  export BAT_THEM2="Solarized (dark)"
+  export BAT_THEME="TwoDark"
+  help() {
+    "$@" --help 2>&1 | $BAT_PRG -p -l help --theme "$BAT_THEM2"
+  }
+else
+  help() {
+    "$@" --help
+  }
+fi
+# }}}
+# FZF # {{{
+if $FZF_INSTALLED; then
   if which fdfind >/dev/null 2>&1; then # {{{
-    export FZF_DEFAULT_COMMAND='command fdfind --type f -L | sort'
-    export FZF_ALT_C_COMMAND='command fdfind --type d | sort'
+    export FZF_DEFAULT_COMMAND="command fdfind -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
+    export FZF_ALT_C_COMMAND="command fdfind -d ${FZF_MAX_DEPTH:-12} --type d --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
     # }}}
   elif which ag >/dev/null 2>&1; then # {{{
     export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS --follow -g "" | sort' # }}}
   else # {{{
-    if [[ -e $BASHRC_RUNTIME_PATH/.fzf.alt-c-cmd.env ]]; then # {{{
-      export FZF_ALT_C_COMMAND="$(cat $BASHRC_RUNTIME_PATH/.fzf.alt-c-cmd.env)"
+    if [[ -e $BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env ]]; then # {{{
+      export FZF_ALT_C_COMMAND="$(cat $BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env)"
     else
       export FZF_ALT_C_COMMAND="$(cat <<-EOF
 					command find \${dir:-.}
 						-mindepth 1
+						-maxdepth 4
 						-type d
 						-a \(
 							\( -name .\* $( [[ -e ~/.agignore ]] && cat ~/.agignore | command grep -v '^\s*#\|^\s*$' | sed -e 's/^/-o -name /' -e 's/\*/\\\*/g' | tr '\n' ' ') \) -prune -o
@@ -61,12 +85,12 @@ if [[ -f ~/.fzf.bash ]]; then
 				EOF
       )"
       export FZF_ALT_C_COMMAND="$(echo $FZF_ALT_C_COMMAND)"
-      echo "$FZF_ALT_C_COMMAND" >$BASHRC_RUNTIME_PATH/.fzf.alt-c-cmd.env
+      echo "$FZF_ALT_C_COMMAND" >$BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env
     fi # }}}
   fi # }}}
-  fzf_exe="$ALIASES fzf_exe"
-  if [[ -e $BASHRC_RUNTIME_PATH/.fzf.def-opts.env ]]; then # {{{
-    export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/.fzf.def-opts.env)"
+  fzf_exe="$ALIASES fzf_exe" # has to be in this form for vim fzf-plugin
+  if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
+    export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
   else
     export FZF_DEFAULT_OPTS="$(cat <<-EOF
 				-m -x --algo=v2 -e +s --no-mouse --height 80% --border --tabstop=2 --exit-0
@@ -85,40 +109,37 @@ if [[ -f ~/.fzf.bash ]]; then
 				--bind 'ctrl-e:preview-down'
 			EOF
     )"
-    export FZF_DEFAULT_OPTS="$(echo $FZF_DEFAULT_OPTS)"
-    echo "$FZF_DEFAULT_OPTS" >$BASHRC_RUNTIME_PATH/.fzf.def-opts.env
+    export FZF_DEFAULT_OPTS="$(echo $FZF_DEFAULT_OPTS | tr -s ' ')"
+    echo "$FZF_DEFAULT_OPTS" >$BASHRC_RUNTIME_PATH/fzf.def-opts.env
   fi # }}}
   export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
   export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
-  export FZF_ALT_C_OPTS="+e -x --layout=reverse --prompt='cd> ' --query=\'"
+  export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
   unset fzf_exe
   export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
-  export FZF_INSTALLED=true
+else
+  [[ ! -z "$PS1" ]] && echor "FZF not found"
 fi
 # }}}
-# Default values for functions and scripts {{{
-UNICODE_EXTRA_CHARS[tmux_main]="🌅"
+# Default values for functions and scripts # {{{
 export GREP_DEFAULT_PARAMS="--color --binary-files=binary"
 export GREP_COLORS='mt=38;5;214:ne:fn=36'
-export KEEP_PASS_JOURNAL="$RUNTIME_PATH/keep-pass.journal"
-export KEEP_PASS_KEYS="$RUNTIME_PATH/keep-pass.keys"
-[[ ! -z $SHARED_BASH_PATH ]] && export KEEP_PASS_JOURNAL="$SHARED_BASH_PATH/keep-pass.journal"
-export HL_DEFAULTS+=" +cB '\\<TB\]'"
-export HL_DEFAULTS+=" +cGold '\\<AA\\> \\|\\<BB\\> \\|\\<TT\\> ' +cRed '\\<EE\\> \\|\\<FF\\> ' +cGreen '\\<II\\> ' +cCyan '\\<IMP\\> '"
-export HL_DEFAULTS+=" +c'38;5;9' '# {{{\\|# }}}'"
-export HL_DEFAULTS+=" +cGreen '\<[a-z0-9]\\{40\\}\>'"
-export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
-export RLWRAP_OPTS="-A -b '' -e '' -D 2"
+export HL_DEFAULTS+=" +cB@'\<TB\]'"
+export HL_DEFAULTS+=" +cGold@'\<\(AA|BB|TT\)\>\( |$\)'"
+export HL_DEFAULTS+=" +cRed@'\<\(EE|FF\)\>\( |$\)'"
+export HL_DEFAULTS+=" +cGreen@'\<II\>\( |$\)'"
+export HL_DEFAULTS+=" +cCyan@'\<IMP\>\( |$\)'"
+export HL_DEFAULTS+=" +c'38;5;9' '# {{{|# }}}'"
+export HL_DEFAULTS+=" +cGreen@'\<[a-z0-9]\{40\}\>'"
 export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
 export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
 export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
-export HIGHLIGHT_DEFAULT="warning\\|diagnostic\\|"
-export TMUX_INIT_SESSIONS="MAIN"
+export TMUX_INIT_SESSIONS+=" MAIN"
 export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
 export TMUX_PREFIX_2='C-q'
-export TMUX_SMART_BLACKLIST="EMPTY_VALUE\\|gitlab\\.com\\|github\\.com"
+export TMUX_SMART_BLACKLIST_SSH+="\\|gitlab\\.com\\|github\\.com"
 export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux_main]}\n"
-export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 003:net 005:ssh 010:weather 015:usb 025:time 035:progress_bar"
+export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 003:net 005:ssh 008:reminder 010:weather 015:usb 025:time 035:progress_bar"
 export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
 export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
@@ -132,34 +153,41 @@ export CD_LAST_DIRS=($PWD)
 export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
 export CD_LAST_DIRS_STORED+=":docs@--cd-spec"
 # }}}
-# Editor {{{
+# Editor # {{{
 export EDITOR="vim -c 'set cursorline'"
 [[ $(which vim 2>/dev/null) == "$HOME/"* ]] && export EDITOR="vim --fast -cl"
 export VISUAL=$EDITOR
 export SVN_EDITOR=$EDITOR
 # }}}
 # }}}
-# Shell setup {{{
+# Shell setup # {{{
 export HISTCONTROL="erasedups:ignoreboth"
 export HISTFILESIZE=1000
 export HISTFILE=$HOME/.bash_history
 [[ -n $TMUX_SESSION ]] && export HISTFILE=$TMUX_SESSION_PATH/bash_history
+export HISTFILE_ORIG=$HISTFILE
 unset HISTTIMEFORMAT
-export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
-export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
+[[ -z $BASH_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
+if [[ ! -n $TMUX && -e "$BASH_PHISTORY_FILE" ]] && ! pgrep tmux >/dev/null 2>&1; then
+  sed -i '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+  sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+fi
+[[ -z $BASH_PHISTORY_SUM_CMD ]] && export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
 shopt -s histappend
 shopt -s checkwinsize
 shopt -s extglob
 shopt -s cdspell
-shopt -s direxpand
+shopt -s dirspell
+# shopt -s direxpand
 # }}}
-# InputRC: Bash shortcuts {{{
+# InputRC: Bash shortcuts # {{{
 goto_vi_command() { # {{{
   [[ $READLINE_POINT == ${#READLINE_LINE} && $READLINE_POINT -gt 0 && ${READLINE_LINE:$((READLINE_POINT-1)):1} != ' ' ]] && READLINE_LINE="$READLINE_LINE " && READLINE_POINT=$((READLINE_POINT+1))
   bind 'set keymap vi-command'
   return 0
 } # }}}
 if [[ ! -z $PS1 ]]; then
+  bind 'set enable-bracketed-paste on'
   if [[ $BASH_VERSION == '4.4'* || $BASH_VERSION == '5'* ]]; then
     bind 'set colored-completion-prefix on'
     if [[ ! -z $INPUTRC_MODE_CHAR ]]; then
@@ -168,7 +196,6 @@ if [[ ! -z $PS1 ]]; then
       bind 'set emacs-mode-string  "\1\e[0;31m\2'"$INPUTRC_MODE_CHAR"'\1\e[0m\2"'
     fi
   fi
-
   for i in {emacs,vi-command,vi-insert}; do
     bind "set keymap $i"
     bind -r '\C-k'    # u for utils
@@ -187,36 +214,35 @@ if [[ ! -z $PS1 ]]; then
       pre='i'
       ;;
     vi-insert) # vi-editing-mode
-      bind '"\C-kE":   emacs-editing-mode'
-      bind '"\C-k":    vi-movement-mode'
+      bind '"\C-kE": emacs-editing-mode'
+      bind '"\C-k":  vi-movement-mode'
+      bind '"\C-i":  menu-complete'
+      bind '"\C-n":  menu-complete-backward'
+      bind '"\e[5~": history-search-forward'
+      bind '"\e[6~": history-search-backward'
+      bind -x '"\C-kk": "history -r && echorm -m bash 0 history reloaded"'
+      bind    '"\C-kl": "\C-g logout\C-m"'
       if $FZF_INSTALLED; then
-        bind '"\el":"$(!!|fzf)\C-a \C-m"'
+        bind -x '"\C-f": "fzfwr iRC"'
+        bind -x '"\C-p": "fzf-file-widget"'
       fi
-      bind -x '"\C-kk":"history -r"'
-      bind '"\C-ke":"\C-gexec bash\C-m"'
-      bind '"\C-kf":"\C-gsource ~/.bashrc --force\C-m"'
-      bind '"\C-kd":"\C-gexit 1\C-m"'
-      bind '"\C-i":menu-complete'
-      bind '"\C-n":menu-complete-backward'
-      bind '"\e[5~":history-search-forward'
-      bind '"\e[6~":history-search-backward'
       ;;
     esac
-    bind '"\C-kl":  "'${pre}' \C-g logout\C-m"'
-    bind '"\C-kr":  "'${pre}' \C-g reset\C-m"'
-    bind '"\C-kh":  "'${pre}' \C-g pt ht; clear\C-m"'
-    bind '"\C-l":   "'${pre}' \C-g clr\C-m"'
-    if $FZF_INSTALLED; then
-      bind -x '"\C-f": "'${pre}'fzfwr iRC"'
-      bind -x '"\C-p": "'${pre}'fzf-file-widget"'
-    fi
+    bind    '"\C-k\C-d":  "'${pre}'\C-g exit 1\C-m"'
+    bind    '"\C-k\C-e":  "'${pre}'\C-g exec bash\C-m"'
+    bind -x '"\C-k\C-f":  "source ~/.bashrc --force && echorm -m bash 0 resourced"'
+    bind    '"\C-k\C-h":  "'${pre}'\C-g pt ht && clear\C-m"'
+    bind -x '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
+    bind -x '"\C-k\C-s":  "src"'
+    bind    '"\C-l":      "'${pre}'\C-g clr\C-m"'
+    bind -x '"\C-k\C-l":  "clr --hist"'
   done
   unset i pre
   bind 'set editing-mode vi'
   bind 'set keymap vi-insert'
 fi
 # }}}
-# Completion {{{
+# Completion # {{{
 if [[ -f /etc/bash_completion ]] && ! shopt -oq posix && ! declare -F _completion_loader &>/dev/null; then
   source /etc/bash_completion
 fi
@@ -226,10 +252,12 @@ if [[ -e $GIT_PATH ]]; then
     [[ -f $i ]] && source $i
   done
 fi
-
-! declare -F __git_ps1 &>/dev/null && echo "Using internal __git_ps1" >/dev/stderr && source $BASH_PATH/completion.d/git/git-prompt.sh
+if ! declare -F __git_ps1 &>/dev/null; then
+  $BASHRC_DBG && echo "Using internal __git_ps1" >/dev/stderr
+  source $BASH_PATH/completion.d/git/git-prompt.sh
+fi
 # }}}
-# Less {{{
+# Less # {{{
 if [[ -z $LESSOPEN ]]; then
   : ${LESSPIPE_PATH:="/usr/bin/lesspipe"}
   if [[ -x "$LESSPIPE_PATH" ]]; then
@@ -243,7 +271,7 @@ export PAGER=less
 export LESSCHARSET='utf-8'
 # Use this if lesspipe.sh exists
 export LESS="-dFiJRSwX -x4 -z-4 -+F -~"
-# Less man page colors (makes Man pages more readable) {{{
+# Less man page colors (makes Man pages more readable) # {{{
 export LESS_TERMCAP_mb="$CGreen"
 export LESS_TERMCAP_md="$CCyan"
 export LESS_TERMCAP_me="$COff"
@@ -253,20 +281,31 @@ export LESS_TERMCAP_us="$CGold"
 export LESS_TERMCAP_ue="$COff"
 # }}}
 # }}}
-# PS1 {{{
-export PROMPT_COMMAND="set_title --set-terminal --tmux-session; bash_phistory; history -a"
+# PS1 # {{{
+if ${SET_TITLE_USE_SIMPLE_MODE:-true}; then
+  export PROMPT_COMMAND="set_title_pane;"
+else
+  export PROMPT_COMMAND="set_title --set-terminal --tmux-session;"
+fi
+export PROMPT_COMMAND+=" bash_phistory; history -a"
 export PROMPT_DIRTRIM=3
 
-if [[ -n $STY || -n $TMUX ]]; then
-  export PROMPT_COMMAND="set_title; $PROMPT_COMMAND"
-fi
+${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set_title; $PROMPT_COMMAND"
+${PS1_CHECK_ENV:-true} && export PROMPT_COMMAND="$PROMPT_COMMAND; PS1_envUpdater"
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 
-export PS1_STATUS="short_git:default"
 export PS1_SHORTEN_PATH=true
+if [[ -z $PS1_STATUS ]]; then
+  export PS1_STATUS="short_git:default"
+  if $IS_DOCKER; then
+    export PS1_STATUS="short_git_ssh:default"
+    [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3}
+  elif [[ $PERS_USERS != *\ $USER\ * && $USER != 'root' ]]; then
+    export PS1_STATUS="usuper_full:short_git"
+  fi
+fi
 [[ -n "$SSH_CLIENT" && $PS1_SSH_CHANGE ]] && export PS1_STATUS="short_git_ssh:default_ssh"
-[[ $PERS_USERS != *\ $USER\ * && $USER != 'root' ]] && export PS1_STATUS="usuper_full:short_git"
 [[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
 # }}}
 # CapsLock <-> Ctrl # {{{
@@ -277,18 +316,18 @@ if ! $IS_MAC && [[ -n $DISPLAY ]]; then
     xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
   fi
 fi
-#}}}
+# }}}
 # Disable stopping terminal by C-S # {{{
 if type stty >/dev/null 2>&1; then
   stty -ixon 2>/dev/null
 fi # }}}
-# Source profiles' configurations {{{
-for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/cfg ]] && source $i/cfg
+# Source profiles' configurations # {{{
+for profi in $BASH_PROFILES_FULL; do
+  [[ -e $profi/cfg ]] && source $profi/cfg
 done
 export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
 # }}}
-# Setup PROMPT_COMMAND {{{
+# Setup PROMPT_COMMAND # {{{
 export PROMPT_COMMAND="PS1_setter; $PROMPT_COMMAND"
 export PROMPT_COMMAND_ORIG=$PROMPT_COMMAND
 # }}}

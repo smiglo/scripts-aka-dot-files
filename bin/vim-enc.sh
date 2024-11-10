@@ -173,7 +173,7 @@ if $addHeader; then # {{{
 fi # }}}
 
 err=false
-if [[ -e "$out" ]] && ( ! $edit || vim --fast -c FastClipboard -c 'set cul nobk fdl=0 isk+=-' -p "$out" $otherFiles </dev/tty >/dev/tty ); then
+if [[ -e "$out" ]] && ( ! $edit || vim --fast -c 'set cul nobk fdl=0 isk+=-' -p "$out" $otherFiles </dev/tty >/dev/tty ); then
   $addHeader && sed -i '/^# enc-info:/d' "$out"
   toOutput="$out"
   if $edit; then # {{{

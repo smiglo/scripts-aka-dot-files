@@ -1,13 +1,12 @@
 # vim: fdl=0 fdm=marker
 
 [user] # {{{
-  useConfigOnly = true #}}}
+  useConfigOnly = true # }}}
 [core] # {{{
-  editor = vim --fast
+  editor = vim --fast-save
   pager = less -x4
   excludesfile = ~/.gitignore
-  whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2
-# }}}
+  whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2 # }}}
 [color] # {{{
   ui = auto # }}}
 [diff] # {{{
@@ -42,12 +41,14 @@
   cba = !"git-cmds.sh cba"
   ci = commit
   ci-fast = !"git-cmds.sh commit-fast"
-  ciaa = commit --all --no-verify
-  ciam = commit --amend --reuse-message=HEAD --no-verify
-  ciamb = !"git commit --amend --reuse-message=HEAD --no-verify && git backup"
-  ciamp = !"git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
+  cia  = commit --all --no-verify
+  ciaa = commit --all --amend --reuse-message=HEAD --no-verify
+  ciam  = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify"
+  ciamb = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git backup"
+  ciamp = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
   ciamm = commit --amend --no-verify
   cim = commit -m
+  clone-bare = !"git-cmds.sh clone-bare"
   co = checkout
   d = diff
   dff = diff --relative
@@ -55,7 +56,7 @@
   dffp = !"git diffp --relative"
   dffw = diff --relative --word-diff
   diffc = diff --cached
-  diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f "$@";'" -
+  diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f \"$@\";'" -
   db    = !"bash -c 'f() { local b=\"$(git rev-parse --abbrev-ref --symbolic-full-name @)\" rB=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u})\"; git diff $rB..$b; }; f \"$@\"'" -
   dc    = !"git diffc"
   dp    = !"git diffp"
@@ -67,8 +68,10 @@
               [[ -z $ups ]] && return 1; \
               git diff $ups..@; \
             }; f \"$@\";'" -
+  fetchr = !"git fetch && git rreset"
   i    = info -p
   info = log --pretty=fuller     --date=local    -1
+  init-repo = !"git-cmds.sh init-repo"
   ll   = log --pretty=date-first --date=relative
   l    = !"git-cmds.sh log --fzf -l 'log --pretty=date-first --date=relative' --this"
   lf   = !"git-cmds.sh log --fzf"
@@ -81,13 +84,24 @@
   lgfa = !"git lgo --pretty=tb --graph --all"
   melddiff = difftool -y -t meld
   ps = push --recurse-submodules=check
+  puf = push -f
   range-diff2 = !"git-cmds.sh range-diff"
   rb = rebase
   rba = rebase -i --autosquash
+  remote-backup = !"git-cmds.sh remote-backup $@"
   restash = !"git stash pop && git stash"
   retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f \"$@\";'" -
+  rreset = !"bash -c 'f() { local ups=\"\"; \
+              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
+              elif [[ $1 == */* ]]; then ups=\"$1\"; \
+              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
+              fi; \
+              [[ -z $ups ]] && return 1; \
+              git reset --hard $ups; \
+             }; f \"$@\";'" -
   Reset = !"bash -c 'f() { git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null); }; f ;'" -
-  s = !"git-cmds.sh stash_toggle"
+  s = stash-toggle
+  stash-toggle = !"git-cmds.sh stash_toggle"
   sh = show -w
   shv = !"bash -c 'f() { git shst $@ | vim --Fast -; }; f \"$@\";'" -
   shst = !"bash -c 'f() { git diffp $@ --name-status; }; f \"$@\";'" -
@@ -107,7 +121,8 @@
   showUpstream = auto
   completeAdd = true # }}}
 [branch] # {{{
-  autosetuprebase = always # }}}
+  autosetuprebase = always
+  sort = -committerdate # }}}
 [format] # {{{
   pretty = %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(green)(%cd) %C(blue)<%an>%C(reset) # }}}
 [pretty] # {{{
@@ -150,6 +165,7 @@
 [rebase] # {{{
   autosquash = true # }}}
 [advice] # {{{
+  detachedHead = false
   ignoredHook = false # }}}
 [gitsh] # {{{
   prompt = "[0;36m%D[0m[0;32m(%b)[0m%c%#%w"
@@ -163,3 +179,7 @@
   required = true # }}}
 [include] # {{{
   path = ~/.runtime/gitconfig # }}}
+[credential]
+  helper = store --file  /home/tomasz/.my-credentials
+[url "https://github"]
+  insteadOf = git://github

@@ -39,8 +39,8 @@ rem() { # @@ # {{{
     case $1 in
     @@ | @@@) # {{{
       case $3 in
-      --file | -f | -F) $ALIASES getFileList --pwd "$store_dir" "${mask_file}*.txt";;
-      --restore)        $ALIASES getFileList --pwd "$store_dir" "${mask_file}*.txt-*.bck";;
+      --file | -f | -F) getFileList --pwd "$store_dir" "${mask_file}*.txt";;
+      --restore)        getFileList --pwd "$store_dir" "${mask_file}*.txt-*.bck";;
       --ls-mode)        echo "rec rec-all 1";;
       *) # {{{
         local params=
@@ -81,7 +81,7 @@ rem() { # @@ # {{{
         do_use_file=true; do_set_store_env=true; do_append=true;;& # }}}
     --file | -f) # {{{
         file=
-        [[ -z $file ]] && [[ $2 == '-' ]] && file="$($ALIASES getFileList -1 -t "$store_dir/${mask_file}*.txt")" && shift
+        [[ -z $file ]] && [[ $2 == '-' ]] && file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt")" && shift
         [[ -z $file ]] && [[ $2 == ${mask_file}* ]] && file="$store_dir/$2" && shift
         [[ -z $file ]] && [[ $2 == $store_dir/${mask_file}* ]] && file="$2" && shift
         [[ -z $file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && file="$store_dir/$2" && shift
@@ -110,11 +110,11 @@ rem() { # @@ # {{{
     --restore) # {{{
         do_restore=true
         local restore_file=
-        [[ -z $restore_file ]] && [[ $2 == '-' ]] && restore_file="$($ALIASES getrestore_fileList -t "$store_dir/${mask_file}*.txt-*.bck" | head -n1)" && shift
+        [[ -z $restore_file ]] && [[ $2 == '-' ]] && restore_file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt-*.bck")" && shift
         [[ -z $restore_file ]] && [[ $2 == ${mask_file}* ]] && restore_file="$store_dir/$2" && shift
         [[ -z $restore_file ]] && [[ $2 == $store_dir/${mask_file}* ]] && restore_file="$2" && shift
         [[ -z $restore_file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && restore_file="$store_dir/$2" && shift
-        [[ -z $restore_file ]] && restore_file="$($ALIASES getFileList -1 -t "$store_dir/${mask_file}*.txt-*.bck")"
+        [[ -z $restore_file ]] && restore_file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt-*.bck")"
         ;; # }}}
     --smart)      do_smart=true;;
     # NO* # {{{
@@ -211,8 +211,8 @@ rem() { # @@ # {{{
   [[ -z $file ]] && file="$store_dir/${mask_file}.txt"
   if $do_browse; then # {{{
     local files=
-    files+=" $($ALIASES getFileList "$store_dir/${mask_file}*.txt")"
-    files+=" $($ALIASES getFileList "$store_dir/${mask_file}*.txt-*.bck")"
+    files+=" $(getFileList "$store_dir/${mask_file}*.txt")"
+    files+=" $(getFileList "$store_dir/${mask_file}*.txt-*.bck")"
     local res=
     res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | cat -n")"
     [[ $? != 0 || -z $res ]] && return 0
@@ -272,7 +272,7 @@ rem() { # @@ # {{{
   [[ -z $mode ]] && $do_ls && mode='add'
   [[ -z $mode ]] && mode='recall'
   # }}}
-  if [[ "$mode" == 'add' ]]; then # Remember files {{{
+  if [[ "$mode" == 'add' ]]; then # Remember files # {{{
     eval $var=''
     [[ -z $fzf_prompt ]] && fzf_prompt="To store> "
     last_working_path=
@@ -384,7 +384,7 @@ rem() { # @@ # {{{
   if [[ ! -t 1 ]] || $do_cmd; then
     mode='recall'
   fi
-  if [[ "$mode" == 'recall' ]]; then # Show remembered files {{{
+  if [[ "$mode" == 'recall' ]]; then # Show remembered files # {{{
     if $do_edit; then # {{{
       local err=
       sed -i -e 's/^\s\+//' -e 's/\s\+$//' -e 's/%20/ /g' $file

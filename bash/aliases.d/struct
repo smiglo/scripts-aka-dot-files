@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+struct-new() { # {{{
+  local c=0 i=
+  declare -A struct
+  for i; do
+    if [[ $i == *:* && $i != '-:'* ]]; then
+      k="${i%%:*}" v="${i#*:}"
+    else
+      k="$c" v="${i#-:}"
+      c=$((c + 1))
+    fi
+    struct[$k]="$v"
+  done
+  declare -p struct | sed 's/[^=]*=//'
+} # }}}
+struct-init() { # {{{
+  local n=struct v=
+  if [[ $# == 2 ]]; then
+    n="$1" && v="$2"
+  else
+    v="$1"
+  fi
+  if [[ ${v:0:1} == '(' ]]; then
+    echo "declare -A $n=$v"
+  else
+    echo "declare -A $n=$(struct-unpack "$v")"
+  fi
+} # }}}
+struct-pack() { # {{{
+  local i=
+  for i; do
+    echo "$i" | base64
+  done
+} # }}}
+struct-unpack() { # {{{
+  local i=
+  for i; do
+    echo "$i" | base64 -d
+  done
+} # }}}
+

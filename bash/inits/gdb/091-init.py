@@ -1,7 +1,10 @@
 import os
 
 h = os.getenv("GDB_USE_INTEL_DISASSEMBLY")
-if not h == "False": gdb.execute("set disassembly-flavor intel")
+if not h == "false": gdb.execute("set disassembly-flavor intel")
+
+h = os.getenv("GDB_USE_DEBUGINFOD")
+if not h == "false": gdb.execute("set debuginfod enabled on")
 
 class conn (gdb.Command):
 

@@ -21,7 +21,8 @@ sshh-add() { # @@ # {{{
       done
     fi
     ret+=" $(ssh-add --help 2>&1 | command grep  ^"  -" | cut -d' ' -f3)"
-    ret+=" --lock -v --keys"
+    ret+=" --lock -v --keys --tmux-lock --tmux-unlock"
+    ret+=" -l -d -D"
     echo $ret
     return 0
   fi # }}}
@@ -29,8 +30,8 @@ sshh-add() { # @@ # {{{
   if [[ -z $params ]]; then # {{{
     keys="$(find $key_location -maxdepth 1 -not -name '*_pwd*' -name '*.pub')"
     for key in $keys; do
-        key=${key/.pub}
-        [[ -e $key ]] && params+=" ${key/$key_location\/}"
+      key=${key/.pub}
+      [[ -e $key ]] && params+=" ${key/$key_location\/}"
     done
   fi # }}}
   set -- $params
@@ -38,6 +39,12 @@ sshh-add() { # @@ # {{{
   key=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in # {{{
+    --tmux-lock) # {{{
+      tmux-lock-toggle --lock
+      return 0;; # }}}
+    --tmux-unlock) # {{{
+      tmux-lock-toggle --unlock
+      return 0;; # }}}
     --lock) # {{{
       local colors=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' ) tmp=
       local c1="0"
@@ -69,11 +76,28 @@ sshh-add() { # @@ # {{{
           sleep 1
           return 1
         fi
+        [[ -z $SSHH_ADD_LOCK_TS_FILE ]] && local SSHH_ADD_LOCK_TS_FILE="$TMP_MEM_PATH/.cmatrix.ts"
+        local cTime=$EPOCHSECONDS
+        local cmatrixLockTime=0 cmatrixLockFileCreated=0
+        if [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]]; then
+          [[ -e $SSHH_ADD_LOCK_TS_FILE ]] && source $SSHH_ADD_LOCK_TS_FILE
+          if [[ $cmatrixLockFileCreated -lt $(command date +%s -d "today 0:00") ]]; then
+            rm -f $SSHH_ADD_LOCK_TS_FILE
+            cmatrixLockTime=0 cmatrixLockFileCreated=$cTime
+            update-file $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockFileCreated $cTime
+          fi
+        fi
         if [[ ! -z $timeout && $timeout != 0 ]]; then
           [[ $timeout == -1 ]] && timeout=$((3 * 60 * 60))
           [[ $timeout -lt 5 ]] && timeout=5
-          $ALIASES run_for_some_time --no-fallback --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --wait $((timeout-2)):2
-          [[ $? != 255 ]] && { read -s -n 10000 -t 0.5 tmp; mutex_unlock; mutex_deinit; return 0; }
+          reset
+          run_for_some_time --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --wait $((timeout-2)):2
+          if [[ $? != 255 ]]; then
+            read -s -n 10000 -t 0.5 tmp
+            [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && update-file $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
+            mutex_unlock; mutex_deinit
+            return 0
+          fi
         fi
         { # {{{
           /usr/bin/expect - <<-EOF
@@ -104,9 +128,37 @@ sshh-add() { # @@ # {{{
         eval $cmatrix_cmd -C ${colors[$c2]}
         reset
         if $locked; then # {{{
-          echorm "Unlocking ssh-agent...\n"
+          local checkHome=false
+          [[ ! -z $SSH_AGENT_LOCK_PWD ]] && checkHome=true
+          if [[ $cmatrixLockFileCreated -gt $(command date +%s -d "today 0:00") ]]; then
+            if $checkHome; then
+              progress --mark --msg "Unlocking after $(time2s --to-hms $((EPOCHSECONDS - cTime)))/$(time2s --to-hms $((cmatrixLockTime + $EPOCHSECONDS - cTime)))"
+            else
+              echorm 0 "Unlocking after $(time2s --to-hms $((EPOCHSECONDS - cTime)))/$(time2s --to-hms $((cmatrixLockTime + $EPOCHSECONDS - cTime)))..."
+            fi
+          elif $checkHome; then
+            progress --mark --msg "Unlocking"
+          fi
           while true; do # {{{
-            $ALIASES run_for_some_time --no-fallback --cmd "ssh-add -X 2>/dev/null" --wait 12:2
+            local homeNet=false
+            if $checkHome; then # {{{
+              net-is-home && homeNet=true
+              progress --unmark --err=$homeNet; checkHome=false
+            fi # }}}
+            if $homeNet; then # {{{
+              {
+                /usr/bin/expect - <<-EOF
+										set timeout -1
+										spawn ssh-add -X
+										match_max 100000
+										expect "Enter lock password: "
+										send -- "$::env(SSH_AGENT_LOCK_PWD)\r"
+										expect eof
+								EOF
+              } >/dev/null 2>&1 # }}}
+            else # {{{
+              run_for_some_time --cmd "ssh-add -X 2>/dev/null" --wait 12:2
+            fi # }}}
             local err=$?
             if [[ $err == 255 ]]; then # {{{
               while true; do
@@ -120,6 +172,7 @@ sshh-add() { # @@ # {{{
           done # }}}
         fi # }}}
       done # }}}
+      [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && update-file $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
       mutex_unlock
       mutex_deinit
       if [[ ! -z $SSHH_ADD_LOCK_POST ]]; then
@@ -130,6 +183,7 @@ sshh-add() { # @@ # {{{
         fi
       fi
       return 0;; # }}}
+    -l | -d | -D) ssh-add $1; return;;
     -v) echorm +;;
     --keys) shift; break;;
     -*) params+=" $1";;
@@ -146,16 +200,17 @@ sshh-add() { # @@ # {{{
   done; shift $# # }}}
   local fSshAsk=$TMP_MEM_PATH/ssh-ask.sh list=
   which keep-pass.sh >/dev/null 2>&1 && list="$(keep-pass.sh --list-all-keys)"
-  local kList="$(ssh-add -l)"
+  local kList="$(ssh-add -l | awk '{print $3}')"
   for k in $key; do # {{{
     [[ $k == -* ]] && continue
-    [[ $kList =~ $k ]] && continue
+    echo "$kList" | command grep -q "^$k$" && continue
     local kName=${k##*/}
     local paramK=SSHH_ADD_PARAMS_${kName^^}
+    paramK=${paramK//-/_}
     local cmd="ssh-add $params ${!paramK} $k"
     if echo "$list" | command grep -q "^$kName$" && keep-pass.sh --get --key $kName --no-intr >/dev/null 2>&1; then
       if [[ ! -e $fSshAsk ]]; then
-        cat <<-'EOF' >$fSshAsk
+        cat >$fSshAsk <<-'EOF'
 					#!/usr/bin/env bash
 					read k
 					keep-pass.sh --get --key $k --no-intr
@@ -170,5 +225,6 @@ sshh-add() { # @@ # {{{
   done # }}}
   [[ -e $fSshAsk ]] && rm -f $fSshAsk
   return 0
-} # }}}
+}
+export HISTIGNORE+=":sshh-add:ssh-add" # }}}
 

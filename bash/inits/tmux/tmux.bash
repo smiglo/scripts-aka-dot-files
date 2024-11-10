@@ -2,11 +2,11 @@
 # vim: fdl=0
 
 defaults() { # {{{
-  # Windows numbering {{{
+  # Windows numbering # {{{
   if [[ $TMUX_VERSION -gt 20 ]]; then
     tmux set -qg renumber-windows on
   fi # }}}
-  # Use UTF8 {{{
+  # Use UTF8 # {{{
   if [[ $TMUX_VERSION -lt 24 ]]; then
     tmux set -qg utf8
     tmux set -qg status-utf8 on
@@ -20,34 +20,24 @@ defaults() { # {{{
     tmux set -qg mouse-select-window on
   fi # }}}
   # Make clipboard works in vim under tmux (OS/X) # {{{
-  ${IS_MAC:-false} && tmux set -qg default-command "reattach-to-user-namespace -l bash"
+  ${IS_MAC:-false} && ${TMUX_MAC_USE_REATTACH:-true} && tmux set -qg default-command "reattach-to-user-namespace -l bash"
   # }}}
   # Lock & CMatrix # {{{
   [[ $UID != 0 ]] && type cmatrix >/dev/null 2>&1 && tmux set -qg lock-command "$ALIASES sshh-add --lock --tmux ${TMUX_LOCK_PRE_TIMEOUT:-60}"
   tmux set -g lock-after-time ${TMUX_LOCK_TIMEOUT:-0}
   # }}}
-  if [[ $TMUX_VERSION -lt 24 ]]; then
-    tmux bind-key '?' list-keys
+  if [[ $TMUX_VERSION -ge 24 ]]; then
+    tmux bind-key -T prefix      '?'     display-message "2nd key(h)..." \\\; switch-client -T ext1-help
+    tmux bind-key -n             'M-/'   switch-client -T ext1-help
+    tmux bind-key -T ext1-help   '?'     list-keys -T prefix
+    tmux bind-key -T ext1-help   'r'     list-keys -T root
+    tmux bind-key -T ext1-help   'c'     list-keys -T copy-mode-vi
+    tmux bind-key -T ext1-help   'p'     display-panes
+    tmux bind-key -T ext1-help   'h'     list-keys -T ext1-help
+    tmux bind-key -T ext1-help   'R'     display-message "Reloading..." \\\; source-file ~/.tmux.conf
+    tmux unbind   -T prefix   'R'
   else
-    tmux bind-key -T prefix '?'     display-message "2nd key(h)..." \\\; switch-client -T ext1
-    tmux bind-key -n        'M-/'   switch-client -T ext1
-    tmux bind-key -T ext1   '?'     list-keys -T prefix
-    tmux bind-key -T ext1   'r'     list-keys -T root
-    tmux bind-key -T ext1   'c'     list-keys -T copy-mode-vi
-    tmux bind-key -T ext1   'p'     display-panes
-    tmux bind-key -T ext1   'h'     list-keys -T ext1
-    tmux bind-key -T ext1   'R'     display-message "Reloading..." \\\; source-file ~/.tmux.conf
-    tmux bind-key -T ext1 -r 'C-h'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-h" "select-pane -L"'
-    tmux bind-key -T ext1 -r 'C-j'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-j" "select-pane -D"'
-    tmux bind-key -T ext1 -r 'C-k'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-k" "select-pane -U"'
-    tmux bind-key -T ext1 -r 'C-l'  run-shell '~/.tmux.bash smarter_nest -z#{window_zoomed_flag} "C-l" "select-pane -R"'
-    tmux unbind -T prefix   'R'
-    local params=
-    [[ $TMUX_VERSION -gt 16 ]] && params="-c \"#{pane_current_path}\""
-    tmux bind-key -T ext1 \| run-shell "~/.tmux.bash smarter_nest '|'  'split-window -h -p 25 $params'"
-    tmux bind-key -T ext1 -  run-shell "~/.tmux.bash smarter_nest '-'  'split-window -v -p 20 $params'"
-    tmux bind-key -T ext1 \\ run-shell "~/.tmux.bash smarter_nest '\\' 'split-window -h       $params'"
-    tmux bind-key -T ext1 _  run-shell "~/.tmux.bash smarter_nest '_'  'split-window -v       $params'"
+    tmux bind-key '?' list-keys
   fi
   if [[ $TMUX_VERSION -lt 26 ]]; then
     tmux bind-key 's' choose-tree
@@ -105,7 +95,7 @@ progress_bar_worker() { # {{{
   local dir="$TMP_MEM_PATH" f_prefix="tmux_sb_progress_" f= ret=
   for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do # {{{
     local entry="${f##$TMP_MEM_PATH/$f_prefix}" && entry="${entry%.sh}" && entry="${entry^^}"
-    local interval= params= now="${EPOCHSECONDS:-$(epochSeconds)}" lastChange= delta=30 mod_delta=$((15*60)) progress=
+    local interval= params= now="${EPOCHSECONDS:-$($ALIASES epochSeconds)}" lastChange= delta=30 mod_delta=$((15*60)) progress=
     local state='cont' color= text= doNext= useProgress=true extraParams= expire=
     [[ ! -e "$f" ]] && continue
     source "$f"
@@ -129,12 +119,11 @@ progress_bar_worker() { # {{{
         echo "lastChange=\"0\"" >>"$f"
       fi ;; # }}}
     *end-now) # {{{
-        params="stop"
-        progress_drawer "$entry" $extraParams end
-        tmux set -qg status-interval "${interval:-$TMUX_SB_INTERVAL}"
-        [[ -z $doNext ]] && echo "doNext=\"remove\"" >>"$f"
-        exit 0
-      ;; # }}}
+      params="stop"
+      progress_drawer "$entry" $extraParams end
+      tmux set -qg status-interval "${interval:-$TMUX_SB_INTERVAL}"
+      [[ -z $doNext ]] && echo "doNext=\"remove\"" >>"$f"
+      return 0;; # }}}
     *end) # {{{
       params="stop"
       if [[ -z $lastChange || "$lastChange" == "0" ]]; then
@@ -144,7 +133,7 @@ progress_bar_worker() { # {{{
         progress_drawer "$entry" $extraParams end
         tmux set -qg status-interval "${interval:-$TMUX_SB_INTERVAL}"
         [[ -z $doNext ]] && echo "doNext=\"remove\"" >>"$f"
-        exit 0
+        return 0
       fi;; # }}}
     err*) # {{{
       params="stop" ;; # }}}
@@ -183,7 +172,7 @@ progress_bar() { # @@ # {{{
     return 0
     # }}}
   elif [[ $1 == 'purge' ]]; then # {{{
-    local cur_time=${EPOCHSECONDS:-$(epochSeconds)} delta=$((15*60))
+    local cur_time=${EPOCHSECONDS:-$($ALIASES epochSeconds)} delta=$((15*60))
     for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do
       command grep -q '^state=".*end"$' "$f" && sed -i 's/^state="\(.*end\)\"$/state="\1-now"/' "$f" && continue
       if [[ ( $2 == 'all-all' ) || ( $2 == 'all' && "$(stat -c "%Y" "$f")" -lt "$(($cur_time - $delta))" ) ]]; then
@@ -239,19 +228,20 @@ progress_bar() { # @@ # {{{
 add_to_result() { # {{{
   [[ ! -z "$1" ]] && ret+=" $1"
 } # }}}
-status_right_extra() { # @@ {{{
+status_right_extra() { # @@ # {{{
   [[ -z "$TMUX_STATUS_RIGHT_EXTRA_SORTED" ]] && printf " " && return 0
   source "$UNICODE_EXTRA_CHARS_FILE"
   local tm_info="$1" tm_time="$2"
+  [[ -e $TMP_MEM_PATH/.tz.changed ]] && tm_time= # force to use current TZ
   [[ -z $tm_info ]] && tm_info="$(tmux display-message -pF '#S:#I.#P')"
   [[ -z $tm_time ]] && tm_time="$(command date +'%H:%M')"
   local session="${tm_info%%:*}" l= ret=
-  local cur_time=${EPOCHSECONDS:-$(epochSeconds)} update_time= value= do_update= out=
+  local cur_time=${EPOCHSECONDS:-$($ALIASES epochSeconds)} update_time= value= do_update= out=
   local logtime_params="$(tmux show-environment -t $session "TMUX_SB_LOGTIME_PARAMS" 2>/dev/null)"
   logtime_params="${logtime_params#*=}"
   [[ -z $TMUX_SB_WORKER ]] && return 0
   source <($TMUX_SB_WORKER --get-all-values)
-  if [[ -z ${data["_last_update"]} || ${data["_last_update"]} -lt $((${EPOCHSECONDS:-$(epochSeconds)} - 3 * 60)) ]]; then
+  if [[ -z ${data["_last_update"]} || ${data["_last_update"]} -lt $((${EPOCHSECONDS:-$($ALIASES epochSeconds)} - 3 * 60)) ]] && ! ${TMUX_SB_WORKER_IGNORE:-false}; then
     ret+="#[bg=colour124]#[fg=colour226,bold] W$($ALIASES getUnicodeChar 'exclamation') #[bg=default,none]"
   fi
   local list="$($TMUX_SB_WORKER --list)"
@@ -279,6 +269,7 @@ status_right_extra() { # @@ {{{
           [[ ! -z $time_params ]] && eval "$time_params"
           if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]] || $testing; then
             value=$($BIN_PATH/misc/log-last.sh --tmux %)
+            value="${value/*\#\[fg=/\#\[fg=}"
             value=${value/]*/]}
             tmux set-environment -g "TMUX_SB_TIME_PARAMS" "update_time=$cur_time;value=\"$value\""
           fi
@@ -319,7 +310,7 @@ status_right_extra() { # @@ {{{
   printf "%b" "$ret "
   return 0
 } # }}}
-status_right_refresh() { # @@ {{{
+status_right_refresh() { # @@ # {{{
   tmux show-environment | command grep "^TMUX_SB.*update_time" | while read i; do
     tmux set-environment  ${i%%=*} "$(echo "${i#*=}" | sed -e 's/update_time=[0-9]*;/update_time=0;/')"
   done
@@ -354,9 +345,10 @@ status_left_extra() { # {{{
   TMUX_STATUS_LEFT_EXTRA_MAP= # Temporarily disabled
   [[ ! -z $TMUX_STATUS_LEFT_EXTRA_MAP ]] && info="$(echo -e "$TMUX_STATUS_LEFT_EXTRA_MAP" | sed -n '/^'$sName':/s/^'$sName'://p')"
   if [[ -z $info ]] || $default; then
-    info="$($ALIASES getUnicodeChar "${icon:-localhost}")"
+    [[ -z $info ]] && info="$TMUX_HOSTNAME"
+    [[ -z $info ]] && info="$($ALIASES getUnicodeChar "${icon:-${TMUX_ICON_HOST:-localhost}}")"
     if ${TMUX_SB_SHOW_HOSTNAME:-false}; then
-      [[ -z $icon ]] && info="$(hostname | tr '[a-z]' '[A-Z]' | sed 's/\..*//')"
+      [[ -z $icon && -z $info ]] && info="$(hostname | tr '[a-z]' '[A-Z]' | sed 's/\..*//')"
     else
       [[ -e $TMP_MEM_PATH/tmux.cfg ]] && source $TMP_MEM_PATH/tmux.cfg
       [[ ! -z $TMUX_SB_LEFT ]] && info="$TMUX_SB_LEFT"
@@ -385,6 +377,9 @@ window_status_flags() { # {{{
   local flags="$1"
   flags="${flags/\*}"
   flags="${flags/-}"
+  if [[ $flags == *M* ]]; then
+    flags="${flags/M}"
+  fi
   if [[ $flags == *Z* ]]; then
     flags="${flags/Z}"
     flags="$($ALIASES getUnicodeChar 'zoom')$flags"
@@ -400,9 +395,11 @@ plugins() { # {{{
   tmux set -qg @copy_mode_yank_put 'M-y'
   local i= cnt=0
   for i in $TMUX_FINGERS_REGEX; do
-    tmux set -g @fingers-pattern-$cnt "$i"
+    tmux set -qg @fingers-pattern-$cnt "$i"
     cnt="$(($cnt+1))"
   done
+  tmux set -qg @fingers-key "f"
+  tmux set -qg @fingers-ctrl-action "tmux paste-buffer"
   tmux run-shell ~/.tmux/plugins/tpm/tpm
 } # }}}
 copy_mode() { # {{{
@@ -431,10 +428,17 @@ edit_mode() { # {{{
   tmux bind-key -ct vi-edit C-e end-of-line
 } # }}}
 splitting() { # {{{
+  getSizeParam() {
+    if [[ $TMUX_VERSION -ge 34 ]]; then
+      echo "-l $1%"
+    else
+      echo "-p $1"
+    fi
+  }
   local params=
   [[ $TMUX_VERSION -gt 16 ]] && params="-c \"#{pane_current_path}\""
-  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '|'  'split-window -h -p 25 $params'"
-  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '-'  'split-window -v -p 20 $params'"
+  tmux bind-key \| run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '|'  'split-window -h $(getSizeParam 25) $params'"
+  tmux bind-key -  run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '-'  'split-window -v $(getSizeParam 20) $params'"
   tmux bind-key \\ run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '\\' 'split-window -h       $params'"
   tmux bind-key _  run-shell "~/.tmux.bash smarter_nest -z#{window_zoomed_flag} '_'  'split-window -v       $params'"
   # tmux bind-key p  run-shell "~/.tmux.bash smarter_nest --dbg=$TMP_MEM_PATH/tm-bash.log -z#{window_zoomed_flag} 'p'  'split-window -v -p 20 $params'"
@@ -455,6 +459,31 @@ get_marked_pane() { # {{{
     pane="$($ALIASES getUnicodeChar 'smart')"
   fi
   printf "%b" "$pane"
+} # }}}
+select_marked_pane() { # @@ # {{{
+  local paneId="$(tmux list-panes -F '#D #S:#W.#D' | awk '/^'"$1 "'/ {print $2}')"
+  [[ -z $paneId ]] && return 1
+  local markedPaneId="$(tmux list-panes -F '#{pane_marked} #S:#W.#D' | awk '/^1/ {print $2}')"
+  if [[ -z $markedPaneId ]]; then
+    local firstPaneId="$(tmux list-panes -F '#P #S:#W.#D' | awk '/^1 / {print $2}')"
+    tmux select-pane -t $paneId -m
+    if [[ $firstPaneId == $paneId ]]; then
+      tmux last-pane -Z
+    else
+      tmux select-pane -t 1
+    fi
+    return 0
+  fi
+  if [[ $paneId == $markedPaneId ]]; then
+    markedPaneId=
+  fi
+  if [[ -z $markedPaneId ]]; then
+    tmux select-pane -t $paneId -m
+    tmux last-pane -Z
+  else
+    tmux select-pane -t $paneId -m
+    tmux switch-client -t $markedPaneId
+  fi
 } # }}}
 mark_toggle() { # {{{
   local delay= delayed=false local_set=false zoom=0
@@ -502,7 +531,18 @@ smarter_nest_allowed() { # {{{
   esac
   return 0;
 } # }}}
-smarter_nest() { # @@ {{{
+smarter_nest_docker_toggle() { # {{{
+  local checkDocker=$(tmux show-options -wqv @mark_auto_docker)
+  [[ -z $checkDocker ]] && checkDocker=${TMUX_SMART_CHECK_DOCKER:-true}
+  if $checkDocker; then
+    tmux set-option -w @mark_auto_docker false
+    tmux display-message "Smart nest for docker disabled"
+  else
+    tmux set-option -w @mark_auto_docker true
+    tmux display-message "Smart nest for docker enabled"
+  fi
+} # }}}
+smarter_nest() { # @@ # {{{
   local send_prefix= key= version= do_eval=true dbg=false log_f='/dev/stderr' err= zoom= keep_zoom=false
   if [[ -e $TMP_MEM_PATH/tmux.dbg ]]; then
     dbg=true
@@ -531,19 +571,29 @@ smarter_nest() { # @@ {{{
   fi
   [[ -z $auto_check_nest ]] && auto_check_nest=$auto_check_nest_g
   if [[ $auto_check_nest == 'true' ]] && ! ${TMUX_SMART_IGNORE:-false}; then # {{{
+    local checkDocker=$(tmux show-options -wqv @mark_auto_docker)
+    [[ -z $checkDocker ]] && checkDocker=${TMUX_SMART_CHECK_DOCKER:-true}
     pane_info=$(tmux display-message -p -t $TMUX_PANE -F '#P:#{pane_pid}')
     if ! $IS_MAC; then
       local ps_out="$(command ps -o args -g ${pane_info/*:})"
     else
       local ps_out="$(command pstree ${pane_info/*:} | sed "s/.*= [0-9]\+ $USER //")"
     fi
-    if echo "$ps_out" | command grep -q -P "^tmux|^docker-compose|^docker attach|^ssh +((-\S+ *)|(-p *\d+ *))* *(\S+@)?(\w+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$"; then
+    local dockerInclude="^--------------nop"
+    $checkDocker && dockerInclude="^docker-compose|^docker attach|^docker run"
+    if echo "$ps_out" | command grep -q -P "^tmux|^ssh +((-\S+ *)|(-p *\d+ *))* *(\S+@)?(\w+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$|$dockerInclude"; then
       if echo "$ps_out" | command grep -q "^\(sh -c \)\{0,1\}vlock\|^git\|^scp\|^rsync"; then
         pane_info=
       else
-        ps_out="$(echo "$ps_out" | command grep "ssh")"
-        if [[ ! -z $TMUX_SMART_BLACKLIST ]] && echo "$ps_out" | command grep -q "$TMUX_SMART_BLACKLIST"; then
+        if [[ ! -z $TMUX_SMART_BLACKLIST_SSH ]] && echo "$ps_out" | command grep "ssh" | command grep -q "$TMUX_SMART_BLACKLIST_SSH"; then
           pane_info=
+        elif $checkDocker && [[ ! -z $TMUX_SMART_BLACKLIST_DOCKER ]] && echo "$ps_out" | command grep -q -P "$dockerInclude" ; then
+          local dockerCmd="$(echo "$ps_out" | command grep -P "$dockerInclude" | head -n1)"
+          local dockerName="$dockerCmd"
+          [[ $dockerCmd == "docker attach "* ]] && dockerName=$(docker ps -a | command grep "^${dockerCmd#* attach }")
+          if [[ ! -z $dockerName ]] && echo "$dockerName" | command grep -q "$TMUX_SMART_BLACKLIST_DOCKER"; then
+            pane_info=
+          fi
         fi
       fi
     else
@@ -701,7 +751,8 @@ scratch_pane() { # @@ # {{{
   sleep 0.5
   tmux send-keys -t $pane_id "pt hn; clear"
 } # }}}
-pasteKey_worker() { # @@ {{{
+pasteKey_worker() { # @@ # {{{
+  source ~/.bashrc --do-basic
   local auto=$1 buff="$2" query="$3" v= keys="$(keep-pass.sh --list-all-keys)"
   if [[ ! -z $query ]]; then
     local m="$(echo "$keys" | command grep "$query")"
@@ -723,8 +774,8 @@ pasteKey_worker() { # @@ {{{
   fi
   tmux set-buffer -b $buff "$v"
 } # }}}
-pasteKey() { # @@ {{{
-  local buff="key.$$" pane_src=$(tmux display-message -p -F '#D') pane_id= auto=true key=
+pasteKey() { # @@ # {{{
+  local buff="key.$$" pane_src=$(tmux display-message -p -F '#D') pane_id= auto=true key= res=
   pane_src=${pane_src#%}
   local f="$TMP_MEM_PATH/keep-pass.$pane_src.key"
   while [[ ! -z $1 ]]; do
@@ -757,7 +808,7 @@ pasteKey() { # @@ {{{
     shift
   done
   if [[ -e "$f" ]]; then # {{{
-    local delta=30 keep= count= fTime="$(stat -c "%Y" "$f")" cTime="${EPOCHSECONDS:-$(epochSeconds)}"
+    local delta=30 keep= count= fTime="$(stat -c "%Y" "$f")" cTime="${EPOCHSECONDS:-$($ALIASES epochSeconds)}"
     source <(cat "$f" | command grep "^\(delta\|keep\|count\)=")
     if [[ true == true \
       && ( $delta == 0 || $fTime -gt $((cTime-delta)) ) \
@@ -780,7 +831,9 @@ pasteKey() { # @@ {{{
   fi # }}}
   tmux delete-buffer -b "$buff" >/dev/null 2>&1
   pane_id="$(tmux split-window -h -p 50 -P -F '#{pane_id}' "$HOME/.tmux.bash pasteKey_worker $auto '$buff' '$key'")"
-  while tmux display-message -p -t "$pane_id" -F '#{pane_id}' >/dev/null 2>&1; do
+  while true; do
+    res=$(tmux display-message -p -t "$pane_id" -F '#{pane_id}' 2>/dev/null)
+    [[ -z $res ]] && break
     sleep 0.5
   done
   tmux list-buffers -F '#{buffer_name}' | command grep -q "^$buff$" \
@@ -835,7 +888,7 @@ case $1 in
   (
     echo "$@"
     $dbgFull && set -xv
-    cur_time=${EPOCHSECONDS:-$(epochSeconds)}
+    cur_time=${EPOCHSECONDS:-$($ALIASES epochSeconds)}
     $sTime && { time "$@"; } || { $@; }
     echo
   ) 2>&1

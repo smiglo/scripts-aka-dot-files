@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+smart_alias() { # {{{
+  local cmd= store=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --title) set_title "$2"; shift;;
+    --cmd)   cmd="$2"; shift;;
+    --store) store="$2"; shift;;
+    --)      shift; break;;
+    *)       break;;
+    esac
+    shift
+  done # }}}
+  [[ -z $cmd ]] && echo "Command is missing" >/dev/stderr && return 1
+  if [[ ! -z $store ]]; then # {{{
+    if [[ -z $1 ]]; then
+      [[ ! -z $store ]] && set -- ${!store}
+    else
+      export $store="$@"
+    fi
+  fi # }}}
+  eval "$cmd"
+}
+alias mcd="smart_alias --cmd 'command mkdir -pv \"\$1\" && cd_wrapper -- \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+alias mcdd="smart_alias --cmd 'command mkdir -pv \"\$1\" && pushd \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+alias ll*="smart_alias --store 'SMART_AL_LL_ASTER' --cmd 'ls -Alhv | command grep --color=yes \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+alias chmod="smart_alias --cmd '[[ ! -f \"\$1\" ]] && command chmod \"\$@\" || command chmod +x \"\$@\"'"  # Syntax fix for Vim in OS/X'"
+# }}}
+alias vv='vim --Fast'
+alias v='vim --Fast'
+export PHISTORY_IGNORED_COMMANDS+=":vv"
+if which cmatrix >/dev/null 2>&1; then # {{{
+  export CMATRIX_COLORS=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' )
+  alias cmatrix="cmatrix -u ${CMATRIX_SPEED:-5} -b -C "'${CMATRIX_COLORS[$(($RANDOM % ${#CMATRIX_COLORS[*]}))]}'
+fi # }}}
+# Enable color support of ls and also add handy aliases # {{{
+if [ -x /usr/bin/dircolors ] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
+  test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+  export LS_COLORS='di=36;40:ln=35;40:so=37;40:pi=33;40:ex=32;40:bd=0;43:cd=0;43:su=0;45:sg=0;45:tw=4;36:ow=4;36:'
+  alias ls='ls --color=auto -B'
+  alias ll='ls --color=auto -ABlhv'
+  alias l.='ls --color=auto -ABlvhd .*'
+else
+  alias ll='ls -ABlhv'
+  alias l.='ls -ABlhvd .*'
+fi
+# }}}
+alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
+alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
+alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
+alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
+alias more='less'
+alias cp='cp -R'
+alias du='du -sh'
+alias mkdir='mkdir -pv'
+if $IS_MAC; then
+  alias df='df -h'
+else
+  alias df='df -Th'
+fi
+alias rmf='rm -rf'
+rm-b() { # {{{
+  local i
+  for i; do
+    mv $i $i.del && rm -rf $i.del &
+  done
+} # }}}
+alias gg='git cba 1'
+alias gG='git cba --auto'
+alias gsar='git sync --all --reset'
+alias gitst='git-cmds.sh gitst'
+if which truecrypt >/dev/null 2>&1; then # {{{
+  alias truecrypt='truecrypt -t'
+fi # }}}
+alias shlock='sshh-add --lock'
+if type colordiff >/dev/null 2>&1; then # {{{
+  alias diff='\colordiff -u'
+  alias diff-sbs='\colordiff -y --suppress-common-lines' # }}}
+else # {{{
+  alias diff='\diff -u --suppress-common-lines'
+  alias diff-sbs='\diff -y --suppress-common-lines'
+fi # }}}
+alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
+alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
+if ! $IS_MAC; then # {{{
+  alias fix_mouse='unclutter -idle 1 -root -grab -visible'
+fi # }}}
+if type grc >/dev/null 2>&1; then # {{{
+  grc_prgs=''
+  grc_prgs+="mount\n"
+  if type column >/dev/null 2>&1; then
+    for grc_i in $(echo -e "$grc_prgs"); do
+      alias ${grc_i/:*}="__util_grc_f() { [[ -z \$1 && -t 1 ]] && { command ${grc_i//:/ } | column -t | grcat conf.${grc_i/:*}; } || command ${grc_i//:/ } "\$@"; }; __util_grc_f"
+    done
+    grc_prgs=''
+  fi
+  grc_prgs+="traceroute ::google.pl\nconfigure\ngcc\nnetstat\nwdiff\nlast\nps\ndig\nip\n"
+  grc_prgs+="mtr ::google.pl @@case \\\$1 in 8) arg='8.8.8.8';; esac;\n"
+  grc_prgs+="ping ::-c:5:8.8.8.8 @@case \\\$1 in 8) arg='8.8.8.8';; .*) arg=\\\$(getip \\\$1);; esac;\n"
+  grc_prgs+="ifconfig\n"
+  if $IS_MAC; then
+    grc_prgs="${grc_prgs/mtr/sudo-mtr}"
+  fi
+  while read grc_cmd grc_i; do
+    [[ -z $grc_cmd ]] && continue
+    grc_sudo= grc_def= grc_code=":" grc_params=
+    [[ $grc_cmd == sudo-* ]] && grc_cmd="${grc_cmd#sudo-}" && grc_sudo="sudo"
+    while [[ ! -z $grc_i ]]; do
+      grc_ii="${grc_i%% *}"
+      case $grc_ii in
+      ::*) grc_def="${grc_ii#::}"; grc_def="${grc_def//:/ }";;
+      @@*) grc_code="${grc_i#@@}"; break;;
+      *)   grc_params+="$grc_ii ";;
+      esac
+      grc_i="${grc_i#$grc_ii}" && grc_i="${grc_i# }"
+    done
+    alias $grc_cmd="__util_grc_f() { arg=\"\$@\"; ${grc_code%;}; if [[ -t 1 ]]; then $grc_sudo grc $grc_cmd \${arg:-$grc_def}; else $grc_sudo command $grc_cmd \${arg:-$grc_def}; fi; }; __util_grc_f"
+  done <<<"$(echo -e "$grc_prgs")"
+  unset grc_prgs grc_cmd grc_i grc_ii grc_sudo grc_def grc_code grc_params
+fi # }}}
+if which lolcat >/dev/null 2>&1; then # {{{
+  export LOLCAT_PARAMS="-F 0.2 -p 3"
+  export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
+  lc() {
+    local p="$@"
+    if [[ -z $p ]]; then
+      p="$LOLCAT_PARAMS"
+    elif [[ $p == '-a' ]]; then
+      p="$LOLCAT_PARAMS_A"
+    fi
+    lolcat $p
+  }
+  alias lll='ll | lc'
+fi # }}}
+if which r2 >/dev/null 2>&1; then # {{{
+  alias r2help="r2 -q -c '?*~...' -"
+fi # }}}
+if [[ $UID != 0 ]] ; then # {{{
+  ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
+  if $IS_MAC; then
+    alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
+    if which htop >/dev/null 2>&1; then
+      alias htop="sudo htop"
+    fi
+  else
+    alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt -y"
+    alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get -y"
+    alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
+    alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
+    alias snap="$ALIASES_AUTO_SUDO_PROMPT && sudo snap"
+  fi
+fi # }}}
+which rlwrap >/dev/null 2>&1 && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
+which mc     >/dev/null 2>&1 && alias mc='mc -u'
+which cal ncal >/dev/null 2>&1 && alias cal='ncal -M -b'
+if [[ ! -z $RUN_AS_ROOT ]]; then # {{{
+  alias suspend="$RUN_AS_ROOT suspend"
+  alias reboot="$RUN_AS_ROOT reboot"
+  alias shutdown="$RUN_AS_ROOT shutdown" # }}}
+else # {{{
+  alias suspend='sudo systemctl suspend'
+  alias reboot='  read -t5 -p "Reboot [NY] ? "  k && case $k in Y) sudo /usr/sbin/reboot;;   esac || true'
+  alias shutdown='read -t5 -p "Shutdown [NY] ? "k && case $k in Y) sudo /usr/sbin/shutdown;; esac || true'
+fi # }}}
+

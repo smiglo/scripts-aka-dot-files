@@ -1,0 +1,77 @@
+[org/gnome/desktop/wm/keybindings]
+close=['<Shift><Alt>q']
+cycle-panels=@as []
+cycle-panels-backward=@as []
+cycle-windows=@as []
+cycle-windows-backward=@as []
+maximize=@as []
+minimize=['<Super>Down']
+move-to-monitor-down=@as []
+move-to-monitor-left=@as []
+move-to-monitor-right=@as []
+move-to-monitor-up=@as []
+move-to-workspace-1=@as []
+move-to-workspace-down=['<Primary><Alt><Super>Down']
+move-to-workspace-last=@as []
+move-to-workspace-left=['<Primary><Alt><Super>Left']
+move-to-workspace-right=['<Primary><Alt><Super>Right']
+move-to-workspace-up=['<Primary><Alt><Super>Up']
+panel-main-menu=['disabled']
+panel-run-dialog=['<Alt><Super>F2']
+show-desktop=@as []
+switch-input-source=@as []
+switch-input-source-backward=@as []
+switch-to-workspace-1=@as []
+switch-to-workspace-down=['<Primary><Super>Down']
+switch-to-workspace-last=@as []
+switch-to-workspace-left=['<Primary><Super>Left']
+switch-to-workspace-right=['<Primary><Super>Right']
+switch-to-workspace-up=['<Primary><Super>Up']
+toggle-above=['<Super>F11']
+toggle-fullscreen=['<Super>F12']
+toggle-maximized=['<Super>Up']
+toggle-shaded=['disabled']
+unmaximize=['disabled']
+
+[org/gnome/settings-daemon/plugins/media-keys]
+area-screenshot=['Print']
+area-screenshot-clip=['']
+calculator=['<Shift><Super>c']
+control-center=['<Super>comma']
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/']
+home=['<Super>e']
+logout=['']
+magnifier=['']
+magnifier-zoom-in=['']
+magnifier-zoom-out=['']
+screencast=['']
+screenreader=['']
+screensaver=['<Primary><Shift><Super>z']
+screenshot=['']
+screenshot-clip=['']
+terminal=['']
+window-screenshot-clip=['']
+
+[org/gnome/shell/keybindings]
+focus-active-notification=['<Shift><Super>n']
+open-application-menu=['<Alt>F10']
+show-screen-recording-ui=@as []
+toggle-application-view=@as []
+toggle-message-tray=['<Super>n']
+toggle-overview=['<Super>space']
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
+binding='<Super>v'
+command='@HOME/.bin/vims/gvim --fast'
+name='Vim'
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1]
+binding='<Primary><Shift><Super>s'
+command='systemctl suspend'
+name='Susped'
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2]
+binding='<Super>Escape'
+command='/usr/bin/gnome-system-monitor'
+name='process'
+

@@ -19,7 +19,7 @@ if $isInit; then # {{{
     new-window   -a -n $title -d -c $pl_abs  \; \
     set-option   -t $w -w @locked_title 1    \; \
     split-window -t $w.1 -d -c $pl_abs -v -p30
-  $ALIASES set_title --from-tmux $w --lock-force "$title"
+  set_title --from-tmux $w --lock-force "$title"
   func="$(getFunctionBody "tmux-init" --plain)"
   [[ ! -z $func ]] && bash -c "$func" - "$@"
   sleep 1
@@ -33,7 +33,7 @@ else # {{{
   if [[ ! -z $func ]]; then
     if bash -c "$func" - "$@"; then
       tmux select-pane -t $w.1
-      $ALIASES set_title --from-tmux $w --lock-force "$title"
+      set_title --from-tmux $w --lock-force "$title"
       sleep 1
       func="$(getFunctionBody "tmux-cmds")"
       [[ ! -z $func ]] && bash -c "$func" - "$@"

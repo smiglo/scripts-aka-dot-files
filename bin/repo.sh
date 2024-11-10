@@ -2,29 +2,29 @@
 # vim: fdl=0
 
 if [[ $1 == '@@' ]]; then # {{{
-  if [[ $2 == --shorts ]]; then
+  if [[ $2 == --shorts ]]; then # {{{
     echo "!d -D --diff-ign"
     echo "!dd -D"
     exit 0
-  fi
+  fi # }}}
   case $(compl-short -i $3) in
   -r | --repos) find . -maxdepth 2 -type d -path '*/build-*' -prune -o -name .git -exec dirname {} \;;;
-  --base)
+  --base) # {{{
     ret="$(git branch --all 2>/dev/null | sed -e 's|\*||' -e 's|remotes/||' -e 's|->||')"
-    echo "${ret:----}";;
-  *) case " $@" in
+    echo "${ret:----}";; # }}}
+  *) case " $@" in # {{{
     *\ --dump-rev*) echo "--skip-clean --tags --info --full --short --log --base --skip-master --date --date-first --log-p --plain --diff-ign";;
     *\ --commit*)   echo "-b --bash";;
     *)
       echo "--help"
-      echo "-r --repos -R -b --bash --exit-on-fail --no-colors -D --diff-ign --plain"
+      echo "-r --repos -R -b --bash --exit-on-fail --no-colors -D --diff-ign --plain +br"
       echo -l --{,no-}list
       echo --commit{,-all}
       echo --dump-rev{,-all}
       [[ $2 != '--' ]] && compl-short --shorts
       [[ ! -z $REPO_EXCLUDE_SEARCH_PATH || ! -z $REPO_BROWSE_PATH_EXTRA ]] && echo "-a --all"
       echorm -f? && echo "-s" || echo "-v"
-      ;;
+      ;; # }}}
   esac;;
   esac
   exit 0 # }}}
@@ -53,6 +53,7 @@ findCommitAllBranches=false
 findCommitDo=false
 findCommitRegEx=
 list=false
+list_addBranch=false
 whatToDo=
 wtd=
 if [[ -t 0 ]]; then
@@ -73,13 +74,16 @@ done
 repos="$repos_tmp"
 cRepo= cBr= cDirty= cSha= cOff=
 git_log_params="--pretty=tb --graph"
-defaultParams="--dump-rev --plain"
+defaultParams="--dump-rev"
 # }}}
 [[ $@ = '-b' ]] && set -- $@ --repos -
 if [[ ! -t 1 && -z $1 ]]; then # {{{
-  defaultParams="-- --dump-rev"
+  defaultParams="--dump-rev"
 fi # }}}
-[[ -z $1 ]] && echorm "Using default args: $defaultParams" && set -- $defaultParams
+if [[ -z $1 ]]; then
+  echorm "Using default args: $defaultParams"
+  set -- $defaultParams
+fi
 eval set -- $(compl-short --shorts --args "$@")
 [[ $1 == -D ]] && shift && set -- $defaultParams "$@"
 echorm 2 "Args [$@]"
@@ -97,6 +101,7 @@ while [[ ! -z $1 ]]; do # {{{
   -R)              repos=;;
   -b | --bash)     [[ -z $whatToDo ]] && whatToDo='run-bash'; wtd="$SHELL </dev/tty >/dev/tty 2>/dev/stderr"; echorm -; exitOnFail=true;;
   -l | --list)     list=true;;
+  +br)             list=true; list_addBranch=true; whatToDo='dump-rev';;
   --no-list)       list=false;;
   --no-colors)     colors=false;;
   --colors)        colors=true;;
@@ -121,9 +126,11 @@ while [[ ! -z $1 ]]; do # {{{
   --commit)        whatToDo='find-commit'; findCommitRegEx="$2"; shift; [[ ! -z $2 ]] && findCommitDo=true;;
   -s)              echorm -;;
   -v)              echorm +;;
-  *)               wtd="$@"; shift $#;;
+  *)               whatToDo="$@"; shift $#;;
   esac; shift
 done # }}}
+isStdout=true
+[[ -t 1 ]] || isStdout=false
 if ${colors:-false} || [[ -z $colors && -t 1 ]]; then # {{{
   cRepo=$CCyan cBr=$CYellow cDirty=$CRed cSha=$CGreen cOff=$COff
   git_log_params+=" --color=always"
@@ -153,12 +160,15 @@ if $list; then # {{{
   *) echo "$repos" | tr ' ' '\n' | sed '/^\s*$/d' | sort; exit 0;;
   esac
 fi # }}}
+mS="{{"; mS+="{"
+mE="}}"; mE+="}"
+[[ $(echorm -f??) -ge 3 ]] && set -xv
 for repo in $repos; do # {{{
   pushd $repo &>/dev/null
   echorm "$repo"
   case $whatToDo in
   find-commit) # {{{
-    if git log $($findCommitAllBranches && echo '--all') --format='%s' | command grep -q "$findCommitRegEx"; then # {{{
+    if git log $($findCommitAllBranches && echo '--all') --format='%s' | command grep -q "$findCommitRegEx"; then
       if ! $findCommitDo; then # {{{
         if ! $list; then
           echo "$repo:"
@@ -179,17 +189,19 @@ for repo in $repos; do # {{{
         eval $wtd
         err=$?
       fi # }}}
-    fi;; # }}} # }}}
+    fi;; # }}}
   dump-rev | '') # {{{
     isClean=false stat="$(git status --short)"
     br="$(git rev-parse --abbrev-ref HEAD)"
     sha="$(git log -1 --pretty=%h)"
-    if [[ $br == 'HEAD' ]]; then # {{{
-      br="$(git describe --contains --all HEAD 2>/dev/null)"
+    if [[ $br == 'HEAD'* ]]; then # {{{
+      [[ $(git branch | awk '/\*/') =~ '(HEAD detached at '(.*)')' ]] && br=${BASH_REMATCH[1]} || br="$(git describe --contains --all HEAD 2>/dev/null)"
+      [[ $br == $sha ]] && br=
       [[ -z $br ]] && br="$(git name-rev --name-only HEAD)"
       [[ -z $br ]] && br="$(git rev-parse --short HEAD 2>/dev/null)";
+      [[ -z $br ]] && br=$sha
     fi # }}}
-    br=$(echo "$br" | sed -e 's|remotes/||')
+    br=$(echo "$br" | sed -e 's|remotes/||' -e 's|tags/b/|b/|')
     [[ -z "$stat" ]] && isClean=true
     ! $isClean && [[ ! -z "$REPO_BROWSE_CLEAN_CHECK" && $(echo "$stat" | wc -l) == 1 && "$stat" =~ $REPO_BROWSE_CLEAN_CHECK ]] && isClean=true
     while true; do
@@ -204,6 +216,7 @@ for repo in $repos; do # {{{
         [0-9]*.[0-9]*.[0-9]*) break;;
         v[0-9]*.[0-9]*)       break;;
         master)                         $isClean && break;;
+        b/*)                            $isClean && break;;
         devel | next | origin/* | HEAD) $isClean && break;;
         home-work | tb/mods)            $isClean && break;;
         *)
@@ -225,33 +238,51 @@ for repo in $repos; do # {{{
           ! $isClean && c_sha=$cDirty
           echo "${cRepo}$repo${cOff}: ${cBr}$br${cOff} ${c_sha}$sha${cOff}" # }}}
         else # {{{
-          echo "$(! $dumpRevPlain && echo "# Repo: ")${cRepo}$repo${cOff}: ${cBr}$br${cOff}: ${cSha}$(git log -1 --format="%h" $br)${cOff}$(! $dumpRevPlain && echo " # {{{")"
+          echo "$(! $dumpRevPlain && echo "# Repo: ")${cRepo}$repo${cOff}: ${cBr}$br${cOff}: ${cSha}$(git log -1 --format="%h" $br)${cOff}$(! $dumpRevPlain && echo " # $mS")"
           if ! $isClean && $dumpRevDumpDiff; then # {{{
             git diff
-          fi | { $dumpRevPlain && sed 's/^/  /' || cat -; } | sed 's/\s\+$//' # }}}
+          fi | \
+          if $isStdout && which colordiff >/dev/null 2>&1; then
+            colordiff -u -w | sed 's/^/  /'
+          elif $dumpRevPlain; then
+            sed 's/^/  /'
+          else
+            cat -
+          fi
           i=
-          for ii in m/master master $(git br -a | command grep "sprint_[0-9]\{2,4\}$" | sort -t '_' -k2,2rn | head -n10) $(git tag | command grep "tmp/b-*"); do
+          branchesMaster="m/master master"
+          branchesMasterOth=$({ git br; git tag; } | sed 's/^[ *]*//' | command grep "^b/master/" | sort -r | head -n5)
+          branchesSprint=$(git br -a | sed 's|^ *remotes/||' | command grep "sprint_[0-9]\{2,4\}$" | sort -t '_' -k2,2rn | head -n10)
+          tags=$(git tag | command grep "tmp/b-*")
+          for ii in $branchesMaster $branchesMasterOth $branchesSprint $tags; do
             ! git merge-base --is-ancestor $ii $br 2>/dev/null && continue
             if [[ -z $i ]] || git merge-base --is-ancestor $i $ii 2>/dev/null; then
               i=$ii
             fi
           done
           found=false
-          for i in $dumpRevBaseBranch $i m/master master; do # {{{
+          for i in $i $dumpRevBaseBranch m/master master; do # {{{
             if git merge-base --is-ancestor $i $br 2>/dev/null; then
               oneLess=
               ! $dumpRevPlain && oneLess='~'
-              if [[ $i != $br ]]; then
+              if [[ $i != $br || ! -z $oneLess ]]; then
                 echo "$(git log $git_log_params $i$oneLess..$br)" |  sed 's/\s\+$//' | { $dumpRevPlain && sed 's/^/  /' || cat -; } | sed 's/\s\+$//'
                 if $dumpRevInfoFull && [[ ! -z "$(git diff $i..$br)" ]]; then # {{{
-                  echo "# Diff # {{{"
+                  echo "# Diff # $mS" # }}}
                   dist="$(git log $i~..$br | wc -l)"
                   if [[ $dist -gt $dumpRevMaxCommits ]]; then
                     echo "# Base branch $i is too far ($dist), shrinking to last $dumpRevMaxCommits commits"
                     i="$br~$dumpRevMaxCommits"
                   fi
-                  git diff $i..$br
-                  echo "# Diff # }}}"
+                  git diff $i..$br | \
+                  if $isStdout && which colordiff >/dev/null 2>&1; then
+                    colordiff -u -w | sed 's/^/  /'
+                  elif $dumpRevPlain; then
+                    sed 's/^/  /'
+                  else
+                    cat -
+                  fi
+                  echo "# Diff # $mE"
                 fi # }}}
               fi
               found=true
@@ -262,15 +293,16 @@ for repo in $repos; do # {{{
             echo "# Master is not a base branch, showing last 5 commits$($dumpRevInfoFull && [[ ! -z "$(git diff $br~..$br)" ]] && echo " and diff for one")"
             echo "$(git log $git_log_params $br~5..$br)" | sed 's/\s\+$//' | { $dumpRevPlain && sed 's/^/  /' || cat -; } | sed 's/\s\+$//'
             if $dumpRevInfoFull && [[ ! -z "$(git diff $br~..$br)" ]]; then
-              echo "# Diff # {{{"
+              echo "# Diff # $mS"
               git diff $br~..$br
-              echo "# Diff # }}}"
+              echo "# Diff # $mE"
             fi
           fi # }}}
-          ! $dumpRevPlain && echo "# Repo # }}}" || echo
-        fi # }}} # }}}
+          ! $dumpRevPlain && echo "# Repo # $mE" || echo
+        fi # }}}
+        # }}}
       else # {{{
-        echo "$repo"
+        echo "$repo$($list_addBranch && echo " : $br")"
       fi # }}}
       break
     done;; # }}}
@@ -278,19 +310,18 @@ for repo in $repos; do # {{{
     eval $wtd
     err=$?;; # }}}
   *) # {{{
-    eval $wtd
+    eval "$whatToDo"
     err=$?;; # }}}
   esac
   popd &>/dev/null
   [[ $err != 0 ]] && $exitOnFail && break
+  # }}}
 done | \
-  if ! $list && [[ -t 1 ]]; then
+  if ! $list && [[ -t 1 ]]; then # {{{
     case $whatToDo in
     dump-rev)
       if $dumpRevInfo; then
         column -t
-      elif which colordiff >/dev/null 2>&1; then
-        colordiff -u -w
       else
         cat -
       fi;;
@@ -299,7 +330,7 @@ done | \
   else
     cat -
   fi # }}}
-if $exitOnFail; then
+if $exitOnFail; then # {{{
   exit $err
-fi
+fi # }}}
 

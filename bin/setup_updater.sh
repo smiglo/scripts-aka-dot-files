@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# INIT {{{
+# INIT # {{{
 DATE_FILE=$TMP_PATH/.repo-update
 MIN_DELTA="${BASH_UPDATE_TIME:-"$((7*60*60*24))"}"
 created=false
@@ -11,7 +11,7 @@ do_install=false
 currentTime=0
 # }}}
 ! declare -f echorm >/dev/null 2>&1 && [[ -e $ECHOR_PATH/echor ]] && source $ECHOR_PATH/echor
-# Functions {{{
+# Functions # {{{
 if ! declare -f epochSeconds >/dev/null 2>&1; then # {{{
   epochSeconds() {
     command date +%s
@@ -45,7 +45,7 @@ checkTime() { # {{{
     [[ -e $DATE_FILE ]] && lastMod="$(command date +%Y%m%d -d @$(stat -c %Y $DATE_FILE))"
     [[ "$(command date +%Y%m%d)" == "$lastMod" ]] && return 1
     if $ask; then
-      local msg="$(echor -1 "Update repos [Yn]")"
+      local msg="$(echor --colors=force -1 "Update repos [Yn]")"
       $ALIASES progress --wait 5s --key --no-err --msg "$msg" --out /dev/stderr || return 1
     fi
   else
@@ -60,12 +60,11 @@ check() { # {{{
   [[ -z $BASH_UPDATE_REPOS ]] && return 1
   checkTime || return 1
   echor "Environment auto-update"
-  $ALIASES net --wait=5s || return 1
+  net --wait=5s || return 1
   return 0
 } # }}}
 start() { # {{{
   check || return 1
-  source $SCRIPT_PATH/bash/aliases.d/mutex-locking
   mutex_init "setup-update" --auto-clean-after $((10*60))
   mutex_lock || return 1
   local key=$SETUP_UPDATER_KEY
@@ -82,7 +81,7 @@ start() { # {{{
   $do_install && $MY_PROJ_PATH/scripts/bin/mk_install_scripts.sh --all-no --silent --no-exec
 } # }}}
 # }}}
-# MAIN {{{
+# MAIN # {{{
 echorm --name repo-update -M +
 while [[ ! -z $1 ]]; do
   case $1 in
