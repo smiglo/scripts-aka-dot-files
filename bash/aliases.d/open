@@ -6,7 +6,7 @@ __open_common() { # {{{
   $IS_MAC && openExt="__util_open_osx"
   case $1 in
   @@) # {{{
-    getFileList '*.enc'
+    get-file-list '*.enc'
     for i in $BASH_PROFILES_FULL; do
       [[ -e "$i/aliases" ]] && $i/aliases $openExt "@@"
     done;; # }}}
@@ -29,7 +29,7 @@ if ! $IS_MAC; then
         echo "@@-d";; # }}}
       -f | --file)  # {{{
         __open_common @@
-        getFileList '*.pcap'; getFileList '*.cap';; # }}}
+        get-file-list '*.pcap'; get-file-list '*.cap';; # }}}
       *) # {{{
         echo "-d --dir -f --file";; # }}}
       esac
@@ -43,7 +43,7 @@ if ! $IS_MAC; then
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    echorm -M -?
+    echormf -M -?
     case $f in
     '') # {{{
       cmd="nautilus .";; # }}}
@@ -52,20 +52,20 @@ if ! $IS_MAC; then
       cmdParams="${cmdParams% &}" doDisown=false
       [[ ! -z $CHROME_MAIN_PROFILE ]] && cmd+=" --profile-directory='$CHROME_MAIN_PROFILE'";; # }}}
     *.pcap | *.cap) # {{{
-      isInstalled wireshark || { echorm 0 "WireShark not installed"; return 1; }
+      is-installed wireshark || { echormf 0 "WireShark not installed"; return 1; }
       cmd="wireshark $f";; # }}}
     *) # {{{
       if ! __open_common "$f"; then
         if [[ -d $f ]]; then
           cmd="nautilus $f"
         else
-          echorm 0 "Unknown action for $f"
+          echormf 0 "Unknown action for $f"
           return 1
         fi
       fi;; # }}}
     esac
     (
-      echorm "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
+      echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     )
@@ -77,7 +77,7 @@ else
       case $3 in
       -f | --file)  # {{{
         __open_common @@
-        getFileList '*.pcap'; getFileList '*.cap';; # }}}
+        get-file-list '*.pcap'; get-file-list '*.cap';; # }}}
       *) # {{{
         echo "-f --file";; # }}}
       esac
@@ -90,7 +90,7 @@ else
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    echorm -M -?
+    echormf -M -?
     case $f in
     '') # {{{
       f=$PWD;; # }}}
@@ -99,16 +99,16 @@ else
         if [[ -d $f ]]; then
           :
         else
-          echorm 0 "Unknown action for $f"
+          echormf 0 "Unknown action for $f"
           return 1
         fi
       fi;; # }}}
     esac
     if [[ -z $cmd ]]; then
-      echorm "/usr/bin/open '$f'"
+      echormf "/usr/bin/open '$f'"
       /usr/bin/open "$f"
     else
-      echorm "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
+      echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     fi

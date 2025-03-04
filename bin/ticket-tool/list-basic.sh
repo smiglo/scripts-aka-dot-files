@@ -9,7 +9,7 @@ ISSUES=
 for i in $(find $TICKET_PATH -maxdepth 4 -name \*-data.txt | sort); do # {{{
   dn="$(dirname $i)"
   [[ -e $dn/.done ]] && continue
-  command grep -q "^# j-info: .*[^-]DONE" $i && continue
+  grep -q "^# j-info: .*[^-]DONE" $i && continue
   i="${i##*/}" && i="${i%-data.txt}" && i="${i#.}"
   [[ $(basename $dn) != $i ]] && continue
   ISSUES+=" $i"

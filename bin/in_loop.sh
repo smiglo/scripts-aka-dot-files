@@ -15,7 +15,7 @@ while [[ ! -z "$1" ]]; do
 done
 
 while true; do
-  echo -n "$(date): "
+  echo -n "$(date +$DATE_FMT): "
   eval "$FUNC"
   [[ $? != 0 ]] && break;
   sleep $DELAY

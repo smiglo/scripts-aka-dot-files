@@ -10,7 +10,7 @@ if [[ $1 == '@@' ]]; then # {{{
   --cmd)        echo "---";;
   --lines-max)  echo "10000 100000";;
   --file) # {{{
-    getFileList '*.log'; getFileList '*.txt';; # }}}
+    get-file-list '*.log'; get-file-list '*.txt';; # }}}
   *) # {{{
     echo "--single-cpu --cpu --lines-max --cmd --file"
     echo --{,no-}progress
@@ -91,7 +91,7 @@ cmdWorker="${cmdWorker#\'}"
 cmdWorker="${cmdWorker%\'}"
 [[ -z $cmdWorker ]] && echorm 0 "Empty command" && exit 1
 lines=$(cat "$f" | wc -l)
-isInstalled parallel split || singleCPU=true
+is-installed parallel split || singleCPU=true
 [[ $lines -gt $linesMax ]] || singleCPU=true
 [[ $lines -gt $cpu ]]      || cpu=$lines
 echorv -M cmdWorker

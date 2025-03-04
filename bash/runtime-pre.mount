@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-if [[ ! -z $PS1 && $UID != 0 ]]; then
+if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
   user_id="$UID"
   [[ -e $RUNTIME_PATH/runtime-pre.cfg ]] && source $RUNTIME_PATH/runtime-pre.cfg
   if ! $IS_DOCKER; then
     [[ -z $mount_src ]] && mount_src="/run/user/$user_id"
     [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true
   else
-    [[ -z $mount_src ]] && mount_src=/tmpfs
+    [[ -z $mount_src ]] && mount_src="/tmpfs"
     [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=false
   fi
   if ${RUNTIME_MOUNT_DO_MOUNT:-true} && [[ -e "$mount_src" && ( ! -n $TMUX || $1 == '-f' ) ]]; then

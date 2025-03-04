@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+sshh-add() { # @@ # {{{
+  $ALIASES_SCRIPTS/ssh-tools/sshh-add.sh "$@"
+}
+export PHISTORY_IGNORED_COMMANDS+=":sshh-add:ssh-add" # }}}
+sshc() { # @@ # {{{
+  $ALIASES_SCRIPTS/ssh-tools/sshc.sh "$@"
+} # }}}
+export -f sshh-add sshc
+

@@ -4,11 +4,8 @@
 # Workaround for older bash # {{{
 epochSeconds() { # {{{
   command date +%s
-} # }}}
-# }}}
-# Check for OS/X # {{{
-export IS_MAC=false
-[[ $(uname) == 'Darwin' ]] && IS_MAC=true && export UNAME="$(uname)" && export USERLAND="GNU"
+}
+export -f epochSeconds # }}}
 # }}}
 # Check for MC # {{{
 export IS_IN_MC=$( [[ $PPID != 0 && "$(ps -o comm= -p $PPID)" == "mc" ]] && echo 'true' || echo 'false')
@@ -46,6 +43,7 @@ UNICODE_EXTRA_CHARS[ll-pni]="⛏ "
 UNICODE_EXTRA_CHARS[localhost]="🤠"
 UNICODE_EXTRA_CHARS[mic]="🎤"
 UNICODE_EXTRA_CHARS[mute]="🔇"
+UNICODE_EXTRA_CHARS[new-line]="↳"
 UNICODE_EXTRA_CHARS[padlock]="🔓"
 UNICODE_EXTRA_CHARS[pause]="⏸ "
 UNICODE_EXTRA_CHARS[play]="⏺ "
@@ -54,6 +52,7 @@ UNICODE_EXTRA_CHARS[progress_bar]="▁▃▄▅▆▇█▇▆▅▄▃"
 UNICODE_EXTRA_CHARS[progress_dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
 UNICODE_EXTRA_CHARS[root]="☢ "
 UNICODE_EXTRA_CHARS[smart]="ⓢ "
+UNICODE_EXTRA_CHARS[snake]="🐍"
 UNICODE_EXTRA_CHARS[ssh]="🚀"
 UNICODE_EXTRA_CHARS[tmux_main]="🌅"
 UNICODE_EXTRA_CHARS[zoom_left]="🔍"
@@ -82,9 +81,9 @@ ${INPUTRC_MODE_CHAR_USE:-true} && export INPUTRC_MODE_CHAR="☯ "
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
 [[ -e $RUNTIME_PATH/personalities ]] && source $RUNTIME_PATH/personalities
 # }}}
-if $IS_DOCKER && [[ -e $RUNTIME_PATH/runtime-docker.bash ]]; then
+if $IS_DOCKER && [[ -e $RUNTIME_PATH/runtime-docker.bash ]]; then # {{{
   source $RUNTIME_PATH/runtime-docker.bash
-fi
+fi # }}}
 # Path # {{{
 export PATH=@END@:$PATH
 if $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ ]]; then
@@ -94,6 +93,8 @@ export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$BIN_PATH/misc:$PATH
 [[ -e $HOME/.bin-tools/bin ]] && export PATH=$HOME/.bin-tools/bin:$PATH
 # }}}
 # FZF Runtime # {{{
+export FZF_PATH
+[[ -e $TOOLS_PATH/fzf/bin/fzf ]] && export FZF_PATH="$TOOLS_PATH/fzf/bin"
 export FZF_INSTALLED=false
 if [[ -z $FZF_PATH ]]; then
   if [[ -e /usr/local/bin/fzf ]]; then
@@ -107,7 +108,7 @@ if [[ ! -z $FZF_PATH && -e $FZF_PATH/fzf ]]; then
   [[ :$PATH: == *:$FZF_PATH:* ]] || PATH=$FZF_PATH:$PATH
 elif which fzf >/dev/null 2>&1; then
   FZF_INSTALLED=true
-elif [[ ! -z $PS1 ]]; then
+elif $BASHRC_FULL_START; then
   echor "! FZF not found"
 fi # }}}
 # Tmux - local # {{{
@@ -121,17 +122,16 @@ if [[ -e $HOME/.bin/tmux-local-bin ]]; then
   [[ -e $HOME/.config/tmux-local/local/share/man/man1/tmux.1 ]] && export MANPATH="$HOME/.config/tmux-local/local/share/man:$MANPATH"
 fi # }}}
 # Env - not grouped # {{{
-export PS1_SSH_CHANGE=true
 export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
 [[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
 export REMINDER_DIR="$APPS_CFG_PATH/reminders"
-export ALIASES="$BASH_PATH/aliases"
 export _RR_TRACE_DIR="./.rr"
 [[ -e "$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh" ]] && export TMUX_SB_WORKER="$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh"
 export TMUX_SB_INTERVAL=15
 export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
 [[ -e $RLWRAP_HOME ]] || mkdir -p $RLWRAP_HOME &>/dev/null
 export RLWRAP_OPTS="-A -b '' -e '' -D 2"
+[[ -e $TOOLS_PATH/pwndbg/gdbinit.py ]] && export GDB_PWNDBG_INIT="$TOOLS_PATH/pwndbg/gdbinit.py"
 # vim - clang # {{{
 [[ -z $VIM_CLANG_LIB && ! -z $VIM_CLANG_LPATH ]] && VIM_CLANG_LIB="$VIM_CLANG_LPATH" && echor "change VIM_CLANG_LPATH to VIM_CLANG_LIB"
 if [[ -z $VIM_CLANG_LIB ]]; then
@@ -157,7 +157,7 @@ elif [[ $SHARABLE_PATH == '-' ]]; then
   SHARABLE_PATH=
   SHARED_BASH_PATH=
 fi # }}}
-if [[ ! -z $SHARABLE_PATH && ! -z $PS1 && $UID != 0 ]] && ! $IS_DOCKER; then # {{{
+if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
   export SHARABLE_REAL=${SHARABLE_REAL:-true}
   connectivity=false
   if $SHARABLE_REAL; then
@@ -166,21 +166,21 @@ if [[ ! -z $SHARABLE_PATH && ! -z $PS1 && $UID != 0 ]] && ! $IS_DOCKER; then # {
     fi # }}}
   fi
   if $connectivity || ! $SHARABLE_REAL; then # {{{
-    if $SHARABLE_REAL && ( [[ ! -n $TMUX || $1 == '--mnt-sharable' ]] ); then # {{{
+    if $SHARABLE_REAL && ( $BASHRC_FULL_START  || [[ $1 == '--mnt-sharable' ]] ); then # {{{
       [[ $1 == '--mnt-sharable' ]] && shift && rm -f $BASHRC_RUNTIME_PATH/sharable.conf $BASHRC_RUNTIME_PATH/sharable-runtime.bash
       [[ -e $BASHRC_RUNTIME_PATH/sharable.conf ]] && source $BASHRC_RUNTIME_PATH/sharable.conf
       [[ ! -n $TMUX ]] && export CD_LAST_DIRS_STORED+=":shr@$SHARABLE_PATH"
       if ${SHARABLE_USE_FUSE:-true} && ! $IS_MAC && [[ ! -e $BASHRC_RUNTIME_PATH/sharable.conf ]]; then # {{{
         if ${SHARABLE_USE_FUSE_DIRECTLY:-false}; then
-          [[ -e $SHARABLE_PATH/.mounted ]] || { [[ ! -z "$PS1" ]] && echor "Starting ocamlfuse: $USE_FUSE_LABEL"; google-drive-ocamlfuse -label $USE_FUSE_LABEL $SHARABLE_PATH; }
+          [[ -e $SHARABLE_PATH/.mounted ]] || { echor "Starting ocamlfuse: $USE_FUSE_LABEL"; google-drive-ocamlfuse -label $USE_FUSE_LABEL $SHARABLE_PATH; }
         else
           if [[ -e $HOME/.config/systemd/user/sharable-gd.service ]]; then
-            [[ -e $SHARABLE_PATH/.mounted ]] || { [[ ! -z "$PS1" ]] && echor "Starting sharable-gd"; command systemctl --user start sharable-gd; }
+            [[ -e $SHARABLE_PATH/.mounted ]] || { echor "Starting sharable-gd"; command systemctl --user start sharable-gd; }
           fi
           if [[ -e $HOME/.config/systemd/user/sharable-gd-tb.service ]] && ${SHARABLE_MOUNT_TB:-false}; then
             mntDir="$(cat $HOME/.config/systemd/user/sharable-gd-tb.service | awk '/ExecStart=google-drive-ocamlfuse/{print $4}')"
             if [[ -d $mntDir ]]; then
-              [[ -e $mntDir/.mounted ]] || { [[ ! -z "$PS1" ]] && echor "Starting sharable-gd-tb"; command systemctl --user start sharable-gd-tb; }
+              [[ -e $mntDir/.mounted ]] || { echor "Starting sharable-gd-tb"; command systemctl --user start sharable-gd-tb; }
             fi
           fi
         fi
@@ -218,6 +218,7 @@ if [[ ! -z $SHARABLE_PATH && ! -z $PS1 && $UID != 0 ]] && ! $IS_DOCKER; then # {
   else
     echorm 1 "Sharable skipped due to lack of connectivity"
   fi # }}}
+  unset connectivity
 fi # }}}
 export SHARABLE_PATH SHARED_BASH_PATH
 # }}}
@@ -244,7 +245,7 @@ set-utils() { # {{{
     set -- +grep +vim +vim-sessions +vim-undoes "$@"
   fi
   while [[ ! -z $1 ]]; do # subpaths # {{{
-    local what=$1 where= cmd= isFile=false
+    local what=$1 where= cmd= isFile=false whatOrig=
     shift
     if [[ $what == *=* ]]; then
       where=${what#*=}
@@ -253,6 +254,7 @@ set-utils() { # {{{
         where="$UTILS_PATH/$where"
       fi # }}}
     fi
+    whatOrig=$what
     case $what in # {{{
     +grep)         what="GREP_LAST_PATH";    [[ -z $where ]] && where="$UTILS_PATH/${hidden}grep-last";;
     +vim)          what="VIM_UTILS_PATH";    [[ -z $where ]] && where="$UTILS_PATH/${hidden}vim";;
@@ -275,6 +277,9 @@ set-utils() { # {{{
     if [[ ! -z $cmd ]]; then
       eval "$cmd"
     fi
+    case $whatOrig in # {{{
+    +hist) export HISTFILE_ORIG=$HISTFILE;;
+    esac # }}}
   done # }}}
 } # }}}
 # }}}
@@ -284,21 +289,28 @@ export TMUX_TMPDIR=$HOME/.tmux/socket
 if [[ -n $TMUX ]]; then
   export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
   export TMUX_SESSION_PATH="$APPS_CFG_PATH/tmux/sessions/$TMUX_SESSION"
+  [[ $UID == 0 ]] && export TMUX_SESSION_PATH="/root/tmux/sessions/$TMUX_SESSION"
   [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
   set-utils -d
   export TMUX_RUNTIME="$UTILS_PATH/runtime"
-  [[ ! -e $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION ]] && command mkdir -p $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION
-  [[ ! -e $TMUX_RUNTIME ]] && ln -sf $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION $TMUX_RUNTIME
+  if [[ $UID != 0 ]]; then
+    [[ ! -e $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION ]] && command mkdir -p $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION
+    [[ ! -e $TMUX_RUNTIME ]] && ln -sf $TMP_MEM_PATH/tmux-runtime/$TMUX_SESSION $TMUX_RUNTIME
+  else
+    export TMUX_RUNTIME="/root/tmux/runtime"
+    [[ ! -e $TMUX_RUNTIME ]] && command mkdir -p $TMUX_RUNTIME
+  fi
 else
   set-utils -d
   export TMUX_RUNTIME="$TMP_MEM_PATH/runtime"
+  [[ $UID == 0 ]] && export TMUX_RUNTIME="/root/tmux/runtime"
   [[ ! -e $TMUX_RUNTIME ]] && command mkdir -p $TMUX_RUNTIME
 fi
 # }}}
 # Clean TMP # {{{
-if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* ) ]] && declare -F progress >/dev/null 2>&1; then
+if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]] && ! $IS_DOCKER && ! ${TMUX_POPUP:-false} ) || [[ $1 == '--clean-tmp'* ]]; then
   now=${EPOCHSECONDS:-$(epochSeconds)}
-  check_file=$TMP_MEM_PATH/.tmp-last-check
+  check_file=$MEM_KEEP/tmp-last-check
   do_clean=false
   case $1 in # {{{
   --clean-tmp)            do_clean=true; shift;;
@@ -322,7 +334,7 @@ if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* )
       # Vars # {{{
       [[ -z $COff ]] && source $BASH_PATH/colors
       paths=""
-      paths+=" p=\"$TMP_MEM_PATH\";threshold=7;size=50"
+      paths+=" p=\"$TMP_MEM_PATH\";threshold=7;size=50;keep=\"keep\""
       paths+=" p=\"$TMPDIR\";threshold=21;silent=true;size=250"
       paths+=" p=\"${RMF_TRASH_PATH:-$TMP_PATH/.trash}\";threshold=7;silent=true;size=200"
       paths+=" p=\"$TMP_PATH\";size=150"
@@ -364,7 +376,7 @@ if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* )
         msg+="${COff}"
         $silent \
           && echo -e "$msg" >/dev/stderr \
-          || progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
+          || $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
         # Old files # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
@@ -385,13 +397,14 @@ if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* )
           2>/dev/null # }}}
         rm -f $marker
         [[ ! -z $size && $(command du -s $p 2>/dev/null | awk '{print int($1/1014)}') -gt $size ]] && ! $silent && echo -en "\nSize greater than [${CCyan}${size}${COff}]" >/dev/stderr
-        $silent || progress --unmark
+        $silent || $ALIASES progress --unmark
       done # }}}
+      sleep 0.1
       if which tac >/dev/null 2>&1 && [[ ! -n $TMUX || $do_clean != 'false' ]]; then # {{{
         msg="${CBlue}Cleaning bash histories${COff}"
         $silent \
           && echo -e "$msg" >/dev/stderr \
-          || progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
+          || $ALIASES progress --mark --dots --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
         find -L $TMP_PATH/.tmux -maxdepth 3 -name bash_history \
           -exec \
             $SHELL -c 'f() { \
@@ -400,7 +413,7 @@ if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* )
               && mv "$1.bck" "$1"; \
             }; f "{}"' \; \
           2>/dev/null
-        $silent || progress --unmark
+        $silent || $ALIASES progress --unmark
       fi # }}}
     )
   fi # }}}
@@ -409,7 +422,7 @@ if [[ $UID != 0 && $what_to_do != 'min' && ( ! -z $PS1 || $1 == '--clean-tmp'* )
   if [[ ! -z $CLEAN_BACKUP_STEPS ]]; then
     while read i; do
       f="${i%% *}"
-      isInstalled $f || { echor "Cannot find [$f :: $i ]"; continue; }
+      is-installed $f || { echor "Cannot find [$f :: $i ]"; continue; }
       eval $i
     done <<<$(echo "$CLEAN_BACKUP_STEPS")
     unset i f
@@ -424,11 +437,17 @@ GIT_PATH="/usr/local/git/current"
 # PATH # {{{
 [[ -e $HOME/.cargo/bin ]] && export PATH="$HOME/.cargo/bin:$PATH"
 [[ -e $HOME/.local/bin ]] && export PATH="$HOME/.local/bin:$PATH"
+[[ -e $TOOLS_PATH/.runtime.bash ]] && source $TOOLS_PATH/.runtime.bash
 # }}}
 # Runtime file # {{{
 export RUNTIME_FILE=$RUNTIME_PATH/runtime.bash
 [[ ! -e $RUNTIME_FILE ]] && touch $RUNTIME_FILE
 source $RUNTIME_FILE
+if [[ -e $RUNTIME_PATH/runtime-common.bash ]]; then
+  source $RUNTIME_PATH/runtime-common.bash
+elif $IS_DOCKER && [[ -e ${RUNTIME_PATH/$HOME/\/host}/runtime-common.bash ]]; then
+  source ${RUNTIME_PATH/$HOME/\/host}/runtime-common.bash
+fi
 for profi in $BASH_PROFILES; do
   [[ -e $RUNTIME_FILE.$profi ]] && source $RUNTIME_FILE.$profi
 done

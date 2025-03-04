@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-getUnicodeChar() { # {{{
+get-unicode-char() { # {{{
   [[ -e "$UNICODE_EXTRA_CHARS_FILE" ]] || { echor "missing unicode file [$UNICODE_EXTRA_CHARS_FILE]"; return 1; }
   source "$UNICODE_EXTRA_CHARS_FILE"
   local i= v= len= width=
@@ -34,4 +34,5 @@ getUnicodeChar() { # {{{
     echo "${UNICODE_EXTRA_CHARS[$1]}"
   fi # }}}
 } # }}}
+export -f get-unicode-char
 

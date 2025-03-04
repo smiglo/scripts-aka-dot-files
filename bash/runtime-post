@@ -30,7 +30,7 @@ done # }}}
 # Remote changes # {{{
 src_dir="$SHARED_BASH_PATH/to-apply"
 if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && $UID != 0 ]]; then
-  now="${EPOCHSECONDS:-$(epochSeconds)}" rmt_chngs_file="$TMP_MEM_PATH/.remote.changes"
+  now="${EPOCHSECONDS:-$(epochSeconds)}" rmt_chngs_file="$MEM_KEEP/remote.changes"
   if [[ -z $REMOTE_CHANGES_LAST || $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
     REMOTE_CHANGES_LAST=0
     [[ -e "$rmt_chngs_file" ]] && source "$rmt_chngs_file"
@@ -150,6 +150,7 @@ fzf-dir-widget() { # {{{
   READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
   READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
 } # }}}
+export -f __fzf_select__ fzf-dir-widget __fzfcmd __fzf_defaults
 if $FZF_INSTALLED; then # {{{
   bind -x '"\C-t": "fzf-dir-widget"'
 fi # }}}
@@ -168,6 +169,15 @@ if ${TMUX_POPUP:-false}; then # {{{
   if [[ ! -z $d ]]; then
     set-utils -h "$d" +basic +hist +remember-conf-dir=.remb +note-file=notes.txt
   fi
+fi # }}}
+if $IS_DOCKER; then # {{{
+  if ! $IS_VSCODE && [[ ! -n $TMUX && ! -z $PS1 && $UID != 0 ]]; then # {{{
+    $ALIASES_SCRIPTS/docker-tools/clipboard-docker.sh &
+    disown $!
+  fi # }}}
+fi # }}}
+if $IS_VSCODE; then # {{{
+  set-utils -h "$APPS_CFG_PATH/vscode" +basic +hist +remember-conf-dir=.remb +note-file=notes.txt
 fi # }}}
 unset -f set-utils
 

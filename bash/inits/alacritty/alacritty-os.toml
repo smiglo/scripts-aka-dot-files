@@ -57,12 +57,12 @@ style = "Regular"
 [[keyboard.bindings]]
 action = "Paste"
 key = "V"
-mods = "Command"
+mods = "Control|Shift"
 
 [[keyboard.bindings]]
 action = "Copy"
 key = "C"
-mods = "Command"
+mods = "Control|Shift"
 
 [[keyboard.bindings]]
 chars = "\u001BOH"
@@ -654,7 +654,7 @@ mods = "Alt|Shift"
 
 [window]
 dynamic_padding = true
-dynamic_title = false
+dynamic_title = true
 option_as_alt = "OnlyLeft"
 
 [window.padding]

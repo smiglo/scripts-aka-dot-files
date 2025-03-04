@@ -113,7 +113,7 @@ printer() { # {{{
 getGradientColor() { # {{{
   $isStdout || return
   $colorsOn || return
-  [[ $1 == '-' ]] && getColor 'off' && return
+  [[ $1 == '-' ]] && get-color 'off' && return
   declare -A colors=(
     [40]="blue"
     [55]="green"
@@ -123,9 +123,9 @@ getGradientColor() { # {{{
   )
   local t=$1 v=
   for v in $(echo ${!colors[*]} | tr ' ' '\n' | sort -n); do
-    [[ $t -le $v ]] && getColor "${colors[$v]}" && return
+    [[ $t -le $v ]] && get-color "${colors[$v]}" && return
   done
-  getColor "white"
+  get-color "white"
 } # }}}
 
 [[ -e $pidFile ]] && ps -p "$(cat $pidFile)" >/dev/null && isRunning=true

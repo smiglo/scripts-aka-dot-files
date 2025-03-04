@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-getValueWithProb() { # @@ # {{{
+get-value-with-prob() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     [[ $2 == 1 ]] && echo "Values Value-i:Prob-i[%]" || echo "Probability-For-Each-Value[%] Value-j:Prob-j[%] Value-k"
     return 0
   fi # }}}
-  local r=$((RANDOM%100)) dbg=$(echorm --module getValueWithProb -f?var-) i= s=0 ii=0 v= end=false values= probs=
+  local r=$((RANDOM%100)) dbg=$(echorm --module get-value-with-prob -f?var-) i= s=0 ii=0 v= end=false values= probs=
   if [[ $1 == *:* ]]; then
     for i in $@; do
       values+="${i%%:*} "
@@ -33,7 +33,7 @@ getValueWithProb() { # @@ # {{{
   fi # }}}
   echo $v
 } # }}}
-getRangeValue() { # @@ # {{{
+get-range-value() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "-i min max"
     return 0
@@ -51,4 +51,5 @@ getRangeValue() { # @@ # {{{
   $inclusive && max=$((max+1))
   echo $((min+RANDOM%max))
 } # }}}
+export -f get-value-with-prob get-range-value
 

@@ -3,13 +3,13 @@
 
 if false; then # {{{
 # BASH # {{{
-  prefixVars_util_isVar() {
+  prefixVars-util-isVar() {
     [[ -v "$1" ]]
   }
 # BASH # }}}
 # OS-X # {{{
-  prefixVars_util_isVar() {
-    compgen -v | command grep -q "^$1$"
+  prefixVars-util-isVar() {
+    compgen -v | grep -q "^$1$"
   }
 # OS-X # }}}
 fi # }}}
@@ -18,7 +18,7 @@ if ! $IS_MAC; then
 else
   source <(sed -n '/^# OS-X/,/^# OS-X/p' "$SCRIPT_PATH/bash/aliases.d/prefixVars")
 fi
-prefixVars_util() { # {{{
+prefixVars-util() { # {{{
   local cmd=$1 ret=0 all=false
   shift
   while [[ ! -z $1 ]]; do # {{{
@@ -40,7 +40,7 @@ prefixVars_util() { # {{{
     -z)     [[ -z ${!name} ]];;
     true)   [[ ${!name} == true ]];;
     false)  [[ ${!name} == false ]];;
-    -v)     prefixVars_util_isVar $name;;
+    -v)     prefixVars-util-isVar $name;;
     *)      [[ ${!name} == $1 ]];;
     esac
     ret=$?;; # }}}
@@ -48,7 +48,7 @@ prefixVars_util() { # {{{
     if ! $all; then # {{{
       local default=$1 defaultOnEmpty=false
       [[ $1 == '-z' ]] && default=$2 && defaultOnEmpty=true
-      if ! prefixVars_util_isVar $name || ( $defaultOnEmpty && [[ -z ${!name} ]] ); then
+      if ! prefixVars-util-isVar $name || ( $defaultOnEmpty && [[ -z ${!name} ]] ); then
         echo -en "$default"
       else
         echo -en "${!name}"
@@ -66,10 +66,10 @@ prefixVars_util() { # {{{
   esac
   return $ret
 } # }}}
-vIsSet() { prefixVars_util --isSet "$@"; }
-vGet()   { prefixVars_util --get   "$@"; }
-vSet()   { prefixVars_util --set   "$@"; }
-vClean() { prefixVars_util --clean "$@"; }
+vIsSet() { prefixVars-util --isSet "$@"; }
+vGet()   { prefixVars-util --get   "$@"; }
+vSet()   { prefixVars-util --set   "$@"; }
+vClean() { prefixVars-util --clean "$@"; }
 vBool() { # {{{
   local ret=false
   case $1 in
@@ -103,6 +103,6 @@ vDumpArrayNicely() { # {{{
     echo "$n[$i]=\"${ref[$i]}\""
   done
 } # }}}
-export -f vIsSet vGet vSet vClean vBool prefixVars_util vDumpArrayNicely prefixVars_util_isVar
+export -f vIsSet vGet vSet vClean vBool prefixVars-util vDumpArrayNicely prefixVars-util-isVar
 
 

@@ -11,14 +11,14 @@ if [[ "$MSG_RECEIVER_SEND_METHOD" == '_msg_ssh_sender_' ]]; then
   [[ -z "$MSG_RECEIVER_SSH_USER" ]] && echo "MSG_RECEIVER_SSH_USER not defined" && exit 1
 fi
 
-[[ -z $msg_receiver_file ]] && msg_receiver_file="$TMP_MEM_PATH/.messages.txt"
+[[ -z $msg_receiver_file ]] && msg_receiver_file="$MEM_KEEP/messages.txt"
 
 if [[ "$1" == 'login' ]]; then
   debug=false
   $debug && log_file=$TMP_MEM_PATH/msg_receiver.log
 
   log() {
-    $debug && echo "$(date): $1" >>$log_file
+    $debug && echo "$(date +$DATE_FMT): $1" >>$log_file
   }
 
   _msg_receiver_() {

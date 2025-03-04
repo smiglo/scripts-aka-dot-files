@@ -39,7 +39,8 @@
   bash-switches = !"git-cmds.sh bash-switches"
   br = branch
   cba = !"git-cmds.sh cba"
-  ci = commit
+  c = !"git-cmds.sh commit"
+  ci = !"git-cmds.sh commit"
   ci-fast = !"git-cmds.sh commit-fast"
   cia  = commit --all --no-verify
   ciaa = commit --all --amend --reuse-message=HEAD --no-verify
@@ -56,7 +57,7 @@
   dffp = !"git diffp --relative"
   dffw = diff --relative --word-diff
   diffc = diff --cached
-  diffp = !"bash -c 'f() { local rev="HEAD"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f \"$@\";'" -
+  diffp = !"bash -c 'f() { local rev=\"HEAD\"; [[ $1 == -b ]] && shift; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f \"$@\";'" -
   db    = !"bash -c 'f() { local b=\"$(git rev-parse --abbrev-ref --symbolic-full-name @)\" rB=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u})\"; git diff $rB..$b; }; f \"$@\"'" -
   dc    = !"git diffc"
   dp    = !"git diffp"
@@ -68,6 +69,8 @@
               [[ -z $ups ]] && return 1; \
               git diff $ups..@; \
             }; f \"$@\";'" -
+  f      = fetch
+  fr     = fetchr
   fetchr = !"git fetch && git rreset"
   i    = info -p
   info = log --pretty=fuller     --date=local    -1
@@ -84,28 +87,29 @@
   lgfa = !"git lgo --pretty=tb --graph --all"
   melddiff = difftool -y -t meld
   ps = push --recurse-submodules=check
-  puf = push -f
+  puf   = !"bash -c 'f() { local ups=\"\"; \
+              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
+              elif [[ $1 == */* ]]; then ups=\"$1\"; \
+              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
+              fi; \
+              [[ -z $ups ]] && return 1; \
+              git-cmds.sh tag_sync -r $ups; \
+              git push -f ${ups/\\// }; \
+            }; f \"$@\";'" -
   range-diff2 = !"git-cmds.sh range-diff"
   rb = rebase
   rba = rebase -i --autosquash
   remote-backup = !"git-cmds.sh remote-backup $@"
   restash = !"git stash pop && git stash"
   retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f \"$@\";'" -
-  rreset = !"bash -c 'f() { local ups=\"\"; \
-              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
-              elif [[ $1 == */* ]]; then ups=\"$1\"; \
-              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
-              fi; \
-              [[ -z $ups ]] && return 1; \
-              git reset --hard $ups; \
-             }; f \"$@\";'" -
-  Reset = !"bash -c 'f() { git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null); }; f ;'" -
+  rreset = !"git-cmds.sh rreset"
   s = stash-toggle
   stash-toggle = !"git-cmds.sh stash_toggle"
   sh = show -w
   shv = !"bash -c 'f() { git shst $@ | vim --Fast -; }; f \"$@\";'" -
   shst = !"bash -c 'f() { git diffp $@ --name-status; }; f \"$@\";'" -
   shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f \"$@\";'" -
+  sr = sync --reset
   st = status --short -b
   stv = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim --Fast -; }; f \"$@\";'" -
   sync = !"git-cmds.sh sync"
@@ -179,7 +183,6 @@
   required = true # }}}
 [include] # {{{
   path = ~/.runtime/gitconfig # }}}
-[credential]
-  helper = store --file  /home/tomasz/.my-credentials
-[url "https://github"]
-  insteadOf = git://github
+[url "https://github"] # {{{
+  insteadOf = git://github # }}}
+

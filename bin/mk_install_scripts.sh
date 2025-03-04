@@ -37,14 +37,20 @@ get_app_name() { # {{{
   return 0
 } # }}}
 install() { # {{{
-  echo "$TO_INSTALL" | command grep -q " $1\(:[^ ]*\)\{0,1\} " && return 0
-  [[ $1 == *-'*' ]] && echo "$TO_INSTALL" | command grep -q " ${1%-\*}-.[^ ]* " && return 0
+  if [[ $1 == 'tools-'* ]]; then
+    mkdir -p $TOOLS_PATH/.stat >/dev/null 2>&1
+    local tool=${1#tools-}
+    [[ " $MK_INSTALL_TOOLS " == *" -$tool "* ]] && return 1
+    [[ -e $TOOLS_PATH/.stat/$tool ]] && return 1
+  fi
+  echo "$TO_INSTALL" | grep -q " $1\(:[^ ]*\)\{0,1\} " && return 0
+  [[ $1 == *-'*' ]] && echo "$TO_INSTALL" | grep -q " ${1%-\*}-.[^ ]* " && return 0
   if [[ ! -z $INSTALL_FROM_ARGS ]]; then
     local i=
     for i in $TO_INSTALL; do
       [[ $i != '@' ]] || continue
       [[ $i == *\* ]] || continue
-      echo "$1" | command grep -q "${i/\*/.\*}" && return 0
+      echo "$1" | grep -q "${i/\*/.\*}" && return 0
     done
   fi
   return 1
@@ -102,26 +108,40 @@ appender() { # {{{
   for src in $srcs; do
     src="$(echo "$src" | sed -e 's/[{}]//g')"
     [[ -e $src ]] || continue
-    ! command grep -q "$(head -n1 $src)" $dst || continue
+    ! grep -q "$(head -n1 $src)" $dst || continue
     cat $src >> $dst
   done
+} # }}}
+retry() { # {{{
+  local cnt=$1 cmd=$2 msg=$3
+  while ! $cmd; do
+    if $AUTO_INSTALL_TOOLS && [[ $cnt -gt 0 ]]; then
+      cnt=$((cnt - 1))
+      [[ $cnt -gt 0 ]] && continue
+    fi
+    read -p "$msg" key
+    case ${key,,} in q) rm -rf $name; return 1;; esac
+  done
+} # }}}
+tools-clone() { # {{{
+  local url="$1"
+  local name=${url##*/} && name=${name%.git}
+  [[ ! -e $name ]] || { echo "$name already exist, skipping"; return 1; }
+  retry 10 "git clone $url" "$name: clone failed, press a key to retry or Q > " || return 1
+  return 0
 } # }}}
 # }}}
 # Setup # {{{
 # INIT # {{{
-
 # trap cleanUp EXIT
-if [[ -z $MY_PROJ_PATH ]]; then # {{{
-  export MY_PROJ_PATH=$HOME/projects/my
-  [[ ! -e $MY_PROJ_PATH ]] && export MY_PROJ_PATH=$HOME/projects
-  [[ ! -e $MY_PROJ_PATH ]] && echo 'MY_PROJ_PATH cannot be evaluated. Export correct value from a shell' >/dev/stderr && exit 1
-fi # }}}
+theFile=$(readlink -f $0)
+export MY_PROJ_PATH="${theFile%%/scripts/*}"
 script_path=$MY_PROJ_PATH/scripts
 bin_path=$HOME/.bin
 TMP_PATH=${TMP_PATH:-$HOME/.tmp}
 RUNTIME_PATH=${RUNTIME_PATH:-$HOME/.runtime}
 APPS_CFG_PATH=${APPS_CFG_PATH:-$RUNTIME_PATH/apps}
-[[ ! -e $APPS_CFG_PATH ]] && command mkdir -p $APPS_CFG_PATH
+[[ ! -e $APPS_CFG_PATH ]] && mkdir -p $APPS_CFG_PATH
 
 SETUP_PROFILES=$MK_INSTALL_SETUP_PROFILES
 AUTO_INSTALL_TOOLS=${MK_INSTALL_AUTO_INSTALL_TOOLS}
@@ -132,15 +152,16 @@ INSTALL_FAILED=
 IS_SILENT=false
 DO_EXEC=true
 INSTALL_FEATURES_BASIC='bashrc runtime bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf rlwrap quilt my-proj-path-as-kb tcpdump-permissions'
-INSTALL_FEATURES_EXT='dconf-colors dconf-keys grc atom ap-calc tig install-tools ack ssh-config gitsh gdb gdb-multiarch'
+INSTALL_FEATURES_EXT='dconf-colors dconf-keys grc ap-calc tig install-tools ack ssh-config gitsh gdb gdb-multiarch'
 INSTALL_FEATURES_EXT_UBU=''
 INSTALL_FEATURES_EXT_MAC='mac-tools mac-grep'
-TO_INSTALL_TOOLS_BASIC='git tig quilt pv at tmux cmatrix mc cscope grc vlock jq expect colordiff column htop curl batcat:bat entr'
+TO_INSTALL_TOOLS_BASIC='git tig quilt pv at tmux cmatrix mc cscope grc vlock jq expect colordiff column htop curl batcat:bat entr file highlight tree'
 TO_INSTALL_TOOLS_UBU="calc:apcalc vim.gtk3:vim-gtk xclip ack-grep:ack ctags:exuberant-ctags clang valgrind strace netcat:netcat-openbsd tcpdump \
     vipe:moreutils pstree ag:silversearcher-ag \
     ifconfig:net-tools ip:iproute2 gawk fdfind:fd-find \
     bfs psmisc build-essential xxd socat rlwrap rr \
-    -:manpages-dev -:manpages-posix-dev"
+    -:manpages-dev -:manpages-posix-dev \
+    npm nodejs"
 if ! $IS_DOCKER; then
   INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse less-highlight fonts docker user-groups root sudo-permissions'
   TO_INSTALL_TOOLS_BASIC+=' cowsay figlet lolcat fortune:fortune-mod'
@@ -153,9 +174,12 @@ if ! $IS_DOCKER; then
 else
   INSTALL_FEATURES_EXT_UBU='less-highlight user-groups root sudo-permissions'
 fi
+INSTALL_FEATURES_EXT_UBU+=' tools-cargo tools-fzf tools-pwntools tools-frida tools-pwndbg tools-radare2 tools-dedoc tools-nodejs'
 TO_INSTALL_TOOLS_MAC="calc ack pbcopy:tmux-pasteboard ctags ag:the_silver_searcher \
-    bfs:tavianator/tap/bfs fd pidof pstree "
+    bfs:tavianator/tap/bfs fd pidof pstree up"
 INSTALL_BIN_MISC_BASIC='cht.sh keep-pass.sh'
+INSTALL_BIN_MISC_BASIC_UBU=' up:ubu'
+INSTALL_BIN_MISC_BASIC_MAC=''
 INSTALL_FROM_ARGS=
 INSTALL_SUDO_ALLOWED=${INSTALL_SUDO_ALLOWED:-true}
 # }}}
@@ -194,7 +218,7 @@ done
 PROFILES_FILE=$APPS_CFG_PATH/setup_profiles
 [[ -z $SETUP_PROFILES && -e $PROFILES_FILE ]] && SETUP_PROFILES="$(cat $PROFILES_FILE)"
 [[ -z $SETUP_PROFILES ]] && echo "WARNING: Profiles not specifed" >/dev/stderr
-[[ $SETUP_PROFILES == '-' ]] && SETUP_PROFILES=
+[[ $(echo $SETUP_PROFILES) == '-' ]] && SETUP_PROFILES=
 # }}}
 # Cleaning # {{{
 # [[ -z $INSTALL_FROM_ARGS ]] && rm -rf $bin_path
@@ -224,7 +248,7 @@ done
 # }}}
 # Configure TMP_PATH # {{{
 dbg -n "Configuring tmp ($TMP_PATH)... "
-[[ ! -d $TMP_PATH ]] && command mkdir -p $TMP_PATH
+[[ ! -d $TMP_PATH ]] && mkdir -p $TMP_PATH
 dbg "[DONE]"
 # }}}
 # Store selected profiles in a file # {{{
@@ -263,7 +287,7 @@ TO_INSTALL="@ $TO_INSTALL @"
 # }}}
 # Installation # {{{
 # Configurations, etc. # {{{
-if ! $IS_MAC && $INSTALL_SUDO_ALLOWED && [[ ! -h ~/.bashrc ]]; then # {{{
+if ! $IS_MAC && ! $IS_DOCKER && $INSTALL_SUDO_ALLOWED && [[ ! -h ~/.bashrc ]]; then # {{{
   if which add-apt-repository >/dev/null 2>&1; then
     dbg "Configuring (apt repositories)... "
     yes | sudo add-apt-repository main
@@ -282,19 +306,20 @@ if install 'bashrc'; then # {{{
   ln -sf $script_path/bash/profile ~/.profile
   ln -sf $script_path/bash/inputrc ~/.inputrc
   ln -sf $script_path/bash/inits/radare2rc $HOME/.radare2rc
+  touch $HOME/.hushlogin
   dbg "[DONE]"
 fi # }}}
 if install 'runtime'; then # {{{
   dbg -n "Configuring (runtime)... "
   [[ ! -e $RUNTIME_PATH/runtime-pre.mount ]] && ln -sf $script_path/bash/runtime-pre.mount $RUNTIME_PATH/
-  if [[ ! -e $RUNTIME_PATH/runtime-pre.cfg ]]; then
-    cp $SCRIPT_PATH/bash/runtime-pre.cfg $RUNTIME_PATH/
-  fi
+  [[ ! -e $RUNTIME_PATH/runtime-pre.cfg ]] && cp $SCRIPT_PATH/bash/runtime-pre.cfg $RUNTIME_PATH/
+  [[ ! -e $RUNTIME_PATH/runtime-pre.bash ]] && touch $RUNTIME_PATH/runtime-pre.bash
+  export PATH=$HOME/.local/bin:$PATH
   dbg "[DONE]"
 fi # }}}
 if install 'bin-path'; then # {{{
   dbg -n "Configuring ($bin_path)... "
-  command mkdir -p $bin_path
+  mkdir -p $bin_path
   for i in $script_path/bin/*; do
     [[ -f $i && ! -e $bin_path/$i ]] && ln -sf $i $bin_path/
   done
@@ -304,23 +329,26 @@ fi # }}}
 if install 'bin-misc'; then # {{{
   dbg    "Configuring (bin-misc)... "
   TO_INSTALL_BIN_MISC="${TO_INSTALL_BIN_MISC/BASIC/$INSTALL_BIN_MISC_BASIC}"
+  ! $IS_MAC && TO_INSTALL_BIN_MISC+=" $INSTALL_BIN_MISC_BASIC_UBU" || TO_INSTALL_BIN_MISC+=" $INSTALL_BIN_MISC_BASIC_MAC"
   dbg    "  List: [$(echo $TO_INSTALL_BIN_MISC)]"
-  command mkdir -p $bin_path/misc
+  mkdir -p $bin_path/misc
   paths="$script_path/bin/misc"
   for i in $SETUP_PROFILES; do
     paths+=" $script_path/bash/profiles/$i/bin/misc"
   done
   for i in $TO_INSTALL_BIN_MISC; do
     found=false
+    dst=$i
+    [[ $i == *:* ]] && dst=${i%:*} && i=${i/:/.}
     for p in $paths; do
       if [[ -e "$p/$i" ]]; then
         found=true
         if [[ -d "$p/$i" ]]; then
           for j in $(cd $p/$i; echo *); do
-            ln -sf $p/$i/$j $bin_path/misc/
+            ln -sf $p/$i/$j $bin_path/misc/$dst
           done
         else
-          ln -sf $p/$i $bin_path/misc/
+          ln -sf $p/$i $bin_path/misc/$dst
         fi
       fi
     done
@@ -330,13 +358,13 @@ if install 'bin-misc'; then # {{{
 fi # }}}
 if install 'bash-path'; then # {{{
   dbg -n "Configuring ($bin_path/bash)... "
-  command mkdir -p $bin_path/bash
+  mkdir -p $bin_path/bash
   for i in $script_path/bash/*; do
     [[ -f $i && ! -e $bin_path/bash/$i ]] && ln -sf $i $bin_path/bash/
   done
   [[ ! -e $bin_path/bash/completion.d ]] && ln -s $script_path/bash/completion.d $bin_path/bash/
   [[ ! -e $bin_path/bash/personalities ]] && ln -s $script_path/bash/personalities $bin_path/bash/
-  command mkdir -p $bin_path/bash/profiles
+  mkdir -p $bin_path/bash/profiles
   for i in $SETUP_PROFILES; do
     [[ ! -e $bin_path/bash/profiles/$i ]] && ln -s $script_path/bash/profiles/$i $bin_path/bash/profiles/$i
   done
@@ -362,7 +390,7 @@ if install 'fonts'; then # {{{
     fonts="FiraMono Inconsolata" dst="$HOME/.local/share/fonts"
     $IS_MAC && dst="$HOME/Library/Fonts"
     for f in $fonts; do
-      [[ "$(command cd $dst; echo $f*)" == "$f"'*' ]] || continue
+      [[ "$(cd $dst; echo $f*)" == "$f"'*' ]] || continue
       unzip -q -d "$dst" "$SHARABLE_PATH/sharable/fonts/${f}.zip" \*.ttf
     done
   fi
@@ -383,7 +411,7 @@ if install 'vim'; then # {{{
   [[ ! -z $SETUP_PROFILES ]] && appender $vim_specific $(eval echo $script_path/bash/profiles/{${SETUP_PROFILES// /,}}/inits/vim/vim-specific)
 
   vim_path=$bin_path/vims
-  command mkdir -p $vim_path
+  mkdir -p $vim_path
   ln -sf $vim_repo_path/mvim $vim_path/
   pushd $vim_path >/dev/null
   for i in {,_}{,g,m,r}{vi,view,vim,vimdiff} vimdiffgit; do
@@ -415,7 +443,7 @@ fi # }}}
 if install 'tmux'; then # {{{
   dbg -n "Configuring (tmux)... "
   # rm -rf ~/.tmux
-  [[ ! -e ~/.tmux/plugins ]] && command mkdir -p ~/.tmux/plugins
+  [[ ! -e ~/.tmux/plugins ]] && mkdir -p ~/.tmux/plugins
   ln -sf $script_path/bash/inits/tmux/plugins/tpm   ~/.tmux/plugins
   ln -sf $script_path/bash/inits/tmux/tmux-chain.sh ~/.tmux/
   ln -sf $script_path/bash/inits/tmux/tmux.conf     ~/.tmux.conf
@@ -424,10 +452,10 @@ if install 'tmux'; then # {{{
 fi # }}}
 if install 'mc'; then # {{{
   dbg -n "Configuring (mc)... "
-  [[ ! -e ~/.config ]] && command mkdir -p ~/.config
+  [[ ! -e ~/.config ]] && mkdir -p ~/.config
   rm -rf ~/.config/mc
   cp -rf $script_path/bash/inits/mc ~/.config/
-  command mkdir -p ~/.local/share
+  mkdir -p ~/.local/share
   rm -rf ~/.local/share/mc
   ln -sf $script_path/bash/inits/mc/share ~/.local/share/mc
   ln -sf ~/.config/mc.menu ~/.mc.menu
@@ -435,13 +463,13 @@ if install 'mc'; then # {{{
 fi # }}}
 if install 'htop'; then # {{{
   dbg -n "Configuring (htop)... "
-  [[ ! -e ~/.config ]] && command mkdir -p ~/.config
+  [[ ! -e ~/.config ]] && mkdir -p ~/.config
   cp -aR $script_path/bash/inits/htop ~/.config/
   dbg "[DONE]"
 fi # }}}
 if install 'alacritty'; then # {{{
   dbg -n "Configuring (alacritty)... "
-  [[ ! -e ~/.config/alacritty ]] && command mkdir -p ~/.config/alacritty
+  [[ ! -e ~/.config/alacritty ]] && mkdir -p ~/.config/alacritty
   ext="toml"
   src="$script_path/bash/inits/alacritty/alacritty$($IS_MAC && echo "-os" || echo "").$ext"
   ln -sf $src ~/.config/alacritty.$ext
@@ -470,15 +498,6 @@ if install 'grc'; then # {{{
   ln -sf $script_path/bash/inits/grc ~/.grc
   dbg "[DONE]"
 fi # }}}
-if install 'atom'; then # {{{
-  dbg -n "Configuring (atom)... "
-  [[ ! -e ~/.atom ]] && command mkdir -p ~/.atom
-  for i in $(ls $script_path/bash/inits/atom/); do
-    [[ -e ~/.atom/$i ]] && rm -rf ~/.atom/$i
-    ln -sf $script_path/bash/inits/atom/$i ~/.atom/
-  done
-  dbg "[DONE]"
-fi # }}}
 if install 'less-highlight' && $INSTALL_SUDO_ALLOWED; then # {{{
   if which dpkg >/dev/null 2>&1 && ! dpkg -L libsource-highlight-common >/dev/null 2>&1; then
     dbg "Configuring (less-highlight)... "
@@ -503,7 +522,7 @@ if install 'abcde'; then # {{{
 fi # }}}
 if install 'autostart'; then # {{{
   dbg -n "Configuring (autostart)... "
-  [[ ! -e ~/.config/autostart ]] && command mkdir -p ~/.config/autostart
+  [[ ! -e ~/.config/autostart ]] && mkdir -p ~/.config/autostart
   for i in $(ls $script_path/bash/inits/autostart); do
     rm -rf ~/.config/autostart/$i
     ln -sf $script_path/bash/inits/autostart/$i ~/.config/autostart/$i
@@ -528,11 +547,9 @@ if install 'marblemouse' && [[ $AUTO_INSTALL_TOOLS != false ]] && $INSTALL_SUDO_
     while true; do
       dbg
       read -p "Install support for Marble Mouse [y/n] ? " key
-      case $key in
-      y|Y)
-        sudo ln -sf $f /usr/share/X11/xorg.conf.d/
-        ;&
-      n|N) break;;
+      case ${key,,} in
+      y) sudo ln -sf $f /usr/share/X11/xorg.conf.d/; break;;
+      n) break;;
       esac
     done
   fi
@@ -540,13 +557,13 @@ if install 'marblemouse' && [[ $AUTO_INSTALL_TOOLS != false ]] && $INSTALL_SUDO_
 fi # }}}
 if install 'pulse-audio'; then # {{{
   dbg -n "Configuring (pulse-audio)... "
-  command mkdir -p ~/.config/pulse
+  mkdir -p ~/.config/pulse
   ln -sf $script_path/bash/inits/pulse-audio/default.pa ~/.config/pulse/
   dbg "[DONE]"
 fi # }}}
 if install 'x-opengl' && $INSTALL_SUDO_ALLOWED; then # {{{
   dbg -n "Configuring (support for OpenGL in X)... "
-  if ! command grep -q "^export MOZ_USE_OMTC=1" /etc/X11/Xsession.d/90environment; then
+  if ! grep -q "^export MOZ_USE_OMTC=1" /etc/X11/Xsession.d/90environment; then
     sudo bash -c "echo export MOZ_USE_OMTC=1 >> /etc/X11/Xsession.d/90environment"
   fi
   dbg "[DONE]"
@@ -568,7 +585,7 @@ fi # }}}
 if install 'gdb'; then # {{{
   dbg -n "Configuring (gdb)... "
   p="$HOME/.config/gdb"
-  [[ -e $p ]] || command mkdir -p $p
+  [[ -e $p ]] || mkdir -p $p
   rm -rf $HOME/.gdbinit
   ln -sf $script_path/bash/inits/gdb/gdbinit "$HOME/.gdbinit"
   nr=1
@@ -614,9 +631,9 @@ if install 'tmux-tarball'; then # {{{
   v="$(echo "$TO_INSTALL" | sed 's/ tmux-tarball\(:\([^ ]*\)\)\{0,1\} /\2/')"
   if ! type tmux >/dev/null 2>&1 || [[ -z $v || $(tmux -V) != "tmux $v" ]]; then
     dbg -n "  Configuring (tmux-tarball [${v:-Ver not specified}])... "
-    command mkdir -p $HOME/.config
+    mkdir -p $HOME/.config
     cd $HOME/.config
-    [[ -e tmux-local ]] && mv tmux-local $TMP_PATH/tmux-local.$(command date +"$DATE_FMT")
+    [[ -e tmux-local ]] && mv tmux-local $TMP_PATH/tmux-local.$(date +"$DATE_FMT")
     suffix=
     if type apt-get 1>/dev/null 2>&1; then
       suffix='-ubu'
@@ -637,36 +654,6 @@ if install 'tmux-tarball'; then # {{{
     fi
     cd - >/dev/null 2>&1
   fi
-fi # }}}
-if install 'pwndbg'; then # {{{
-  dbg "Configuring [pwndbg]... "
-  [[ ! -e $MY_PROJ_PATH/oth ]] && command mkdir -p $MY_PROJ_PATH/oth
-  pushd $MY_PROJ_PATH/oth >/dev/null 2>&1
-  git clone "https://github.com/pwndbg/pwndbg"
-  cd pwndbg
-  ./setup.sh --update
-  popd >/dev/null 2>&1
-  dbg "[DONE]"
-fi # }}}
-if install 'radare2'; then # {{{
-  dbg "Configuring [radare2]... "
-  ln -sf $script_path/bash/inits/radare2rc $HOME/.radare2rc
-  if ! type radare2 >/dev/null 2>&1; then
-    [[ ! -e $MY_PROJ_PATH/oth ]] && command mkdir -p $MY_PROJ_PATH/oth
-    pushd $MY_PROJ_PATH/oth >/dev/null 2>&1
-    [[ ! -e radare2 ]] && git clone https://github.com/radare/radare2
-    cd radare2
-    if $INSTALL_SUDO_ALLOWED; then
-      sys/install.sh
-    else
-      sys/install.sh --prefix=$HOME/.local
-    fi
-    # if which r2pm >/dev/null 2>&1; then
-    #   r2pm -c -i r2dec r2frida r2ghidra r2pipe r2diaphora # r2ai
-    # fi
-    popd >/dev/null 2>&1
-  fi
-  dbg "[DONE]"
 fi # }}}
 if install 'ack'; then # {{{
   dbg -n "Configuring [ack]... "
@@ -724,8 +711,8 @@ if install 'user-groups' && $INSTALL_SUDO_ALLOWED; then # {{{
   groupSystem="$(cat /etc/group | cut -d: -f1)"
   list=
   for i in $groupList; do
-    echo "$groupSystem" | command grep -q "^$i$" || sudo groupadd $i
-    echo "$groupUser"   | command grep -q "^$i$" || list+="$i,"
+    echo "$groupSystem" | grep -q "^$i$" || sudo groupadd $i
+    echo "$groupUser"   | grep -q "^$i$" || list+="$i,"
   done
   sudo groupadd -g 1000 gr1k && list+="gr1k,"
   [[ ! -z $list ]] && sudo usermod -aG "${list%,}" $USER
@@ -741,23 +728,24 @@ if install 'root' && $INSTALL_SUDO_ALLOWED; then # {{{
   sudo chmod 755 /root/bin/utils.sh
 fi # }}}
 if install 'sudo-permissions' && $INSTALL_SUDO_ALLOWED; then # {{{
-  prgList="ip mount nice renice dbus-monitor suspend.wrap tcpdump"
+  prgList="ip mount nice renice dbus-monitor suspend.wrap tcpdump service ufw"
   (
     echo "# vim: ft=sudoers"
     echo
     echo "$USER ALL=(ALL:ALL) ALL"
     echo "$USER ALL=(ALL) NOPASSWD: \\"
     for i in $prgList; do
-      prg=$(which $i 2>/dev/null || true)
-      [[ ! -z $prg ]] && echo "        $prg, \\"
+      i=$(which $i 2>/dev/null || true)
+      [[ ! -z $i ]] && echo "        $i, \\"
     done
     echo "        /root/bin/utils.sh"
     echo
   ) | sudo tee /etc/sudoers.d/user-${USER,,} >/dev/null
   sudo chmod 440 /etc/sudoers.d/user-${USER,,}
+  sudo sed -i '/^'"$USER"'/s/^/# /' /etc/sudoers
 fi # }}}
 # }}}
-# Install tools # {{{
+# Install tools: apt/brew # {{{
 if install 'install-tools'; then
   tools="$TO_INSTALL_TOOLS"
   to_remove=
@@ -779,7 +767,7 @@ if install 'install-tools'; then
   dbg "Tools: To install: [$tools]"
   for i in $tools; do
     [[ $i == -* ]] && continue
-    echo " $to_remove " | command grep -q " -${i} " && continue
+    echo " $to_remove " | grep -q " -${i} " && continue
     prg= inst= ppa=
     get_app_name $i
     dbg -n "Checking [$prg:$inst$([[ ! -z $ppa ]] && echo " from $ppa")]... "
@@ -795,7 +783,7 @@ if install 'install-tools'; then
     for i in $tools; do
       get_app_name $i
       dbg -n "Checking [$prg]... "
-      if ! ls /etc/init.d | command grep $prg 1>/dev/null; then
+      if ! ls /etc/init.d | grep $prg 1>/dev/null; then
         do_install
       else
         dbg "[DONE]"
@@ -817,7 +805,7 @@ if install 'dconf-*' && ! $IS_DOCKER; then
       gsettings set org.gnome.mutter overlay-key ''
       gsettings set org.gnome.shell.keybindings toggle-overview "['<Super>s', '<Super>Space']"
       f=$SCRIPT_PATH/bash/inits/dconf.keys
-      for i in $(command grep "^\[.*\]$" $f); do
+      for i in $(grep "^\[.*\]$" $f); do
         i="${i//[\[\]]}"
         range="[/]\n$(sed -n '/^\['"${i//\//\\\/}"'\]/,/^$/p' $f | tail -n+2)"
         range="${range//@HOME/$HOME}"
@@ -845,7 +833,7 @@ if install 'dconf-*' && ! $IS_DOCKER; then
       dbg "  -- From: https://github.com/morhetz/gruvbox"
       if ! ${IS_MAC:-false}; then
         if [[ -z $TERMINAL_PROFILE ]]; then
-          TERMINAL_PROFILE="$(dconf list "/org/gnome/terminal/legacy/profiles:/" | command grep "^:" |  head -n1)"
+          TERMINAL_PROFILE="$(dconf list "/org/gnome/terminal/legacy/profiles:/" | grep "^:" |  head -n1)"
           TERMINAL_PROFILE="${TERMINAL_PROFILE#:}"
           TERMINAL_PROFILE="${TERMINAL_PROFILE%/}"
         fi
@@ -890,9 +878,128 @@ if install 'tcpdump-permissions' && $INSTALL_SUDO_ALLOWED; then # {{{
   fi
 fi # }}}
 # }}}
+# Tools: external # {{{
+if install 'tools-cargo'; then # {{{
+  dbg "Installing-tools: cargo"
+  curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path
+  export PATH=$HOME/.cargo/bin:$PATH
+  which cargo 1>/dev/null 2>&1
+  touch $TOOLS_PATH/.stat/cargo
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-fzf'; then # {{{
+  dbg "Installing-tools: fzf"
+  pushd $TOOLS_PATH
+  if tools-clone "https://github.com/junegunn/fzf.git"; then
+    pushd fzf
+    git checkout ${MK_INSTALL_TOOLS_FZF_VER:-v0.55.0}
+    ( export PATH="/usr/local/bin:/usr/bin:/bin"
+      ./install --bin
+    )
+    popd
+    touch $TOOLS_PATH/.stat/fzf
+  fi
+  popd
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-pwntools'; then # {{{
+  dbg "Installing-tools: pwntools"
+  python3 -m pip install --break-system-packages pwntools
+  touch $TOOLS_PATH/.stat/pwntools
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-nodejs' && ! which npm >/dev/null 2>&1 && $INSTALL_SUDO_ALLOWED; then # {{{
+  dbg "Installing-tools: nodejs"
+  curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt install -y nodejs
+  touch $TOOLS_PATH/nodejs
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-frida'; then # {{{
+  dbg "Installing-tools: frida"
+  python3 -m pip install --break-system-packages frida-tools
+  python3 -m pip install --break-system-packages frida
+  if which npm >/dev/null 2>&1; then
+    sudo npm install --global frida
+  else
+    dbg "[ERR] No npm on system"
+  fi
+  touch $TOOLS_PATH/.stat/frida
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-pwndbg'; then # {{{
+  dbg "Installing-tools: pwndbg"
+  mv $HOME/.gitconfig $HOME/.gitconfig_
+  git config --global http.version HTTP/1.1
+  pushd $TOOLS_PATH
+  if tools-clone "https://github.com/pwndbg/pwndbg"; then
+    pushd pwndbg
+    ./setup.sh --update
+    sed -i -e 's/gdb.execute(f"set prompt {prompt}")/# \0/' pwndbg/gdblib/prompt.py
+    popd
+    touch $TOOLS_PATH/.stat/pwndbg
+  fi
+  popd
+  mv $HOME/.gitconfig_ $HOME/.gitconfig
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-radare2'; then # {{{
+  dbg "Installing-tools: radare2"
+  mv $HOME/.gitconfig $HOME/.gitconfig_
+  git config --global http.version HTTP/1.1
+  pushd $TOOLS_PATH
+  if tools-clone "https://github.com/radareorg/radare2.git"; then
+    installed=false
+    pushd radare2
+    tag=$(git tag | grep -E "^[0-9]+\.[0-9]+\.[0-9]+$" | tail -n1)
+    dbg "Installing-tools: radare2: building on tag: $tag"
+    git checkout $tag
+    sed -i 's/shell $(LIBR)/shell $(LTOP)/g' global.mk
+    retry 10 "./sys/install.sh" "radare2: build failed, press a key to retry or Q > " && installed=true
+    if $installed && which r2pm >/dev/null 2>&1; then
+      lvl=${MK_INSTALL_TOOLS_RADARE2_PM_LVL:-1}
+      echo "Installing: tools: r2-plugins: l$lvl" >/dev/stderr
+      python3 -m pip install --break-system-packages meson
+      r2pm -U
+      if [[ $lvl -ge 1 ]]; then r2pm -c -i r2dec || true; fi
+      if [[ $lvl -ge 2 ]]; then r2pm -c -i r2pipe r2frida r2ghidra r2diaphora || true; fi
+      if [[ $lvl -ge 3 ]]; then r2pm -c -i r2ai; fi
+    fi
+    popd
+    if $installed && [[ " $MK_INSTALL_TOOLS " = *" -radare2-clean-after "* ]]; then
+      rm -rf radare2
+    fi
+    touch $TOOLS_PATH/.stat/radare2
+  fi
+  popd
+  mv $HOME/.gitconfig_ $HOME/.gitconfig
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-dedoc'; then # {{{
+  dbg "Installing-tools: dedoc"
+  cargo install dedoc
+  mkdir -p $HOME/.dedoc >/dev/null
+  if dedoc fetch; then
+    dedoc download c cpp cmake bash python~3.13
+  else
+    cd $HOME/.dedoc
+    rm -rf *
+    tar xzf $SCRIPT_PATH/bash/inits/dedoc.tgz
+  fi
+  touch $TOOLS_PATH/.stat/dedoc
+  dbg "[DONE]"
+fi # }}}
+# }}}
 # }}}
 # Finish # {{{
-[[ ! -z $INSTALL_FAILED ]] && echo -en "Some of installations have failed: [$INSTALL_FAILED]\nPress any key to proceed..." >/dev/stderr && read
+if $INSTALL_SUDO_ALLOWED && ! $IS_MAC; then # {{{
+  sudo apt-get autoremove -y
+  sudo apt-get clean -y
+  sudo rm -rf /var/lib/apt/lists/*
+fi # }}}
+if [[ ! -z $INSTALL_FAILED ]]; then
+  echo "Some of installations have failed: [$INSTALL_FAILED]" >/dev/stderr
+  ! $AUTO_INSTALL_TOOLS && echo "Press any key to proceed..." >/dev/stderr && read
+fi
 $DO_EXEC && exec bash || true
 # }}}
 

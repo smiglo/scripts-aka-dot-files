@@ -286,7 +286,7 @@ style = "Regular"
 
 [window]
 dynamic_padding = true
-dynamic_title = false
+dynamic_title = true
 
 [window.padding]
 x = 0

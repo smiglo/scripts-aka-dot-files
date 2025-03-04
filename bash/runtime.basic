@@ -6,6 +6,8 @@ export TMP_PATH=$HOME/.tmp
 export TMP_MEM_PATH=$TMP_PATH/.mem
 [[ -h $TMP_MEM_PATH && ! -e $TMP_MEM_PATH ]] && rm $TMP_MEM_PATH
 [[ ! -e $TMP_MEM_PATH ]] && command mkdir -p $TMP_MEM_PATH
+export MEM_KEEP=$TMP_MEM_PATH/keep
+[[ ! -e $MEM_KEEP ]] && command mkdir -p $MEM_KEEP
 export RUNTIME_PATH=$HOME/.runtime
 export APPS_CFG_PATH=$RUNTIME_PATH/apps
 [[ -e $APPS_CFG_PATH ]] || mkdir -p $APPS_CFG_PATH
@@ -15,30 +17,34 @@ export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 export BIN_PATH="${BIN_PATH:-$HOME/.bin}"
 export BASH_PATH="${BASH_PATH:-$BIN_PATH/bash}"
 export PROFILES_PATH="$BASH_PATH/profiles"
-export MY_PROJ_PATH=$HOME/projects/my
-[[ ! -e $MY_PROJ_PATH ]] && export MY_PROJ_PATH=$HOME/projects
-if [[ -z $IS_DOCKER ]]; then
+export ALIASES="$BASH_PATH/aliases"
+if [[ -z $MY_PROJ_PATH ]]; then
+  export MY_PROJ_PATH=$HOME/projects/my
+  [[ ! -e $MY_PROJ_PATH/scripts ]] && MY_PROJ_PATH=$HOME/projects
+  if [[ ! -e $MY_PROJ_PATH/script ]]; then
+    MY_PROJ_PATH="$(readlink -f $HOME/.bashrc)"
+    MY_PROJ_PATH=${MY_PROJ_PATH%%/scripts/*}
+  fi
+fi
+if [[ -z $IS_MAC ]]; then # {{{
+  export IS_MAC=false
+  [[ $(uname) == 'Darwin' ]] && IS_MAC=true
+fi # }}}
+if [[ -z $IS_DOCKER ]]; then # {{{
   export IS_DOCKER=false
-  [[ -e /.dockerenv ]] && IS_DOCKER=true
-fi
-if $IS_DOCKER; then
-  export DOCKER_HOST="/host"
-fi
-# }}}
+  [[ -e /.dockerenv ]] && IS_DOCKER=true && export DOCKER_HOST="/host"
+fi # }}}
+export IS_VSCODE=false
+[[ $TERM_PROGRAM == "vscode" ]] && export IS_VSCODE=true
+if $IS_VSCODE ]]; then
+  [[ -e $APPS_CFG_PATH/vscode ]] || mkdir -p $APPS_CFG_PATH/vscode
+fi # }}}
 # Clear appended variables, init env # {{{
 export ALIASES_MAP=
 export BASH_EXTRA_FEATURES=
 export BASH_UPDATE_REPOS=
 export BASH_UPDATE_TIME=
 export BASH_ALIASES_DUMMY="compl-add"
-export BASHRC_EXPORTS_TO_IGNORE=
-export BASHRC_EXPORTS_TO_IGNORE+=" Exit PS1_adjustPath PS1_colorFormat PS1_covertMode PS1_getColor PS1_setter aawk ack_ag_wrapper \
-  bash-on-list bash_phistory brun clf clr colorCacheDump colorCacheInit colorList cpp dum extract f for_do gdbenv goto_vi_command \
-  grep_wrapper hist kb-open kdiff3 last_grep lc logout mg open phist printColors printColorsFull ps1_fix ps1_toggle randomTextDrawer \
-  rem repo-browse rm-b rmfTrash runx set-utils show_notifications simple_http smart_alias source-basic src sshh sshh-add status-wait-for \
-  sudo vimf vimg vims weather wifi-tool www xaa zipf \
-  install installExtensions"
-export BASHRC_EXPORTS_TO_WRAP=
 export COMPLETION_GENERIC_UTILS=
 export COMPLETION_GENERIC_FUNCTIONS=
 export COLUMNS=$COLUMNS
@@ -50,19 +56,16 @@ export CLANG_PARAMS_COMMON="-g -O0"
 export CLANG_PARAMS_W="-Wall -Wno-disabled-macro-expansion -Wno-writable-strings"
 export CLANG_PARAMS="-std=c99"
 export CLANGPP_PARAMS="-std=c++11"
-export CLIP_FILE="$TMP_MEM_PATH/clip.txt"
-$IS_DOCKER && CLIP_FILE="${CLIP_FILE/$HOME/$DOCKER_HOST}"
+export CLIP_FILE="$MEM_KEEP/clip"
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
-export GIT_REPOS=
 export GREP_EXCLUDES=
 export HISTIGNORE=
 export HISTIGNORE+=":reset:clear:exit"
 export HISTIGNORE+=":keep-pass.sh:./keep-pass.sh"
 export HISTIGNORE+=":vim-enc.sh"
 export HISTIGNORE+=":reboot:shutdown"
-export HISTIGNORE+=":type"
 export HISTIGNORE_WILD_WHITELIST=
 export HISTIGNORE_WILD_WHITELIST+=" echo"
 export HL_DEFAULTS=
@@ -85,6 +88,7 @@ export PHISTORY_IGNORED_COMMANDS+=":echo:printf:echor:echorc:echorv:echorm"
 export PHISTORY_IGNORED_COMMANDS+=":cl:clf:printfc:echoc"
 export PHISTORY_IGNORED_COMMANDS+=":dbg:dbgF:FAT:ERR:WRN:INF:DBG:TRC"
 export PHISTORY_IGNORED_COMMANDS+=":time-measure"
+export PHISTORY_IGNORED_COMMANDS+=":type"
 export PS1_ENV_PWD=
 export ROWS=$ROWS
 export SCRIPT_PATH=
@@ -110,6 +114,7 @@ export TMUX_STATUS_LEFT_EXTRA_MAP=
 export TMUX_STATUS_RIGHT_EXTRA=
 export TMUX_SWITCH_CLIENT_MAP=
 [[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
+export TOOLS_PATH="$HOME/tools"
 export TO_INSTALL_BIN_MISC='BASIC'
 export TO_INSTALL_TOOLS=
 export TO_INSTALL_TOOLS_EXTRA=
@@ -118,40 +123,37 @@ export VIM_PRJ_EXCLUDE=
 export VIM_PRJ_PARAMS=
 # }}}
 # MY_PROJ_PATH setup # {{{
-if [[ -e $MY_PROJ_PATH ]]; then
-  export SCRIPT_PATH=$MY_PROJ_PATH/scripts
-  export BASH_UPDATE_REPOS="$MY_PROJ_PATH/scripts $MY_PROJ_PATH/vim"
-  export BASH_UPDATE_TIME="$((1*18*60*60))"
-  export GIT_REPOS+=" $MY_PROJ_PATH/scripts $MY_PROJ_PATH/info $MY_PROJ_PATH/vim"
-  export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
-  [[ -e $MY_PROJ_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$MY_PROJ_PATH/vim"
-  [[ -e $MY_PROJ_PATH/info ]] && export CD_LAST_DIRS_STORED+=":info@$MY_PROJ_PATH/info"
-  [[ -e $MY_PROJ_PATH/.ticket-data.sh ]] && KB_PATHS+=" env:$MY_PROJ_PATH"
-  [[ -e $MY_PROJ_PATH/sp/.ticket-data.sh ]] && KB_PATHS+=" sp:$MY_PROJ_PATH/sp"
-  if [[ -e $MY_PROJ_PATH/oth/.ticket-data.sh ]]; then # {{{
-    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/oth" ]]; then
-      KB_PATHS+=" oth-my:$MY_PROJ_PATH/oth"
-      KB_PATHS+=" oth:$HOME/projects/oth"
-    else
-      KB_PATHS+=" oth:$MY_PROJ_PATH/oth"
-    fi
-  elif [[ -e "$HOME/projects/oth" ]]; then
+export SCRIPT_PATH=$MY_PROJ_PATH/scripts
+export ALIASES_SCRIPTS="$SCRIPT_PATH/bin/from-aliases"
+export BASH_UPDATE_REPOS="$MY_PROJ_PATH/scripts $MY_PROJ_PATH/vim"
+export BASH_UPDATE_TIME="$((1*18*60*60))"
+export GIT_REPOS="$BASH_UPDATE_REPOS $MY_PROJ_PATH/info"
+[[ -e $RUNTIME_PATH/.git ]] && GIT_REPOS+=" $RUNTIME_PATH"
+export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
+[[ -e $MY_PROJ_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$MY_PROJ_PATH/vim"
+[[ -e $MY_PROJ_PATH/info ]] && export CD_LAST_DIRS_STORED+=":info@$MY_PROJ_PATH/info"
+[[ -e $MY_PROJ_PATH/.ticket-data.sh ]] && KB_PATHS+=" env:$MY_PROJ_PATH"
+[[ -e $MY_PROJ_PATH/sp/.ticket-data.sh ]] && KB_PATHS+=" sp:$MY_PROJ_PATH/sp"
+if [[ -e $MY_PROJ_PATH/oth/.ticket-data.sh ]]; then # {{{
+  if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/oth" ]]; then
+    KB_PATHS+=" oth-my:$MY_PROJ_PATH/oth"
     KB_PATHS+=" oth:$HOME/projects/oth"
-  fi # }}}
-  if [[ -e $MY_PROJ_PATH/tmp/.ticket-data.sh ]]; then # {{{
-    if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/tmp" ]]; then
-      KB_PATHS+=" tmp-my:$MY_PROJ_PATH/tmp"
-      KB_PATHS+=" tmp:$HOME/projects/tmp"
-    else
-      KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
-    fi
-  elif [[ -e "$HOME/projects/tmp" ]]; then
+  else
+    KB_PATHS+=" oth:$MY_PROJ_PATH/oth"
+  fi
+elif [[ -e "$HOME/projects/oth" ]]; then
+  KB_PATHS+=" oth:$HOME/projects/oth"
+fi # }}}
+if [[ -e $MY_PROJ_PATH/tmp/.ticket-data.sh ]]; then # {{{
+  if [[ $MY_PROJ_PATH == */my && -e "$HOME/projects/tmp" ]]; then
+    KB_PATHS+=" tmp-my:$MY_PROJ_PATH/tmp"
+    KB_PATHS+=" tmp:$HOME/projects/tmp"
+  else
     KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
-  fi # }}}
-else
-  echo "Cannot find script path!" >/dev/stderr
-  export MY_PROJ_PATH=
-fi
+  fi
+elif [[ -e "$HOME/projects/tmp" ]]; then
+  KB_PATHS+=" tmp:$MY_PROJ_PATH/tmp"
+fi # }}}
 # }}}
 # Profiles # {{{
 export BASH_PROFILES="$(command cd $PROFILES_PATH 2>/dev/null; echo *)"
@@ -170,9 +172,16 @@ export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
 [[ -e $APPS_CFG_PATH ]] || command mkdir $APPS_CFG_PATH
 # }}}
 # TMP Paths # {{{
-export TM=$TMP_MEM_PATH
 export TMPDIR=$TMP_PATH/.tmp-dir
 [[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
 chmod 700 $TMPDIR $TMP_MEM_PATH
+# }}}
+# shortcuts to env # {{{
+export RT=$RUNTIME_PATH
+export TP=$TMP_PATH
+export TM=$TMP_MEM_PATH
+export MK=$MEM_KEEP
+export AP=$APPS_CFG_PATH
+export BA=$BASHRC_RUNTIME_PATH
 # }}}
 

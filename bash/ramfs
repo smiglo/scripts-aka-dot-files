@@ -6,10 +6,10 @@ mount_point=${TMP_MEM_PATH:-$HOME/.tmp/.mem}
 ramfs_size_sectors=$(($ramfs_size_mb*1024*1024/512))
 ramdisk_dev=$(hdid -nomount ram://$ramfs_size_sectors)
 newfs_hfs -v 'memfs' $ramdisk_dev
-command mkdir -p $mount_point
+mkdir -p $mount_point
 mount -o noatime,nobrowse -t hfs $ramdisk_dev $mount_point
 touch $mount_point/mounted.txt
-command mkdir -p $mount_point/.desktop
+mkdir -p $mount_point/.desktop
 ln -sf $mount_point/.desktop $HOME/Desktop/tmp/mem
 
 # echo "remove with:"

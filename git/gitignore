@@ -30,6 +30,11 @@ tmp-tb
 cscope.*
 tags
 
+core
+core.*
+core-*
+*.core
+
 .gitbranches
 
 .env

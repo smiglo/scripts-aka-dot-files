@@ -3,7 +3,7 @@
 
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
-  -f | --dump-rev) getFileList 'manifest*.xml';;
+  -f | --dump-rev) get-file-list 'manifest*.xml';;
   --tag) echo "tmp/b- -";;
   *) echo -f -v --verify --diff --checkout{,+} --dump --tag --dump-rev;;
   esac
@@ -56,7 +56,7 @@ while [[ ! -z $1 ]]; do # {{{
         pushd $d >&/dev/null
         rHead="$(git rev-parse $head)"
         popd >&/dev/null
-        if [[ -z $listRev ]] || echo "$listRev" | command grep -q "$d"; then
+        if [[ -z $listRev ]] || echo "$listRev" | grep -q "$d"; then
           echo "<project path=\"$d\" revision=\"$rHead\"\\>"
         fi
       done | sort
@@ -80,10 +80,10 @@ done # }}}
 ! $wtdSet && exit 1
 
 if $tag && [[ -z $tagName || $tagName == '-' ]]; then
-  if echo "$fManifest" | command grep -q "\-[0-9]\{14\}"; then
-    tagName="tmp/b$(command grep "\-[0-9]\{8\}")"
+  if echo "$fManifest" | grep -q "\-[0-9]\{14\}"; then
+    tagName="tmp/b$(grep "\-[0-9]\{8\}")"
   else
-    tagName="tmp/ts-$(command date +"$DATE_FMT")"
+    tagName="tmp/ts-$(date +"$DATE_FMT")"
   fi
 fi
 $dump && rm -f manifest-{new,dump}.xml
@@ -124,15 +124,6 @@ while read l; do
       rHead="$(git rev-parse HEAD)"
     fi
   fi # }}}
-  if $tag; then # {{{
-    if git tag | command grep -q "^$tagName$"; then
-      $verbose && echo "$d: Cannot tag: tag already exists"
-    elif git cat-file -e $r >/dev/null; then
-      git tag $tagName $r
-    else
-      echo "$d: Revision not present"
-    fi
-  fi # }}}
   if $verify; then # {{{
     if [[ $r != $rHead ]]; then
       echo "$d: Log: ${r:0:7}..${rHead:0:7} ($head)"
@@ -152,7 +143,7 @@ while read l; do
   fi # }}}
   rm -f manifest-orig.xml
   popd >&/dev/null
-  ts="$(command date +$DATE_FMT)"
+  ts="$(date +$DATE_FMT)"
   $dump \
     && echo "<project path=\"$d\" revision=\"$rHead\"\\>" >>manifest-$ts-prev.xml \
     && echo "<project path=\"$d\" revision=\"$r\"\\>" >>manifest-$ts-new.xml

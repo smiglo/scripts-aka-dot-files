@@ -168,12 +168,12 @@ for repo in $repos; do # {{{
   echorm "$repo"
   case $whatToDo in
   find-commit) # {{{
-    if git log $($findCommitAllBranches && echo '--all') --format='%s' | command grep -q "$findCommitRegEx"; then
+    if git log $($findCommitAllBranches && echo '--all') --format='%s' | grep -q "$findCommitRegEx"; then
       if ! $findCommitDo; then # {{{
         if ! $list; then
           echo "$repo:"
-          for sha in $(git log $($findCommitAllBranches && echo '--all') --pretty=short2 | command grep "$findCommitRegEx" | awk '{print $1}'); do
-            git log --color -1 --pretty=date-first --date=local $sha | command grep --color=yes "$findCommitRegEx"
+          for sha in $(git log $($findCommitAllBranches && echo '--all') --pretty=short2 | grep "$findCommitRegEx" | awk '{print $1}'); do
+            git log --color -1 --pretty=date-first --date=local $sha | grep --color=yes "$findCommitRegEx"
             if $findCommitAllBranches; then
               echo "On branches:"
               git branch -r --contains $sha | sed 's/^/  /'
@@ -184,8 +184,8 @@ for repo in $repos; do # {{{
           echo "$repo"
         fi # }}}
       else # {{{
-        sha=$(git log --pretty=short2 | command grep "$findCommitRegEx" | head -n1 | awk '{print $1}')
-        git log --color $($findCommitAllBranches && echo '--all') --date=local | command grep --color=yes "$findCommitRegEx"
+        sha=$(git log --pretty=short2 | grep "$findCommitRegEx" | head -n1 | awk '{print $1}')
+        git log --color $($findCommitAllBranches && echo '--all') --date=local | grep --color=yes "$findCommitRegEx"
         eval $wtd
         err=$?
       fi # }}}
@@ -251,9 +251,9 @@ for repo in $repos; do # {{{
           fi
           i=
           branchesMaster="m/master master"
-          branchesMasterOth=$({ git br; git tag; } | sed 's/^[ *]*//' | command grep "^b/master/" | sort -r | head -n5)
-          branchesSprint=$(git br -a | sed 's|^ *remotes/||' | command grep "sprint_[0-9]\{2,4\}$" | sort -t '_' -k2,2rn | head -n10)
-          tags=$(git tag | command grep "tmp/b-*")
+          branchesMasterOth=$({ git br; git tag; } | sed 's/^[ *]*//' | grep "^b/master/" | sort -r | head -n5)
+          branchesSprint=$(git br -a | sed 's|^ *remotes/||' | grep "sprint_[0-9]\{2,4\}$" | sort -t '_' -k2,2rn | head -n10)
+          tags=$(git tag | grep "tmp/b-*")
           for ii in $branchesMaster $branchesMasterOth $branchesSprint $tags; do
             ! git merge-base --is-ancestor $ii $br 2>/dev/null && continue
             if [[ -z $i ]] || git merge-base --is-ancestor $i $ii 2>/dev/null; then

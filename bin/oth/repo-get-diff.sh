@@ -34,9 +34,9 @@ while [[ ! -z $1 ]]; do # {{{
   -p)      add_patch=true;;
   -a)      all_changes=true;;
   --new-list) # {{{
-    [[ -e $list_out ]] && cp $list_out $list_out.$(command date +"$DATE_FMT") && rm -f $list_out;; # }}}
+    [[ -e $list_out ]] && cp $list_out $list_out.$(date +"$DATE_FMT") && rm -f $list_out;; # }}}
   --all-repos) # {{{
-    [[ -e $list_out ]] && cp $list_out $list_out.$(command date +"$DATE_FMT") && rm -f $list_out
+    [[ -e $list_out ]] && cp $list_out $list_out.$(date +"$DATE_FMT") && rm -f $list_out
     repos=
     list=$(find . -type d -path '*/build-*' -prune -o -name .git -exec dirname {} \;)
     for i in $list; do
@@ -58,7 +58,7 @@ echo
 for j in $repos; do
   dName=$(find . -maxdepth 6 -path '*/build-*' -prune -o -path '*/'$j'/.git' -print)
   [[ -z $dName ]] && echo "Err: $j" && continue
-  command pushd $dName &>/dev/null
+  pushd $dName &>/dev/null
   if $use_list; then # {{{
     list=$(sed -n '/^r: '$j'/,/^r:/p' $list_out | awk '/^c:/ {print $2}')
   else
@@ -101,7 +101,7 @@ for j in $repos; do
   else
     $stdout && echo "Checking $j: Empty" && echo
   fi
-  command popd &>/dev/null
+  popd &>/dev/null
 done \
   | sed 's/^\s*$//' \
   | cat -

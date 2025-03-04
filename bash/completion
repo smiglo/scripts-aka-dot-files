@@ -42,23 +42,23 @@ compl-short() { # {{{
   echorv -M 1 tool
   local list="$(
     for i in $($tool @@ -- | tr ' ' '\n'); do
-      [[ $i == --?* ]] || { echorm 3 "skip:[$i]"; continue; }
+      [[ $i == --?* ]] || { echorm -m compl-short 3 "skip:[$i]"; continue; }
       echo "$(echo "$i" | sed -n 's/-\+\([a-z]\)[^-]*/\1/gp') $i"
     done | sort)"
   $addShorts && list="$(echo -e "$list\n$($tool @@ --shorts)")"
-  echorm 2 "list-pre:[$(echo "$list" | tr '\n' ':')]"
+  echormf 2 "list-pre:[$(echo "$list" | tr '\n' ':')]"
   local sLast= s= f= toRemove= remove=false i=
   while read s f; do # {{{
     remove=false
-    [[ $s == $sLast ]] && remove=true && echorm 3 "checking $s [$f]: the same [= $sLast]"
-    [[ ${#s} -lt $len && $s =~ ^[a-z] ]] && remove=true && echorm 3 "checking $s [$f]: too short [< $len]"
-    $remove && toRemove+="\|^$s " || echorm 3 "checking $s [$f]: ok"
+    [[ $s == $sLast ]] && remove=true && echormf 3 "checking $s [$f]: the same [= $sLast]"
+    [[ ${#s} -lt $len && $s =~ ^[a-z] ]] && remove=true && echormf 3 "checking $s [$f]: too short [< $len]"
+    $remove && toRemove+="\|^$s " || echormf 3 "checking $s [$f]: ok"
     sLast=$s
   done < <(echo "$list") # }}}
   toRemove="${toRemove#\\|}"
-  echorv -M 2 toRemove
-  [[ -z $toRemove ]] || list="$(echo "$list" | grep -v "$toRemove")"
-  echorm 1 "list-post:[$(echo "$list" | tr '\n' ':'))]"
+  echormf -f? && echorv -M 2 toRemove
+  [[ -z $toRemove ]] || list="$(echo "$list" | command grep -v "$toRemove")"
+  echormf 1 "list-post:[$(echo "$list" | tr '\n' ':'))]"
   while read s f; do
     s=${s#!}
     case $wtd in
@@ -93,6 +93,7 @@ compl-help() { # {{{
   if [[ $1 == @@ ]]; then # {{{
     echo "$EXPORTED_FUNCTIONS"
     echo "-s --short -l --long @@-f @@-d"
+    declare -Fx | cut -d' ' -f3 | command grep -v "^_"
     return 0
   fi # }}}
   local cmd= short=false
@@ -104,27 +105,32 @@ compl-help() { # {{{
     esac; shift
   done # }}}
   if [[ -z $cmd && ! -t 0 ]]; then
-    cmd="$(cat -)"
+    cmd="$(<-)"
   elif [[ -e "$cmd" ]]; then
-    cmd="$(cat "$cmd")"
+    cmd="$(<"$cmd")"
   elif ! declare -F "$cmd" >/dev/null 2>&1; then
     cmd="$(which "$cmd")"
-    cmd="$(cat "$cmd")"
+    cmd="$(<"$cmd")"
   else
     cmd="$(type "$cmd")"
+    if [[ $cmd =~ (\$ALIASES_SCRIPTS/[^ ]*) ]]; then
+      local f=${BASH_REMATCH[1]}
+      f="$(eval echo "$f")"
+      cmd="$(<$f)"
+    fi
   fi
   local indent="$(echo "$cmd" | command grep '^ *while \[\[ ! -z $1 \]\]; do' | head -n1 | command grep -o "^ *")"
-  local parser="$(echo "$cmd" | sed -n '/'"^$indent"'while/,/'"^$indent"'done/p' | cat -n)"
-  local caseS="$(echo "$parser" | cat | awk '/case/ {print $1}' | head -n1)"
+  local parser="$(echo "$cmd" | sed -n '/'"^$indent"'while/,/'"^$indent"'done/p' | command cat -n)"
+  local caseS="$(echo "$parser" | command cat | awk '/case/ {print $1}' | head -n1)"
   local caseE="$(echo "$parser" | tac | awk '/esac/ {print $1}' | head -n1)"
   caseS=$((caseS+1)) caseE=$((caseE-1))
   parser="$(echo "$parser" | sed -n "$caseS,$caseE p" | cut -c9-)"
   indent="$(echo "$parser" | head -n1 | command grep -o "^ *")"
   parser="$(echo "$parser" | sed 's/^'"$indent"'//')"
   if $short; then
-    echo "$parser" | command grep "^[^ ][^)]*)" | sed 's/).*//' | { if [[ -t 1 ]] && isInstalled column; then column -t; else cat -; fi; }
+    echo "$parser" | command grep "^[^ ][^)]*)" | sed 's/).*//' | { if [[ -t 1 ]] && is-installed column; then column -t; else command cat -; fi; }
   else
-    echo "$parser" | sed -e '/^;;/d' -e 's/;$//' | hl +c=Search "^[^ ][^)]*)"
+    echo "$parser" | sed -e '/^;;/d' -e 's/;$//' | hl-bash +c=Search "^[^ ][^)]*)"
   fi
 }
 alias ch='compl-help'
@@ -188,39 +194,37 @@ if $IS_MAC; then
   fi
 fi # }}}
 # Completion for git aliases defined in git-cmds.sh # {{{
-for i in $($SCRIPT_PATH/git/git-cmds.sh --comply); do
-  eval "_git_${i}() { _completion_generic; }"
+for ii in $($SCRIPT_PATH/git/git-cmds.sh --comply); do
+  eval "_git_${ii}() { _completion_generic; }"
 done
 # }}}
 # Set generic completion # {{{
 COMPLETION_GENERIC_UTILS+=" fix_ssh_agent.sh mk_tar.sh asciidoc2html.sh gitst do_sync.sh tmux-startup.sh vim-enc.sh"
 COMPLETION_GENERIC_UTILS+=" repo.sh repo-get-diff.sh repo-update.sh"
-for i in $COMPLETION_GENERIC_UTILS $TO_INSTALL_BIN_MISC; do
-  type $i >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i # || echo "Util [$i] not found" >/dev/stderr
+for ii in $COMPLETION_GENERIC_UTILS $TO_INSTALL_BIN_MISC; do
+  type $ii >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $ii # || echo "Util [$ii] not found" >/dev/stderr
 done
-unset COMPLETION_GENERIC_UTILS
-for i in $(echo "$COMPLETION_GENERIC_FUNCTIONS" | tr ' ' '\n' | sort -u | tr '\n' ' '); do
-  if type $i >/dev/null 2>&1; then
-    complete -r $i >/dev/null 2>&1
-    complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i
+for ii in $(echo "$COMPLETION_GENERIC_FUNCTIONS" | tr ' ' '\n' | sort -u | tr '\n' ' '); do
+  if type $ii >/dev/null 2>&1; then
+    complete -r $ii >/dev/null 2>&1
+    complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $ii
   else
-    echo "Function [$i] not found" >/dev/stderr
+    echo "Function [$ii] not found" >/dev/stderr
   fi
 done
-list="$(complete)"
+unset COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS
 set +f
-for i in $HOME/.bin/*.sh; do
-  i="${i##*/}"
-  compl-add "$i"
+for ii in $HOME/.bin/*.sh; do
+  ii="${ii##*/}"
+  compl-add "$ii"
 done
-unset COMPLETION_GENERIC_FUNCTIONS
 # }}}
 # Git-cmds # {{{
 complete $COMPLETE_DEFAULT_PARAMS -F _completion_git_cmds git_cmds.sh
 # }}}
 # Hosts # {{{
 if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command grep -vq "^|1|"; then
-  complete -W "$( echo `cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
+  complete -W "$( echo `command cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
 fi # }}}
 # Vim # {{{
 _do_vim_completion
@@ -228,6 +232,7 @@ unset _do_vim_completion
 # }}}
 # Oth # {{{
 complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
+declare -F _filedir >/dev/null && eval "$(type -a _filedir | tail -n +2 | sed 's/compopt -o filenames 2>/compopt -o filenames -o noquote 2>/')"
 # }}}
 # tldr # {{{
 if [[ -e $HOME/.local/share/tldr ]]; then
@@ -235,16 +240,17 @@ if [[ -e $HOME/.local/share/tldr ]]; then
 fi # }}}
 # Source additional completions # {{{
 if [[ -e $BASH_PATH/completion.d ]]; then
-  for i in $(ls $BASH_PATH/completion.d); do
-    [[ -f $BASH_PATH/completion.d/$i ]] && source $BASH_PATH/completion.d/$i
+  for ii in $(ls $BASH_PATH/completion.d); do
+    [[ -f $BASH_PATH/completion.d/$ii ]] && source $BASH_PATH/completion.d/$ii
   done
 fi
 if [[ -e $RUNTIME_PATH/completion.d ]]; then
-  for i in $(ls $RUNTIME_PATH/completion.d); do
-    [[ -f $RUNTIME_PATH/completion.d/$i && ( -x $RUNTIME_PATH/completion.d/$i || $i == *.sh || $i == *.bash ) ]] && source $RUNTIME_PATH/completion.d/$i
+  for ii in $(ls $RUNTIME_PATH/completion.d); do
+    [[ -f $RUNTIME_PATH/completion.d/$ii && ( -x $RUNTIME_PATH/completion.d/$ii || $ii == *.sh || $ii == *.bash ) ]] && source $RUNTIME_PATH/completion.d/$ii
   done
 fi
 # }}}
+unset ii
 # Source profile specic completions # {{{
 for profi in $BASH_PROFILES_FULL; do
   [[ -e $profi/completion ]] && source $profi/completion

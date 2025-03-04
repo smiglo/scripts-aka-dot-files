@@ -54,7 +54,8 @@ if ${DEFINE_TICKET_TOOL_HELPER:-false}; then # {{{
       $TICKET_TOOL_PATH/j-cmd.sh "$@" ;; # }}}
     esac
   } # }}}
-  complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic j
+  export -f j
+  compl-add j
   export PHISTORY_IGNORED_COMMANDS+=":j"
   export jj=$TICKET_TOOL_PATH/j-cmd.sh
 fi # }}}

@@ -8,13 +8,18 @@ confDir = os.path.expanduser('~/.config/gdb')
 
 useDashboard = os.environ.get("GDB_USE_DASHBOARD") != 'false'
 usePwnDbg = os.environ.get("GDB_USE_PWNDBG") != 'false'
-pwnDbgConf = os.environ.get("GDB_PWNDBG_INIT")
-if not pwnDbgConf:
-    pwnDbgConf = os.environ["SCRIPT_PATH"] + '/bash/inits/gdb/pwn-dbg/gdbinit.py'
-if not os.path.exists(pwnDbgConf):
+
+if os.environ.get("GDB_USE_DASHBOARD") == 'true':
     usePwnDbg = False
+
 if usePwnDbg:
-    useDashboard = False
+    pwnDbgConf = os.environ.get("GDB_PWNDBG_INIT")
+    if not pwnDbgConf:
+        pwnDbgConf = os.environ["SCRIPT_PATH"] + '/bash/inits/gdb/pwn-dbg/gdbinit.py'
+    if not os.path.exists(pwnDbgConf):
+        usePwnDbg = False
+    if usePwnDbg:
+        useDashboard = False
 
 for file in sorted(os.listdir(os.path.expanduser(confDir))):
     path = os.path.join(confDir, file)

@@ -26,18 +26,18 @@ weather_interval=${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}
 battery_tmux_sb_worker() { # @@ # {{{
   is_ac() { # {{{
     if $IS_MAC; then
-      pmset -g batt  | command grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
+      pmset -g batt  | grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
     else
-      upower -i /org/freedesktop/UPower/devices/line_power_AC | command grep -q "online: *yes" && echo 'true' || echo 'false'
+      upower -i /org/freedesktop/UPower/devices/line_power_AC | grep -q "online: *yes" && echo 'true' || echo 'false'
     fi
   } # }}}
   get_percentage() { # {{{
     local perc=
     if $IS_MAC; then
-      perc="$(pmset -g batt  | command grep 'InternalBattery' | awk '{print $3}')"
+      perc="$(pmset -g batt  | grep 'InternalBattery' | awk '{print $3}')"
       perc="${perc%\%;}"
     else
-      perc="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | command grep -F "percentage:" | awk '{print $2}')"
+      perc="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | grep -F "percentage:" | awk '{print $2}')"
       perc="${perc%\%}"
     fi
     echo "${perc%\%}"
@@ -124,13 +124,13 @@ mic_tmux_sb_worker() { # {{{
     local v="$(amixer $amixerP sget 'Internal Mic Boost' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
     [[ $v -gt 0 ]] && isInternal=true;;
   false)
-    if ! amixer $amixerP sget 'Headset Mic' 1>/dev/null 2>&1 || amixer $amixerP sget 'Headset Mic' | command grep -q "Mono:.*\[off\]"; then
+    if ! amixer $amixerP sget 'Headset Mic' 1>/dev/null 2>&1 || amixer $amixerP sget 'Headset Mic' | grep -q "Mono:.*\[off\]"; then
       return
     fi
   esac
-  local mic="$(getUnicodeChar 'mic')" mute="$(getUnicodeChar 'mute')"
+  local mic="$(get-unicode-char 'mic')" mute="$(get-unicode-char 'mute')"
   local value=
-  if amixer $amixerP sget 'Capture' | command grep -q "Front Left:.*\[off\]"; then
+  if amixer $amixerP sget 'Capture' | grep -q "Front Left:.*\[off\]"; then
     value="#[fg=colour9]$mic$mute"
   else
     $isInternal && return
@@ -144,14 +144,14 @@ mic_tmux_sb_worker() { # {{{
   printf "%b" "$value"
 } # }}}
 net_tmux_sb_worker() { # {{{
-  local value= char=$(getUnicodeChar 'link') con="#[bg=colour124]#[fg=colour226,bold]" coff="#[bg=default,none]" isNet=false
+  local value= char=$(get-unicode-char 'link') con="#[bg=colour124]#[fg=colour226,bold]" coff="#[bg=default,none]" isNet=false
   ping -c1 8.8.8.8 -w1 >/dev/null 2>&1 && value=0 || value=$(net -s; echo $?)
   case $value in
   0)  value=""; isNet=true;;
   1)  value="$char$con 8 $coff";;
   2)  value="$char$con DNS $coff";;
   10) value="$char$con GW $coff";;
-  11) value="$char$con $(getUnicodeChar 'icon-err') GW $coff";;
+  11) value="$char$con $(get-unicode-char 'icon-err') GW $coff";;
   *)  value="$char$con ? $value$coff";;
   esac
   if $isNet; then
@@ -185,20 +185,25 @@ reminder_tmux_sb_worker() { # {{{
   printf "%b" "$value"
 } # }}}
 ssh_tmux_sb_worker() { # {{{
-  local w="$(w -h -i)" isRoot=false isSsh=false moreThanOne=false d="${TMUX_SB_WORKER_SSH_FROM_NO:-:0}"
+  local w="$(w -h -i)" isRoot=false isSsh=false sshCnt=0 moreThanOne=false d="${TMUX_SB_WORKER_SSH_FROM_NO:-:0}"
   $IS_DOCKER && w="$(w -h -i | grep -v tmux)"
   local lines="$(echo "$w" | wc -l)"
-  echo "$w" | command grep -q "^root" && isRoot=true
-  w="$(echo "$w" | cut -c19- | command grep -v "^$d")"
+  echo "$w" | grep -q "^root" && isRoot=true
+  w="$(echo "$w" | cut -c19- | grep -v "^$d")"
   if ! $IS_MAC && [[ $lines -gt 1 ]]; then
     if [[ ! -z $w ]]; then
+      sshCnt=$(who | grep -v "(:" | sort -k5,5 -u | wc -l)
       moreThanOne=true
-      echo "$w" | command grep -q "^[0-9\.:]\+ " && isSsh=true
+      [[ $sshCnt -gt 0 ]] && isSsh=true
     fi
   fi
-  local sign="$(getUnicodeChar 'exclamation')" value=
+  local sign="$(get-unicode-char 'exclamation')" value=
   if $isSsh; then
-    value="#[bg=colour124]#[fg=colour226,bold] $sign$sign$sign #[bg=default,none]"
+    if [[ $sshCnt == 1 ]]; then
+      local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
+      pstree -A -s $cpid | grep -q -e '---sshd---' && isSsh=false
+    fi
+    $isSsh && value="#[bg=colour124]#[fg=colour226,bold] $sign$sign$sign #[bg=default,none]"
   elif $isRoot; then
     value="#[bg=colour124]#[fg=colour226,bold] $sign$sign #[bg=default,none]"
   elif $moreThanOne; then
@@ -282,7 +287,7 @@ weather_tmux_sb_worker() { # @@ # {{{
     else                       printf "#[fg=colour226]%d°C" "$1"
     fi
   } # }}}
-  local STORAGE_FILE="$TMP_MEM_PATH/.weather-tmux.log"
+  local STORAGE_FILE="$MEM_KEEP/weather-tmux.log"
   if [[ -e $STORAGE_FILE ]]; then # {{{
     WEATHER_INFO=()
     local line=
@@ -335,7 +340,7 @@ weather_tmux_sb_worker() { # @@ # {{{
     value="$(printf "%s %s #[fg=colour72]%s" "$(weather_icon "${WEATHER_INFO[6]}")" "$(weather_temp_color "${WEATHER_INFO[3]}")" "$(weather_wind_arrow ${WEATHER_INFO[5]} ${WEATHER_INFO[4]})")"
     weather_interval="${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}"
   else
-    value="#[fg=colour124]$(getUnicodeChar 'icon-err')☁️ #[fg=default,none]"
+    value="#[fg=colour124]$(get-unicode-char 'icon-err')☁️ #[fg=default,none]"
     weather_interval=60
   fi
   unset weather_icon weather_wind_arrow weather_temp_color
@@ -389,7 +394,7 @@ fromAliases() { # {{{
 } # }}}
 worker() { # {{{
   source "$UNICODE_EXTRA_CHARS_FILE"
-  # fromAliases --source getUnicodeChar
+  # fromAliases --source get-unicode-char
   local fTmpSingle=$info_file.single.tmp  fTmp=$info_file.tmp markIgn='--IGNORED--' markLU='_last_update'
   local i= now=
   declare -A data
@@ -415,7 +420,7 @@ worker() { # {{{
     done
     (
       echo "declare -A data"
-      echo "data[$markLU]=${data[$markLU]} # $(command date +$DATE_FMT -d @$now)"
+      echo "data[$markLU]=${data[$markLU]} # $(date +$DATE_FMT -d @$now)"
       for i in $(printf '%s\n' ${!data[*]} | sort); do
         [[ ${data[$i]} == "$markIgn" || $i == "$markLU" ]] && continue
         echo "data[$i]=\"${data[$i]}\""
@@ -458,7 +463,7 @@ case $1 in # {{{
   ! declare -f $f &>/dev/null && echor "Function [$f] not defined" && exit 1
   now=${EPOCHSECONDS:-$(epochSeconds)}
   DBG --init --ts-add --prefix D
-  fromAliases --source getUnicodeChar
+  fromAliases --source get-unicode-char
   $xv && set -xv
   w="$($f $@)"; err=$?
   $xv && set +xv
@@ -485,7 +490,7 @@ case $1 in # {{{
   fi;; # }}}
 *) # {{{
   DBG --init --ts=show $log_level $@
-  INF - "Start: $(command date +"$DATE_FMT")"
+  INF - "Start: $(date +"$DATE_FMT")"
   worker
   DBG --deinit;; # }}}
 esac # }}}

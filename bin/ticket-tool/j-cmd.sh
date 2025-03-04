@@ -7,7 +7,7 @@ putOnList() { # {{{
   [[ ! -e "$ticket_list" ]] && touch "$ticket_list"
   [[ $1 == '-s' ]] && silent=true && shift
   if [[ $# == 1 ]]; then
-    if ! command grep -q "^${1}$" "$ticket_list"; then
+    if ! grep -q "^${1}$" "$ticket_list"; then
       echo "$1" >>"$ticket_list"
       sort -u "$ticket_list" >"${ticket_list}.tmp"
       mv "${ticket_list}.tmp" "$ticket_list"
@@ -32,8 +32,8 @@ getIssue() { # {{{
     [[ $i != $ii ]] && list+=" $ii"
   fi
   for ii in $list; do # {{{
-    command grep -q "^${ii}$" "$ticket_list" && echo "$ii" && return 0
-    [[ $i != 'tmp' ]] && command grep -q "^-${ii}$" "$ticket_list" && return 0
+    grep -q "^${ii}$" "$ticket_list" && echo "$ii" && return 0
+    [[ $i != 'tmp' ]] && grep -q "^-${ii}$" "$ticket_list" && return 0
   done # }}}
   for ii in $list; do # {{{
     [[ -e "$TICKET_PATH/$ii/${ii}-data.txt" || -e "$TICKET_PATH/$ii/.${ii}-data.txt" ]] && putOnList "$ii" && return 0
@@ -45,7 +45,7 @@ getIssue() { # {{{
     return 0
   fi
   for ii in $list; do # {{{
-    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       p="$($ext --ticket-path $ii)"
       [[ ! -z $p && ( -e "$p/${ii}-data.txt" || -e "$p/.${ii}-data.txt" ) ]] && putOnList "$ii" && return 0
     done # }}}
@@ -62,7 +62,7 @@ findDataFiles() { # {{{
         | tr '\n' ' ') \
     "$@" \
     -type f -name '\*-data.txt' -print 2>/dev/null \
-  | command grep ".*/\([^/]*\)/\.\{0,1\}\1-data.txt" \
+  | grep ".*/\([^/]*\)/\.\{0,1\}\1-data.txt" \
   | sort
   return 0
 } # }}}
@@ -103,7 +103,7 @@ getIssueID() { # {{{
       while [[ $p == $TICKET_PATH* ]]; do
         f="${p##*/}"
         [[ -e "$p/${f}-data.txt" ]] && issue="$f" && break
-        p="$(command cd "$p/.."; pwd)"
+        p="$(cd "$p/.."; pwd)"
       done
     fi # }}}
     # Get issue from fallback issue # {{{
@@ -144,7 +144,7 @@ fzf_wrapper() { # {{{
   local i="${1#*$s:}"
   t="${t%:*}"
   local f="$(findDataFile "${t}")"
-  f="$f:$(command grep -n "^# $s -\{0,1\}\# {{[{]" $f)"
+  f="$f:$(grep -n "^# $s -\{0,1\}\# {{[{]" $f)"
   shift
   if [[ $@ == *-c\ prev* ]]; then
     local q="$1" qi=
@@ -159,13 +159,13 @@ fzf_wrapper() { # {{{
     [[ ! -z $i ]] && i+=".*"
     if [[ ! -z $qi && $qi != !* ]]; then
       echo -e "\t---  $t : ${i} $qi ---" && echo
-      fzf_exe -f "$f" "$@" | hl +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
+      fzf-exe -f "$f" "$@" | hl-bash +cGold "# $s -\{0,1\}\# {{[{].*" $([[ ! -z $i ]] && echo "+cC \"$i\"") +cG "$qi" # For vim # }} }
     else
       echo -e "\t---  $t : ${i} ---" && echo
-      fzf_exe -f "$f" "$@" | hl +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
+      fzf-exe -f "$f" "$@" | hl-bash +cGold "# $s -\{0,1\}\# {{[{].*" +cC "$i" # For vim # }} }
     fi
   else
-    fzf_exe -f "$f" "$@"
+    fzf-exe -f "$f" "$@"
   fi
 }
 export -f fzf_wrapper findDataFile findDataFiles
@@ -200,7 +200,7 @@ saveInHistory() { # {{{
   [[ -z $l ]] && return 1
   l="$(echo "$l" | sed -e 's/\s\s\+/ /g')"
   if [[ -s "$TICKET_CONF_HISTFILE" ]]; then
-    tail -n30 "$TICKET_CONF_HISTFILE" | sed -e 's/\s\s\+/ /g' | command grep -qF "$l" && return 0
+    tail -n30 "$TICKET_CONF_HISTFILE" | sed -e 's/\s\s\+/ /g' | grep -qF "$l" && return 0
   fi
   [[ $err != 0 ]] && l+=" # $err"
   echo "$l" >>"$TICKET_CONF_HISTFILE"
@@ -226,7 +226,7 @@ while [[ ! -z $1 ]]; do # {{{
     while [[ ! -z ${params[$i]} ]]; do
       [[ ${params[$i]} == [0-9]* && $first == 'true' ]] && wNr="${params[$i]}" && break
       [[ ${params[$i],,} == '-j' || ${params[$i],,} == '-jj'  || ${params[$i],,} == '--issue' ]] && issue="${params[$(($i+1))]}" && break
-      [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)" && break
+      [[ ${params[$i]} == '-l' ]] && issue="$(tmux list-windows -F '#{window_flags} #W' | grep "^-" | cut -d\  -f2)" && break
       i=$(($i+1))
       first=false
     done
@@ -288,7 +288,7 @@ while [[ ! -z $1 ]]; do # {{{
     fi # }}}
     ;; # }}}
   -L)  # {{{
-    i="$(tmux list-windows -F '#{window_flags} #W' | command grep "^-" | cut -d\  -f2)"
+    i="$(tmux list-windows -F '#{window_flags} #W' | grep "^-" | cut -d\  -f2)"
     issue="$(getIssue "$i" true)"
     [[ -z $issue ]] && echore "Ticket for [$i] not found" && exit 1
     ISSUE_FALLBACK="$issue"
@@ -407,16 +407,16 @@ if $do_grep; then # {{{
     ( tail --pid=$$ -q -F $f_dot | while read l; do progress-dot; done; rm -f $f_dot ) &
     s="$TICKET_TOOL_PATH/ticket-tool.sh --issue \$issue"
     echo -e "$issues_newer" | work-parallel.sh --lines-max 6 \
-      "cat - | while read issue; do [[ -z \$issue ]] && continue; echo '.' >&3; $s ? \$($s ? | tr ' ' '\n' | sort -u | tr '\n' ' ') | sed -e '/^[^:]*:#/d' -e '/# IGN$/d' -e '/:echorm/d' | eval sed -e 's/^/\$issue:/'; done" \
+      "command cat - | while read issue; do [[ -z \$issue ]] && continue; echo '.' >&3; $s ? \$($s ? | tr ' ' '\n' | sort -u | tr '\n' ' ') | sed -e '/^[^:]*:#/d' -e '/# IGN$/d' -e '/:echorm/d' | eval sed -e 's/^/\$issue:/'; done" \
     >"$tmpFile"
-    [[ -e $kb_file ]] && cat "$kb_file" >> "$tmpFile"
+    [[ -e $kb_file ]] && command cat "$kb_file" >> "$tmpFile"
     mv "$tmpFile" "$kb_file"
     progress-dot --end
     exec 3>&-
   fi
   if [[ -t 1 ]]; then # {{{
     tmpFile="$TMP_MEM_PATH/kb-grep.txt"
-    { [[ -z "$list" ]] && cat "$kb_file" || command grep "^\($list\):" "$kb_file"; } | \
+    { [[ -z "$list" ]] && command cat "$kb_file" || grep "^\($list\):" "$kb_file"; } | \
       fzf -i --exit-0 --no-sort --multi --ansi --height 100% --prompt='Tickets> ' \
         --preview "fzf_wrapper {} {q} -c prev --prev 20" \
         --preview-window 'hidden' \
@@ -432,7 +432,7 @@ if $do_grep; then # {{{
         vim --fast "$tmpFile"
       fi
   else
-    [[ -z "$list" ]] && cat "$kb_file" || command grep "^\($list\):" "$kb_file"
+    [[ -z "$list" ]] && command cat "$kb_file" || grep "^\($list\):" "$kb_file"
   fi # }}}
   exit 0
 fi # }}}
@@ -468,7 +468,7 @@ if [[ $1 == '@@' ]]; then # {{{
       i=1 is= issue_list=":"
       for is in $(tmux list-windows -F '#W'); do
         is="$(getIssue "$is" true)"
-        if [[ ! -z "$is" ]] && ! echo "$issue_list" | command grep -q ":$is:"; then
+        if [[ ! -z "$is" ]] && ! echo "$issue_list" | grep -q ":$is:"; then
           ret+=" $i"
           issue_list+="$is:"
         fi
@@ -506,10 +506,10 @@ if [[ $1 == '@@' ]]; then # {{{
     ret+=" $files" ;; # }}}
   -j | -J) # {{{
     marker="$TMP_MEM_PATH/j-cmd-marker.$$"
-    touch -t $(command date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
+    touch -t $(date +"%Y%m%d%H%M.%S" -d "1 month ago") $marker
     files="$(getIssues -newer $marker)"
     rm $marker
-    files+=" $(command grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
+    files+=" $(grep -l '^# j-info:.* ALWAYS-INCLUDE' $(getIssuesRaw) | sed -e 's|.*/\.\{0,1\}||' -e 's|-data\.txt||')"
     ret=" $files";; # }}}
   --hist | --hist-full | --hist-issue | -h ) # {{{
     ret=" -l --loop";;& # }}}
@@ -539,7 +539,7 @@ if [[ $1 == '@@' ]]; then # {{{
     $dbg_j && echorm 1 "\nargs-j-out=[$@]"
     $dbg_j && echorm -l2 -xv
     if [[ ! -z $issue ]]; then
-      isInstalled -t completionCacheInvocation || source $TICKET_TOOL_PATH/completion-cache
+      is-installed -t completionCacheInvocation || source $TICKET_TOOL_PATH/completion-cache
       eval $(completionCacheInvocation)
       completionCacheLoad
       key="$@"; [[ -z $key ]] && key="@@"; key="${key// /-}"
@@ -570,7 +570,7 @@ elif $do_history; then # {{{
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -l | --loop) loop=false;;
-    --clean)     cat -n "$TICKET_CONF_HISTFILE" | sed -e '/# [0-9]\+$/d' | sort -k2 -u | sort -k1,1n | cut -c8-;;
+    --clean)     command cat -n "$TICKET_CONF_HISTFILE" | sed -e '/# [0-9]\+$/d' | sort -k2 -u | sort -k1,1n | cut -c8-;;
     -)           count=;;
     *) # {{{
       if [[ $1 =~ ^[0-9]+$ ]]; then
@@ -585,7 +585,7 @@ elif $do_history; then # {{{
   while true; do
     rm -f "$check_file"
     items=$( \
-      cat "$TICKET_CONF_HISTFILE" \
+      command cat "$TICKET_CONF_HISTFILE" \
       | sed -e '/^\s*$/d' -e '/^#/d' -e 's/\s\s\+/ /' \
       | if [[ $cmd == 'hist' ]]; then
           tail -n${count:-100}
@@ -595,7 +595,7 @@ elif $do_history; then # {{{
           if [[ ! -z $count && $count != 100 ]]; then
             tail -n$count
           else
-            cat -
+            command cat -
           fi
         fi \
       | tac - \

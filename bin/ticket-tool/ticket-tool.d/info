@@ -30,12 +30,12 @@ if [[ -z $1 ]]; then
 else
   while [[ ! -z $1 ]]; do
     s="${1,,}"
-    s="$(echo -ne "$func\n" | command grep -ai "^##\+ @ $s\( .*\)\{0,1\}" | head -n1 | sed -e 's/^##\+ @ //' -e 's/ #.*//')"
+    s="$(echo -ne "$func\n" | grep -ai "^##\+ @ $s\( .*\)\{0,1\}" | head -n1 | sed -e 's/^##\+ @ //' -e 's/ #.*//')"
     [[ -z $s ]] && echo "Section [$1] not found" >/dev/stderr && shift && continue
     if echo -ne "$func\n" | grep -aq  "^##\+ @ $s .*}}[}]"; then
       echo -ne "$func\n" | sed -n -e "/^##\+ @ $s .*{{[{]/,/^##\+ @ $s .*}}[}]/p" | sed -e "s/^\(##\+ @\).*}}[}]/\1/"
     else
-      indent="$(echo -ne "$func\n" | command grep -a "^##\+ @ $s" | head -n1 | sed -e 's/^\(##\+\) .*/\1/')"
+      indent="$(echo -ne "$func\n" | grep -a "^##\+ @ $s" | head -n1 | sed -e 's/^\(##\+\) .*/\1/')"
       max="$((${#indent}-1))"
       [[ $max -lt 2 ]] && max=2
       echo -ne "$func\n" | \

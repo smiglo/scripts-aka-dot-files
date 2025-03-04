@@ -43,7 +43,7 @@ fix_ssh_agent() { # {{{
 start_agent() { # {{{
   local err=0 i=0 stderr="$SSH_PATH/stderr"
   while [[ $i -le 1 ]]; do
-   command mkdir -p $SSH_PATH && chmod 700 $SSH_PATH
+    command mkdir -p $SSH_PATH >/dev/null && chmod 700 $SSH_PATH
     if ssh-agent -a "$SSH_PATH/bind" -s 2>$stderr | sed 's/^echo/#echo/' >$SSH_ENV && [[ ! -s $stderr ]]; then
       chmod 600 $SSH_ENV
       source $SSH_ENV >/dev/null
@@ -52,7 +52,7 @@ start_agent() { # {{{
       rm $SSH_ENV
       err=$?
     fi
-    command rm -rf $SSH_PATH
+    rm -rf $SSH_PATH
     i=$(($i+1))
   done
   rm -f $stderr
@@ -62,6 +62,7 @@ start_agent() { # {{{
   return $err
 } # }}}
 start_if_needed() { # {{{
+  [[ -n "$SSH_CLIENT" ]] && [[ $(who | grep -v "(:" | sort -k5,5 -u | wc -l) == 0 ]] && unset SSH_CLIENT SSH_TTY
   [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]] && return 0
   local start_ssh=true
   if [[ -f $SSH_ENV ]]; then
@@ -78,7 +79,8 @@ start_if_needed() { # {{{
 cmd="--start"
 [[ ! -z $1 ]] && cmd="$1" && shift
 case $cmd in
---start)    start_if_needed "$@";;
+--start)    start_agent "$@";;
+--start-if) start_if_needed "$@";;
 --fix)      fix_ssh_agent "$@";;
 --fix-tmux) fix_tmux "$@";;
 esac

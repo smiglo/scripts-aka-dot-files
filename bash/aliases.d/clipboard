@@ -1,74 +1,117 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# [[ -z $CLIPBOARD_FORCE_TMUX_CLIPBOARD ]] && $IS_DOCKER && CLIPBOARD_FORCE_TMUX_CLIPBOARD=true
-
-if $IS_DOCKER; then # {{{
-  __xclip() {
-    [[ -z $CLIP_FILE ]] && return 1
-    if [[ $1 == --put ]]; then
-      cat - >$CLIP_FILE
-    elif [[ $1 == --get ]]; then
-      cat $CLIP_FILE
-    elif [[ $1 == '--tmux' ]]; then
-      tmux set-buffer -b clipboard "$(cat $CLIP_FILE)"
+__xclip() { # {{{
+  local mode="$CLIP_MODE" doSet=false updateClipFileOnPut=${CLIP_UPDATE_CLIP_FILE_ON_PUT:-true}
+  [[ $1 == '--set' ]] && shift && doSet=true
+  if [[ -z $mode ]] || $doSet; then # {{{
+    export CLIP_CMD_PUT=
+    export CLIP_CMD_GET=
+    if $IS_DOCKER; then # {{{
+      mode='docker' # }}}
+    elif which xclip >/dev/null 2>&1;then # {{{
+      mode='xclip'
+      CLIP_CMD_PUT="command xclip -in -selection clipboard"
+      CLIP_CMD_GET="command xclip -out -selection clipboard" # }}}
+    elif $IS_MAC && which pbcopy >/dev/null 2>&1; then # {{{
+      mode='pbcopy'
+      export CLIP_REATTACH=
+      which reattach-to-user-namespace >/dev/null 2>&1 && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
+      CLIP_CMD_PUT="$CLIP_REATTACH pbcopy"
+      CLIP_CMD_GET="$CLIP_REATTACH pbpaste" # }}}
+    elif [[ -n $TMUX ]]; then # {{{
+      mode='tmux'
+      CLIP_CMD_GET="tmux show-buffer -b clip 2>/dev/null"
     else
-      return 1
-    fi
-  } # }}}
-elif which xclip >/dev/null 2>&1 && ! ${CLIPBOARD_FORCE_TMUX_CLIPBOARD:-false}; then # {{{
-  __xclip() {
-    if [[ $1 == --put ]]; then
-      command xclip -in -selection clipboard
-    elif [[ $1 == --get ]]; then
-      command xclip -out -selection clipboard
+      mode='plain'
+    fi # }}}
+    if [[ -z $CLIP_CMD_PUT ]]; then # {{{
+      CLIP_CMD_PUT="command cat - >$CLIP_FILE"
+      CLIP_UPDATE_CLIP_FILE_ON_PUT=false
     else
-      command xclip $@
-    fi
-  } # }}}
-elif which pbcopy >/dev/null 2>&1 && ! ${CLIPBOARD_FORCE_TMUX_CLIPBOARD:-false}; then # {{{
-  __xclip() {
-    local rattach=
-    which reattach-to-user-namespace >/dev/null 2>&1 && reatach="reattach-to-user-namespace"
-    if [[ $1 == --put ]]; then
-      $reattach pbcopy
-    elif [[ $1 == --get ]]; then
-      $reattach pbpaste
-    else
-      $reattach pbcopy $@
-    fi
-  } # }}}
-elif [[ -n $TMUX ]]; then # {{{
-  __xclip() {
-    if [[ $1 == --put ]]; then
-      tmux set-buffer -b clipboard "$(cat -)"
-    elif [[ $1 == --get ]]; then
-      tmux paste-buffer -b clipboard
-    else
-      return 1
-    fi
-  } # }}}
-else # {{{
-  __xclip() { echor "xclip not defined"; cat -; }
-fi # }}}
-export -f __xclip
-xclip() { # {{{
-  if [[ -z $1 ]]; then
+      CLIP_UPDATE_CLIP_FILE_ON_PUT=true
+    fi # }}}
+    if [[ -z $CLIP_CMD_GET ]]; then # {{{
+      [[ -e $CLIP_FILE ]] || touch $CLIP_FILE
+      CLIP_CMD_GET="if [[ -e $CLIP_FILE ]]; then command cat $CLIP_FILE; fi"
+    fi # }}}
+    export CLIP_MODE="$mode"
+    $doSet && return
+  fi # }}}
+  if [[ -z $DISPLAY && $mode == "xclip" ]]; then
+    export DISPLAY="$(w | awk '/'"$USER"'/ {print $3}' | command grep "^:" | head -n1)"
+  fi
+  local tmuxP=
+  [[ -n $TMUX ]] || tmuxP="-S ${TMUX_TMPDIR:-$HOME/.tmux/socket}/tmux-$UID/default"
+  case $1 in
+  --put) # {{{
+    shift
+    local f="-" checkSsh=true
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      --no-ssh) checkSsh=false;;
+      *) f=$1;;
+      esac; shift
+    done
+    command cat $f | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
+    $updateClipFileOnPut && command cat $CLIP_FILE.put >$CLIP_FILE
+    if $checkSsh && [[ -p $CLIP_FILE.ssh ]]; then
+      command cat $CLIP_FILE.put >$CLIP_FILE.ssh
+    fi;; # }}}
+  --get) # {{{
+    eval $CLIP_CMD_GET | tee >(tmux $tmuxP load-buffer -b clip /dev/stdin 2>/dev/null)
+    ;; # }}}
+  *)
+    [[ $mode == 'plain' ]] && return 1
+    case $1 in
+    --tmux | -t) tmux $tmuxP save-buffer $CLIP_FILE 2>/dev/null;;
+    --tmux-to | -tt | -) tmux $tmuxP load-buffer -b clip $CLIP_FILE 2>/dev/null;;
+    --save | -s) # {{{
+      local cnt="$(tmux list-buffers -F '#{buffer_name}' | command grep "^clip[0-9]\+" | wc -l)"
+      local name="$2"
+      [[ -z $name ]] && name="$(printf "clip%003d" $((cnt + 1)))"
+      eval $CLIP_CMD_GET > >(tmux $tmuxP load-buffer -b "$name" /dev/stdin 2>/dev/null);; # }}}
+    *) # {{{
+      [[ $1 == '-' ]] && shift
+      case $mode in
+      xclip) xclip "$@";;
+      pbcopy) $CLIP_REATTACH pbcopy "$@";;
+      *) return 1;;
+      esac;; # }}}
+    esac
+  esac
+} # }}}
+xclip() { # @@ # {{{
+  if [[ $1 == @@ ]]; then # {{{
+    case ${4:-$3} in
+    --put) echo "--no-ssh @@-f FILE";;
+    --save | -s) echo "BUFFER"; tmux list-buffers -F '#{buffer_name}';;
+    *) echo "--put --get --save -s --tmux -t --tmux-to -tt -";;
+    esac
+    return 0
+  fi # }}}
+  if [[ -z $1 ]]; then # {{{
     if [[ ! -t 0 ]]; then
       xclip --put
     else
       xclip --get
     fi
     return 0
-  elif [[ $1 == --put ]]; then
-    sed -u -z '$ s/\n$//' | __xclip --put
-  elif [[ $1 == --get ]]; then
-    __xclip --get
-  else
-    __xclip $@
-  fi
+  fi # }}}
+  __xclip "$@"
 } # }}}
+__xclip --set
 xc()     { xclip "$@"; }
 ccopy()  { cat - | xclip --put; }
 cpaste() { xclip --get | cat -; }
+xs()     { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "BUFFER"
+    tmux list-buffers -F '#{buffer_name}'
+    return 0
+  fi
+  xclip --save "$@"
+} # }}}
+export -f xclip __xclip
 

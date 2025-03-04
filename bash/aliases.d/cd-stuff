@@ -100,7 +100,7 @@ __cd_util_mode_parent() { # {{{
     if [[ -z $2 ]]; then
       stdout="$(__cd_util --list-parents)"
       if $use_fzf; then
-        dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Parent> ')" || return 0
+        dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Parent> ')" || return 0
         dst="$(__cd_util --update-dst "$dst" 'eval dst="${dst%%. *}" && eval printf ../%.0s {1..$dst}')"
       else
         echo "$stdout"
@@ -134,7 +134,7 @@ __cd_util_mode_previous() { # {{{
         printf "%d. %s\n" $(($len-2-$i+1)) "$(echo ${CD_LAST_DIRS[$i]} | sed "s|^$HOME|~|")"
       done)
       if $use_fzf; then
-        dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Last> ')" || return 0
+        dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Last> ')" || return 0
         dst="$(__cd_util --update-dst "$dst")"
       else
         echo "$stdout"
@@ -165,20 +165,20 @@ __cd_util_mode_stored() { # {{{
         local list="$(for i in $BASH_PROFILES_FULL; do
           [[ -e $i/aliases ]] && $i/aliases __util_cd_param @@ | tr ' ' '\n' | sed 's/$/@--cd-spec/' | tr '\n' ':' 2>/dev/null
         done)"
-        list="$(echo "$cd_list:$list" | tr ':' '\n' | sed '/^ *$/d' | sort -u | tr '\n' ':')"
+        list="$(echo -e "$cd_list:$list" | tr ':' '\n' | sed '/^ *$/d' | sort -u | tr '\n' ':')"
         IFS=':' && read -ra cd_list < <(echo -e "$list") && IFS=$oldIFS
         [[ -z $cd_list ]] && return 1
         progress --mark --msg "Obtaining dirs" --out /dev/stderr
         stdout=$(ii=0; for i in ${!cd_list[*]}; do
           key="${cd_list[$i]/@*}"
           p="$(__cd_util --cd-param "$key" "${cd_list[$i]/*@}")"
-          [[ ! -z $p ]] && ii=$((ii + 1)) && printf "%2d. %12s: %s\n" "$ii" "${key:0:12}" "$(echo "$p" | sed "s|^$HOME|~|")"
+          [[ ! -z $p ]] && ii=$((ii + 1)) && printf "%2d. %12s: %s\n" "$ii" "${key:0:12}" "$(echo -e "$p" | sed "s|^$HOME|~|")"
         done)
         progress --unmark
         __cd_util --add-to-cache F "$stdout"
       fi
       if $use_fzf; then
-        dst="$(echo "$stdout" | fzf $fzf_common_params  --prompt='Stored> ')" || return 0
+        dst="$(echo -e "$stdout" | fzf $fzf_common_params  --prompt='Stored> ')" || return 0
         dst="$(__cd_util --update-dst "$dst" '${dst#*: }')"
       else
         echo "$stdout"
@@ -254,10 +254,10 @@ __cd_util_mode_stored() { # {{{
         dst=${out[0]}
       else
         stdout=$(for i in ${!out[*]}; do
-          printf "%2d. %s\n" "$(($i+1))" "$(echo "${out[$i]}" | sed "s|^$HOME|~|")"
+          printf "%2d. %s\n" "$(($i+1))" "$(echo -e "${out[$i]}" | sed "s|^$HOME|~|")"
         done)
         if $use_fzf; then
-          dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
+          dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
           dst="$(__cd_util --update-dst "$dst")"
         else
           echo "$stdout"
@@ -310,7 +310,7 @@ __cd_util_mode_children() { # {{{
       printf "%2d. %s\n" "$(($i+1))" "${out[$i]}"
     done)
     if $use_fzf; then
-      dst="$(echo "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
+      dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
       dst="$(__cd_util --update-dst "$dst")"
     else
       echo "$stdout"
@@ -431,18 +431,19 @@ __cd_util_mode_interactive() { # {{{
     fzf_wrapper() { # {{{
       local mode="$1" wd="$3" dir=
       [[ $2 == '---' || -z $2 ]] && dir="$wd"
-      [[ -z $dir ]] && dir="$(echo "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
+      [[ -z $dir ]] && dir="$(echo -e "$2" | awk '/ --> / {$1=$2=""; print $0; next}; {print $0}')"
       dir="$(echo $(__cd_util --tilde-conv "$dir"))"
       [[ $dir != /* ]] && dir="$wd/$dir" && dir="$(command cd "$dir"; pwd)"
       case $mode in
-      prev)    fzf_exe -c prev --prev 10 -f "$dir" ;;
-      split-v) tmux split-window -v -p 30 -d -c "$dir";;
-      split-h) tmux split-window -h -p 50 -d -c "$dir";;
-      new-wnd) tmux new-window   -a       -d -c "$dir";;
+      prev)    fzf-exe -c prev --prev 10 -f "$dir" ;;
+      split-v) [[ -n $TMUX ]] && tmux split-window -v -p 30 -d -c "$dir";;
+      split-h) [[ -n $TMUX ]] && tmux split-window -h -p 50 -d -c "$dir";;
+      new-wnd) [[ -n $TMUX ]] && tmux new-window   -a       -d -c "$dir";;
       esac
     } # }}}
     export -f fzf_wrapper __cd_util
-    local empty=false hidden=false fzf_key_show_hidden='ctrl-f'
+    local empty=false hidden=false fzf_key_show_hidden='ctrl-f' fzf_key_upper="ctrl-u" fzf_key_home="ctrl-h" fzf_key_into="ctrl-e" fzf_key_orig="ctrl-o"
+    local orgDst="$(command cd "$(__cd_util --tilde-conv "$dst")"; pwd)"
     while true; do # {{{
       dst="$(command cd "$(__cd_util --tilde-conv "$dst")"; pwd)"
       # List # {{{
@@ -457,7 +458,7 @@ __cd_util_mode_interactive() { # {{{
             find . -mindepth $i -maxdepth $i \
                    -type d -a -not \( -name .git -o -path \*/.git/\* \) -print \
                    -o -prune 2>/dev/null \
-              | { if ! $hidden; then command grep -v "/\."; else cat -; fi; } \
+              | { if ! $hidden; then command grep -v "/\."; else command cat -; fi; } \
               | sed 's|^\./||' | LC_COLLATE=C sort -f)"
           [[ ! -z $res ]] && list+="$res\n" && empty=false
         done
@@ -500,23 +501,37 @@ __cd_util_mode_interactive() { # {{{
       stdout="$(echo -e "$list" | sed -e '/^\.\{1,2\}$/d')"
       # }}}
       if $use_fzf; then # {{{
-        res="$(\
-          echo -e "$stdout" \
-          | fzf \
-              $fzf_common_params --no-sort \
-              --expect $fzf_key_show_hidden \
-              --layout=reverse \
-              --preview "fzf_wrapper prev {} \"$dst\"" \
-              --bind "ctrl-v:execute(fzf_wrapper split-v {} \"$dst\")" \
-              --bind "ctrl-h:execute(fzf_wrapper split-h {} \"$dst\")" \
-              --bind "ctrl-n:execute(fzf_wrapper new-wnd {} \"$dst\")" \
-              --prompt="$prompt> " \
-              $fzf_params \
-              --query="$([[ ! -z "$query" && $query != "-" ]] && echo "$query")" \
-        )"
+        res=
+        if [[ ! -z $query && $query == *,* ]]; then
+          n=${query##*,}
+          [[ -z $n ]] && n=1
+          query="${query%,*}"
+          res="$(echo -e "$stdout" | command grep -F "$query" | command grep "$query$" | sed -n ${n}p)"
+          [[ ! -z $res ]] && res="\n$res"
+        fi
+        if [[ -z $res ]]; then
+          res="$(\
+            echo -e "$stdout" \
+            | fzf \
+                $fzf_common_params --no-sort \
+                --expect $fzf_key_show_hidden \
+                --expect $fzf_key_upper \
+                --expect $fzf_key_home \
+                --expect $fzf_key_into \
+                --expect $fzf_key_orig \
+                --layout=reverse \
+                --preview "fzf_wrapper prev {} \"$dst\"" \
+                --bind "ctrl-v:execute(fzf_wrapper split-v {} \"$dst\")" \
+                --bind "ctrl-h:execute(fzf_wrapper split-h {} \"$dst\")" \
+                --bind "ctrl-n:execute(fzf_wrapper new-wnd {} \"$dst\")" \
+                --prompt="$prompt> " \
+                $fzf_params \
+                --query="$([[ ! -z "$query" && $query != "-" ]] && echo "$query")" \
+          )"
+        fi
         [[ $? != 0 || -z $res ]] && return 0
-        local key="$(echo "$res" | sed -n '1p')"
-        res="$(echo "$res" | sed -n '2p')"
+        local key="$(echo -e "$res" | sed -n '1p')"
+        res="$(echo -e "$res" | sed -n '2p')"
         [[ -z $res ]] && return 0
         [[ ! -z "$query" ]] && query="-"
         if [[ $res =~ ^\.\.\.[0-9]+'/ --> '(.*) ]]; then
@@ -525,13 +540,17 @@ __cd_util_mode_interactive() { # {{{
             if [[ $dst =~ (.*)/${res#.../}.* ]]; then
               res="${BASH_REMATCH[1]}/${res#.../}"
             else
-              echorm 0 "res starts with .../ but cannot obtain full path"
+              echormf 0 "res starts with .../ but cannot obtain full path"
               echorv -M 0 -nl res dst
             fi
           fi
         fi
         res="$(__cd_util --tilde-conv "$res")"
         case $key in # {{{
+        $fzf_key_upper) dst="$(command cd "$dst/.." && pwd)"; continue;;
+        $fzf_key_home)  dst="$HOME"; continue;;
+        $fzf_key_into)  dst="$(command cd $dst/$res && pwd)"; continue;;
+        $fzf_key_orig)  dst="$orgDst"; continue;;
         $fzf_key_step_in) ;;
         $fzf_key_show_hidden) $hidden && hidden=false || hidden=true; continue;;
         '') loop=false;;
@@ -543,7 +562,7 @@ __cd_util_mode_interactive() { # {{{
       fi # }}}
       case $res in # {{{
       ---)  break;;
-      @* | +* | :*) dst="$(echo "$res" | sed -e 's/.*-->\s*\(.*\)/\1/')";;
+      @* | +* | :*) dst="$(echo -e "$res" | sed -e 's/.*-->\s*\(.*\)/\1/')";;
       *) # {{{
         if [[ $res == /* && -e $res ]]; then
           dst="$res"
@@ -563,7 +582,6 @@ __cd_util_mode_interactive() { # {{{
   esac
   echo "$dst"
 } # }}}
-export -f __cd_util __cd_util_mode_parent __cd_util_mode_previous __cd_util_mode_stored __cd_util_mode_children __cd_util_mode_interactive
 function cd_wrapper { # @@ # {{{
   if [[ $1 != '--' && $1 != '-f' ]]; then # {{{
     set +f
@@ -772,6 +790,21 @@ cd_no_expansion() { # @@ { # {{{
   fi
   cd_wrapper -- "$@"
 } # }}}
+__cdd_completion() { # {{{
+  local fdfindCmd="fdfind"
+  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
+  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
+  [[ -z $fdfindCmd ]] && COMPREPLY=() && return 0
+  local cur= opts= depth=${FZF_MAX_DEPTH:-10}
+  [[ $PWD == $HOME || $PWD == $HOME/* ]] || depth=5
+  cur=${COMP_WORDS[COMP_CWORD]}
+  _get_comp_words_by_ref -n : cur
+  opts="$($fdfindCmd -d $depth --type d --type l -L --no-ignore-vcs | sed '/\/$/s|/$||' | sed 's|.*/||' | sort -u)"
+  COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+  __ltrim_colon_completions "$cur"
+} # }}}
+complete -r cdd >/dev/null 2>&1
+complete $COMPLETE_DEFAULT_PARAMS -F __cdd_completion cdd
 
 alias cd='set -f;cd_no_expansion' # @@
 alias cdd='cd -- -i 8 --loop --stored-none --fzf-params "-e -x --query="'

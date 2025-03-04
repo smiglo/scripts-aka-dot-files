@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+mg() { # @@ # {{{
+  if [[ $1 == @@ ]]; then
+    echo "+g +ack +ag +rg +tee=true +tee=false +-fzf +fzf"
+    return 0
+  fi
+  local cmd="ag"
+  ! which $cmd >/dev/null 2>&1 && cmd="rg"
+  ! which $cmd >/dev/null 2>&1 && cmd="ack"
+  ! which $cmd >/dev/null 2>&1 && cmd="grep"
+  local tee=true use_fzf= fzf_params=
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    +g)     cmd="grep";;
+    +ack)   cmd="ack";;
+    +ag)    cmd="ag";;
+    +rg)    cmd="rg";;
+    +tee=*) tee="${1/+tee=}";;
+    +-fzf | +-f) use_fzf=false;;
+    +fzf  | +f)  use_fzf=$FZF_INSTALLED;;
+    +fzf=*)      use_fzf=${1/+fzf=}; $use_fzf && use_fzf=$FZF_INSTALLED;;
+    +fzf-*)      fzf_params+=" $1";;
+    *)      break;;
+    esac
+    shift
+  done
+  if [[ -z $use_fzf ]]; then # {{{
+    if [[ ! -t 1 ]]; then
+      use_fzf=false
+    else
+      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*MG:[^,]\+,' | command grep -o 'true\|false')"
+      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    fi
+  fi # }}}
+  local err=
+  case $cmd in
+  grep*) $ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh   --cmd-grep +tee=$tee +fzf=$use_fzf $fzf_params -R "$@" *;;
+  ack*)  $ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-ack  +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
+  ag*)   $ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-ag   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
+  rg*)   $ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-rg   +tee=$tee +fzf=$use_fzf $fzf_params    "$@"  ;;
+  esac
+} # }}}
+gr() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "-I"
+    return 0
+  fi
+  local params=
+  [[ $1 == '-I' ]] && params+=" +I" && shift
+  [[ -t 1 ]] && params+=" --colors"
+  $ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep +tee=false $params -E $@
+} # }}}
+

@@ -44,7 +44,13 @@ defReset+=" --reset"
 
 $chroma --test || exit 0
 
-[[ -z $1 ]] && set -- $defReset
+if [[ -z $1 ]]; then
+  if is-installed gsettings; then
+    gsettings set org.gnome.desktop.peripherals.keyboard repeat-interval 20
+    gsettings set org.gnome.desktop.peripherals.keyboard delay 300
+  fi
+  set -- $defReset
+fi
 
 while [[ ! -z $1 ]]; do
   cmd=$1

@@ -6,7 +6,8 @@ unset BASH_XTRACEFD
 # Completion # {{{
 if [[ $1 == '@@' ]]; then
   if [[ $3 != '--todo' ]]; then
-    echo "--no-lock --lock --no-attach --attach --dbg --do-post --do-env --todo --env --preconfigure $(echo $(tmux list-sessions -F '#S')) --no-progress"
+    echo "--no-lock --lock --no-attach --attach --dbg --do-post --do-env --todo --env --preconfigure --no-progress"
+    [[ -n $TMUX ]] && tmux list-sessions -F '#S'
   else
     echo "pre init env post"
   fi
@@ -24,7 +25,7 @@ case $1 in
     LOCK=false; shift;;
 esac
 if $LOCK; then # {{{
-  ! command mkdir $TMUX_INIT_LOCK &>/dev/null && exit 0
+  ! mkdir $TMUX_INIT_LOCK &>/dev/null && exit 0
   trap "rm -rf $TMUX_INIT_LOCK" EXIT
 fi # }}}
 # Source extensions # {{{
@@ -69,8 +70,8 @@ run() { # {{{
   done # }}}
   cmd=$1; shift
   case $cmd in
-  set_title) # {{{
-    set_title --from-tmux ${s%.*} "$1"
+  set-title) # {{{
+    set-title --from-tmux ${s%.*} "$1"
     sleep 0.1
     return 0;; # }}}
   layout | layout-default | layout-restore) # {{{
@@ -78,11 +79,11 @@ run() { # {{{
     [[ -z $current ]] && current=$(tmux display-message -p -t $TMUX_PANE -F '#S:#I.#P')
     case $cmd in
     layout-restore) # {{{
-      cmd="tm --session --restore -w";; # }}}
+      cmd="$ALIASES_SCRIPTS/tmux/tm.sh --session --restore -w";; # }}}
     layout | layout-default) # {{{
       local params="-w"
       [[ "$cmd" == 'layout-default' ]] && params="-wd"
-      cmd="tm --l-restore $@ $params --set-pane-1 || true";; # }}}
+      cmd="$ALIASES_SCRIPTS/tmux/tm.sh --l-restore $@ $params --set-pane-1 || true";; # }}}
     esac
     shift $#;; # }}}
   command | exec | \
@@ -93,10 +94,10 @@ run() { # {{{
   [[ ! -z $@ ]] && cmd+=" $@"
   $hide && cmd=" $cmd"
   $clear_after && cmd="$cmd; clear"
-  [[ ! -z $current ]] && tm --switch $s
+  [[ ! -z $current ]] && $ALIASES_SCRIPTS/tmux/tm.sh --switch $s
   tmux send-key -t $s -l "$cmd"
   sleep 0.1
-  [[ ! -z $current ]] && tm --switch $current
+  [[ ! -z $current ]] && $ALIASES_SCRIPTS/tmux/tm.sh --switch $current
   return 0
 } # }}}
 layoutRestore() { # {{{
@@ -205,12 +206,12 @@ initFromEnv() { # {{{
     c=$(echo "${setup[$i]}" | cut -d':' -f3-)
     [[ -z $p ]] && p="$t" && t=
     [[ ! -e $p ]] && msgs+="Window[$t]: Path ($p) does not exists\n" && continue
-    p=$(command cd $p; pwd -P)
+    p=$(cd $p; pwd -P)
     local create=true pane_cnt=1
-    if [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | command grep -q "^$t\$"; then
+    if [[ ! -z $t ]] && tmux list-window -t $sessionName -F '#W' | grep -q "^$t\$"; then
       $change_window && msgs+="Window [$t]: Already created\n" && continue
       create=false
-      w="$(tmux list-window -t $sessionName -F '#I. #W' | command grep " $t\$" | sed 's/\..*//')"
+      w="$(tmux list-window -t $sessionName -F '#I. #W' | grep " $t\$" | sed 's/\..*//')"
       pane_cnt="$(tmux display-message -t $sessionName:$w -p -F '#{window_panes}')"
     fi
     if $create; then
@@ -220,10 +221,10 @@ initFromEnv() { # {{{
     fi
     # Title # {{{
     if [[ ! -z $t ]]; then
-      set_title --from-tmux $sessionName:$w --lock "$t"
+      set-title --from-tmux $sessionName:$w --lock "$t"
       sleep 0.1
     fi # }}}
-    if tm --l-restore --check "$p" "$t"; then
+    if $ALIASES_SCRIPTS/tmux/tm.sh --l-restore --check "$p" "$t"; then
       run $sessionName:$w.1 "layout"
     else
       # Preconfigured Splits # {{{
@@ -263,7 +264,7 @@ initFromEnv() { # {{{
     # Wait for a window to be fully created # {{{
     if [[ ! -z $t ]]; then
       local cnt=10
-      while ! tmux list-windows -t $sessionName -F '#W' | command grep -q "^$t$" && [[ $cnt -gt 0 ]]; do
+      while ! tmux list-windows -t $sessionName -F '#W' | grep -q "^$t$" && [[ $cnt -gt 0 ]]; do
         sleep 0.3
         cnt=$(($cnt-1))
       done
@@ -302,7 +303,6 @@ else
     isSession "$s" && return 1
     tmux -u new-session -d -s "$s" -c "$p" $tmux_size_params || return 1
     tmux set -q -t $s @tmux_path "$p"   || return 1
-    tmux set-environment -gur RCSTUFF_FUNCTION_EXPORTED
   } # }}}
 fi
 # }}}
@@ -352,7 +352,7 @@ makePreconfiguredSplits() { # {{{
                    [[ $sessionName == 'REMOTE' ]] && sessionName=$(getRemoteSessionName);;
       --pwd)       path=$2; shift;;
       --wnd)       wnd=$2; shift;;
-      --wnd-name)  wnd="$(tmux list-windows -t "$sessionName" -F '#I |#W|' | command grep -F "|$2|" | cut -d' ' -f1)"; shift;;
+      --wnd-name)  wnd="$(tmux list-windows -t "$sessionName" -F '#I |#W|' | grep -F "|$2|" | cut -d' ' -f1)"; shift;;
       --cnt-panes) cnt_panes=$2; shift;;
       *)           cfg=$1;  break;
     esac
@@ -400,6 +400,21 @@ makePreconfiguredSplits() { # {{{
   done
 } # }}}
 restoreSaved() { # {{{
+  addWindow() { # {{{
+    local -n toIncludeRef="TMUX_SESSION_${sessionName^^}_INCLUDE"
+    if [[ ! -z $toIncludeRef ]]; then
+      [[ " ${toIncludeRef^^} " == *" ${title^^} "$ ]] && return 0
+    fi
+    local -n toExcludeRef="TMUX_SESSION_${sessionName^^}_EXCLUDE"
+    if [[ ! -z $toExcludeRef ]]; then
+      [[ " ${toExcludeRef^^} " == *" ${title^^} "$ ]] && return 1
+    fi
+    if [[ ! -z $toInclude && -s $toInclude ]]; then
+      grep -q -i "^$title$" "$toInclude" && return 0
+    fi
+    [[ $title == ^[A-Z].+-[0-9]+$ ]] || return 0
+    return 1
+  } # }}}
   local i=
   declare -A openVimIn
   while [[ ! -z $1 ]]; do # {{{
@@ -414,28 +429,31 @@ restoreSaved() { # {{{
   done # }}}
   local sessionName="${1:-$sessionName}"
   local src="$APPS_CFG_PATH/tmux/sessions/$sessionName/windows.save"
+  local toInsclude="$APPS_CFG_PATH/tmux/sessions/$sessionName/windows.current"
   [[ -e $src ]] || touch $src
   local windows="$(tmux list-windows -t $sessionName -F '#I #W')"
   local i="$(echo "$windows" | wc -l | xargs)" title= tmp=
-  echor "Restoring layout"
+  echor "$sessionName: restoring layout"
   while read title tmp; do
+    [[ -z $title ]] && continue
+    addWindow $title || { unset openVimIn[$title]; continue; }
     title=${title#*:}
     local no="$(echo "$windows" | awk '/ '"$title"'$/ {print $1}')"
     if [[ -z $no ]]; then
       tmux new-window -t $sessionName:$i -a -d
       i=$((i+1)); no=$i
       sleep 0.3
-      run $sessionName:$no set_title "$title"
+      run $sessionName:$no set-title "$title"
       sleep 0.3
     fi
     echor "- $sessionName:$no: $title"
     layoutRestore $sessionName:$no.1
     [[ -v openVimIn[$title] ]] || openVimIn[$title]=
-  done <$src
+  done <<< "$(sed -e '/^\s*$/d' -e '/^#/d' "$src")"
   sleep 2
   while read no title; do
     [[ -v openVimIn[$title] ]] || continue
-    echor "- $sessionName:$no: launching vim (${openVimIn[$title]})"
+    echor "- $sessionName:$no: launching vim$([[ ! -z ${openVimIn[$title]} ]] && echo " (${openVimIn[$title]})")"
     run $sessionName:$no.1 vim-session ${openVimIn[$title]}
     sleep 0.5
   done <<<"$(tmux list-windows -t $sessionName -F '#I #W')"
@@ -452,9 +470,9 @@ if ! declare -f initTmux_MAIN >/dev/null 2>&1; then
         select-pane   -t $sessionName:1.1
       local isNet=false vims=
       net --wait=10s && isNet=true
-      run $sessionName:1 set_title "Widgets"
+      run $sessionName:1 set-title "Widgets"
       makePreconfiguredSplits --wnd 1
-      run $sessionName:2 set_title "Tools"
+      run $sessionName:2 set-title "Tools"
       if [[ " $TMUX_INIT_SESSIONS " != *" ENV "* || " $TMUX_INIT_SESSIONS_SKIP " == *" ENV "* ]]; then
         vims+=" Tools"
       fi
@@ -470,8 +488,8 @@ if ! declare -f initTmux_MAIN >/dev/null 2>&1; then
         select-window -t $sessionName:1 \; \
         select-pane   -t $sessionName:1.1
       run $sessionName:1.1 cd "$SCRIPT_PATH"
-      run $sessionName:1 set_title "Tools"
-      run $sessionName:2 set_title "Main"
+      run $sessionName:1 set-title "Tools"
+      run $sessionName:2 set-title "Main"
       restoreSaved --vims "Main:docker"
     } # }}}
   fi
@@ -499,7 +517,7 @@ initTmux_ROOT() { # {{{
   fi
   tmux set -qg lock-server on
   tmux set -qg lock-after-time ${TMUX_LOCK_TIMEOUT_ROOT:-300}
-  $HOME/.tmux.bash status_left "$(getUnicodeChar 'root')" '#[fg=colour226]'
+  $HOME/.tmux.bash status_left "$(get-unicode-char 'root')$(get-unicode-char 'root')" '#[fg=colour226]'
 } # }}}
 # }}}
 # MAIN # {{{
@@ -510,7 +528,7 @@ sessionEnvParams=
 do_attach="$([[ "${BASH_SOURCE[0]}" == "$0" ]] && echo 'false' || echo 'true')"
 todo="pre init env post"
 dbg=false
-[[ -z $1 ]] && set -- --do-env ${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}
+[[ -z $1 ]] && set -- --do-env ${TMUX_SESSION:-$([[ -n $TMUX ]] && tmux display-message -p -t $TMUX_PANE -F '#S')}
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   --no-progress) TMUX_INIT_PROGRESS=false;;
@@ -524,7 +542,7 @@ while [[ ! -z $1 ]]; do # {{{
     if [[ $2 == '--' ]]; then
       shift 2
       sessionName="$1"
-      [[ -z $sessionName || $sessionName == '.' ]] && sessionName="${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}"
+      [[ -z $sessionName || $sessionName == '.' ]] && sessionName="${TMUX_SESSION:-$([[ -n $TMUX ]] && tmux display-message -p -t $TMUX_PANE -F '#S')}"
       sessions="$sessionName"
       shift
       sessionEnvParams="$sessionName"
@@ -533,7 +551,7 @@ while [[ ! -z $1 ]]; do # {{{
     fi ;; # }}}
   --env) # {{{
     shift
-    sn="${TMUX_SESSION:-$(tmux display-message -p -t $TMUX_PANE -F '#S')}"
+    sn="${TMUX_SESSION:-$([[ -n $TMUX ]] && tmux display-message -p -t $TMUX_PANE -F '#S')}"
     initFromEnv "${@:-$sn}"
     exit;; # }}}
   --preconfigure) # {{{
@@ -596,7 +614,7 @@ buffers_path=$RUNTIME_PATH/tmux-buffers
 for i in $(cd $buffers_path && ls *.buffer 2>/dev/null); do
   tmux load-buffer -b "${i/.buffer}" $buffers_path/$i
 done # }}}
-[[ ! -z $TMUX_USE_NICE_PRIO ]] && sudo renice -n ${TMUX_USE_NICE_PRIO} -p $(command ps -A -o pid,comm | command grep 'tmux: server' | awk '{print $1}') >/dev/null 2>&1
+[[ ! -z $TMUX_USE_NICE_PRIO ]] && sudo renice -n ${TMUX_USE_NICE_PRIO} -p $(ps -A -o pid,comm | grep 'tmux: server' | awk '{print $1}') >/dev/null 2>&1
 rm -rf $TMUX_INIT_LOCK
 if $do_attach; then # {{{
   trap "kill -SIGHUP $PPID" SIGHUP

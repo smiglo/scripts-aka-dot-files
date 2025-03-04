@@ -15,7 +15,7 @@ case $c in
 -H | --help | help) # {{{
   ret+=" $(awk -F ')' '/^-.*).*#\s*\{{3}$/{print $1}' "$0" | sed -e '/($/d' -e 's/|//g' -e "s/''//g")" ;& # }}}
 -h | '') # {{{
-  ret+=" $( command grep -v "# IGN" "$0" | awk -F ')' '/^[a-z].*).*#\s*\{{3}$/{print $1}' | sed -e '/(/d')"
+  ret+=" $(grep -v "# IGN" "$0" | awk -F ')' '/^[a-z].*).*#\s*\{{3}$/{print $1}' | sed -e '/(/d')"
   echo $ret | tr ' ' '\n' | sort | tr '\n' ' '; echo;; # }}}
 -i | --install) # {{{
   sudo cp $0 /root/bin/utils.sh;; # }}}

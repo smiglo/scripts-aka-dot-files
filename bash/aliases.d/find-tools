@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+find-wide() { # {{{
+  $ALIASES_SCRIPTS/find-tools/find-wide.sh "$@"
+} # }}}
+find-up() { # @@ # {{{
+  $ALIASES_SCRIPTS/find-tools/find-up.sh "$@"
+} # }}}
+export -f find-wide find-up
+

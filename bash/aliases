@@ -31,7 +31,7 @@ else
   ___rcstuff_aliases_markup() { : ; }
   export -f ___rcstuff_aliases_markup
 fi # }}}
-install() { # START: install # {{{
+install-function() { # START: install-function # {{{
   $BASH_ALIASES_FROM_CMD && return 0
   local doCheck=true
   [[ $1 == --force-yes ]] && doCheck=false && shift
@@ -46,9 +46,9 @@ install() { # START: install # {{{
   [[ ! -z $add_completion ]] && export COMPLETION_GENERIC_FUNCTIONS+=" ${add_completion//:/ }"
   return 0
 }
-export -f install
-# END: install # }}}
-installExtensions() { # START: installExtensions # {{{
+export -f install-function
+# END: install-function # }}}
+install-extensions() { # START: install-extensions # {{{
   local ask=true
   [[ $1 == --no-ask ]] && ask=false && shift
   local name="$2"
@@ -92,7 +92,7 @@ installExtensions() { # START: installExtensions # {{{
         compl=""
       fi # }}}
       command grep -q "^# env:" "$fi" && eval "$(sed -n '/# env: /s/# env: \(.*\)/\1/p' "$fi")"
-      if install $(! $ask_i && echo "--force-yes") "$i$compl"; then # {{{
+      if install-function $(! $ask_i && echo "--force-yes") "$i$compl"; then # {{{
         if [[ ! -e "$dumpFile" ]]; then
           cat >"$dumpFile" <<-EOF
 						#!/usr/bin/env bash
@@ -127,8 +127,8 @@ installExtensions() { # START: installExtensions # {{{
     export ALIASES_TS_${name^^}="$(command stat -c %Y "$dumpFile")"
   fi
 }
-export -f installExtensions
-# END: installExtensions # }}}
+export -f install-extensions
+# END: install-extensions # }}}
 # Check ALIASES_MAP # {{{
 TO_INSTALL=''
 if [[ $ALIASES_MAP == 'NONE' ]]; then
@@ -154,7 +154,7 @@ echorm "To alias: [$TO_INSTALL]"
 # }}}
 # Functions # {{{
 if ! ${BASH_ALIASES_FROM_CMD} || ! declare -F $1 >/dev/null 2>&1; then
-  installExtensions --no-ask "$SCRIPT_PATH/bash/aliases.d" main
+  install-extensions --no-ask "$SCRIPT_PATH/bash/aliases.d" main
 fi
 # }}}
 # MAIN # {{{

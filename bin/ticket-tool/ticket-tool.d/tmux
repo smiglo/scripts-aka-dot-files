@@ -10,16 +10,16 @@ if [[ $1 == 'INIT' ]]; then
 else
   title="${title}-ext"
 fi
-tmux list-windows -F '#W' | command grep -q "$title" && exit 0
+tmux list-windows -F '#W' | grep -q "$title" && exit 0
 export w=$(($(tmux display-message -p -F '#I') + 1))
-export pl_abs="$(command cd $path_issue; pwd)"
+export pl_abs="$(cd $path_issue; pwd)"
 export title
 if $isInit; then # {{{
   tmux \
     new-window   -a -n $title -d -c $pl_abs  \; \
     set-option   -t $w -w @locked_title 1    \; \
     split-window -t $w.1 -d -c $pl_abs -v -p30
-  set_title --from-tmux $w --lock-force "$title"
+  set-title --from-tmux $w --lock-force "$title"
   func="$(getFunctionBody "tmux-init" --plain)"
   [[ ! -z $func ]] && bash -c "$func" - "$@"
   sleep 1
@@ -33,7 +33,7 @@ else # {{{
   if [[ ! -z $func ]]; then
     if bash -c "$func" - "$@"; then
       tmux select-pane -t $w.1
-      set_title --from-tmux $w --lock-force "$title"
+      set-title --from-tmux $w --lock-force "$title"
       sleep 1
       func="$(getFunctionBody "tmux-cmds")"
       [[ ! -z $func ]] && bash -c "$func" - "$@"

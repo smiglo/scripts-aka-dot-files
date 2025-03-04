@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-isInstalled() { # @@ # {{{
+is-installed() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "-f --function -F -x --exporter-Function -b --both -w --which -t --type -v --var"
     return 0
@@ -22,59 +22,10 @@ isInstalled() { # @@ # {{{
   done # }}}
   return $err
 }
-export HISTIGNORE+=":isInstalled" # }}}
-saveInBackup() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "-s -d --dir -v -vv"
-    return 0
-  fi # }}}
-  local s= d= dir=$BACKUP_PATH verbose=0 isRemote=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -s)    s="$2"; shift;;
-    -d)    d="$2"; shift;;
-    -v)    verbose=1;;
-    -vv)   verbose=2;;
-    --dir) dir=$2; shift
-    esac; shift
-  done # }}}
-  [[ -z $dir ]] && return 100
-  if $SHARABLE_REAL && [[ ! -z $SHARABLE_PATH && $dir == $SHARABLE_PATH* ]]; then
-    ! command ping -c1 -w1 8.8.8.8 >/dev/null 2>&1 && echorm "No connectivity" && return 10
-    [[ ! -e $SHARABLE_PATH/.mounted ]] && echorm "Not connected" && return 11
-    isRemote=true
-  fi
-  [[ -t 0 && -t 1 && -z $s && -z $d ]] && return 0
-  if [[ -t 1 || $d != '-' ]]; then # {{{
-    [[ -z $d && ! -z $s ]] && d="$dir/$(basename "$s")"
-    [[ -z $d ]] && echorm 0 "No dst file" && return 1
-    [[ $d == '/'* || $d = './'* ]] || d="$dir/$d"
-    if [[ ! -e "$(dirname "$d")" ]]; then
-      command mkdir -p "$(dirname "$d")" >/dev/null 2>&1 || return 2
-    fi
-  elif [[ $d == '-' ]]; then
-    d=
-  fi # }}}
-  if [[ -z $s ]]; then # {{{
-    [[ ! -t 0 ]] && s="-"
-    [[ -z $s ]] && echorm 0 "No src file" && return 1
-  fi # }}}
-  local err=0 stderr='/dev/stderr'
-  [[ $verbose -lt 2 ]] && stderr='/dev/null'
-  if [[ ! -z $d ]]; then
-    if $isRemote; then
-      eval run_for_some_time $(isInstalled -w timeout && echo "--use-timeout") --wait 10s --cmd "cat \"$s\" >\"$d\""
-    else
-      cat "$s" >"$d"
-    fi
-    err=$?
-  else
-    cat "$s"; err=$?
-  fi 2>$stderr
-  [[ $err != 0 && $verbose -ge 1 ]] && echorm 0 "Cannot save (e:$err) file '$s' -> '$d'"
-  return $err
-}
-export HISTIGNORE+=":saveInBackup" # }}}
+export HISTIGNORE+=":is-installed" # }}}
+save-in-backup() { # @@ # {{{
+  $ALIASES_SCRIPTS/small-utils/save-in-backup.sh "$@"
+} # }}}
 runx() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "-v -vv --cmd --cnt"
@@ -83,8 +34,8 @@ runx() { # @@ # {{{
   local c= cmd=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    -v)    echorm -M + 1;;
-    -vv)   echorm -M + 2;;
+    -v)    echormf -M + 1;;
+    -vv)   echormf -M + 2;;
     --cmd) shift; cmd="$1"; break;;
     --cnt) shift; c="$1";;
     *) # {{{
@@ -96,149 +47,30 @@ runx() { # @@ # {{{
       fi;; # }}}
     esac; shift
   done # }}}
-  [[ -z $c   ]] && echorm 0 "number of iterations not set" && return 1
-  [[ -z $cmd ]] && echorm 0 "command not set" && return 1
-  echorm "cnt: $c, cmd: $cmd"
+  [[ -z $c   ]] && echormf 0 "number of iterations not set" && return 1
+  [[ -z $cmd ]] && echormf 0 "command not set" && return 1
+  echormf "cnt: $c, cmd: $cmd"
   local n= err=0
   for ((n=0; n<$c; n++)); do
     eval "$cmd" || { err=$?; break; }
   done
   return $err
 } # }}}
-cat() { # {{{
-  local bcUse=false bcP="--pager auto"
-  if [[ -z $BAT_INSTALLED ]]; then # {{{
-    export BAT_INSTALLED=true
-    export BAT_PRG='batcat'
-    $IS_MAC && BAT_PRG='bat'
-    isInstalled $BAT_PRG || BAT_INSTALLED=false
-  fi # }}}
-  case ${FUNCNAME[*]} in
-  cat) # {{{
-    bcUse=$BAT_INSTALLED
-    if [[ $1 == '--' || ( $1 == '-' && ! -z $2 ) ]]; then
-      shift
-      [[ -t 1 ]] && bcUse=false || bcP+=" --color always"
-    fi;; # }}}
-  *) # {{{
-    [[ $1 == '--' || ( $1 == '-' && ! -z $2 ) ]] && bcUse=$BAT_INSTALLED && shift;; # }}}
-  esac
-  if $bcUse; then
-    local f1= i=
-    for i; do # {{{
-      [[ -e $i ]] && f1=$i && break
-    done # }}}
-    if [[ ! -z $f1 ]]; then # {{{
-      while true; do
-        case $(head -n1 $f1) in
-        '#!/bin/bash'*         | '#!/bin/sh'* | \
-        '#!/usr/bin/env bash'* | '#!/usr/bin/env sh'*)
-          bcP+=" -l sh" && break;;
-        esac
-        if [[ $f1 == *.txt ]]; then
-          local nameD="$(basename "$(dirname "$(realpath "$f1")")")"
-          local nameF="$(basename "$f1")"
-          [[ "${nameD}-data.txt" == ${nameF#.} ]] && bcP+=" -l sh" && break
-        fi
-        break
-      done
-    fi # }}}
-    command $BAT_PRG $bcP "$@"
-  else
-    command cat "$@"
-  fi
-} # }}}
+# }}}
 up() { # {{{
-  isInstalled up || { echor "up not installed"; return 1; }
+  is-installed up || { echor "up not installed"; return 1; }
   ( TERM='xterm-256color' command up "$@" )
-} # }}}
-man() { # {{{
-  if [[ ! -t 1 ]]; then
-    command man "$@"
-    return
-  fi
-  local list="$@"
-  if [[ -z $list ]]; then
-    list="$(man -k . \
-      | sort -k2,2 -k1,1 \
-      | fzf \
-          --no-sort \
-          --preview="echo {1,2} | sed 's/^\([^ ]\+\) *(\([^)]\+\)).*/-S \2 \1/' | xargs man" \
-      | sed 's/^\([^ ]\+\) *(\([^)]\+\)).*/-S \2 \1/')"
-    [[ -z $list ]] && return 0
-  fi
-  (
-    set -o pipefail
-    echo "$list" | while read -r l; do
-      man $l | \
-      if $BAT_INSTALLED; then $BAT_PRG -l man -p --theme "$BAT_THEM2";
-      else less;
-      fi
-    done
-  )
-  return 0
 } # }}}
 clean-ansi() { # {{{
   if [[ ! -z $1 ]]; then
     echo -e "$@"
   else
-    cat -
+    command cat -
   fi | sed -e 's/\x1b\[[0-9;]\+[mMGK]//g' -e 's/\x1b\[[Jm]//g'
 } # }}}
 capture() { # @@ # {{{
-  local captureFile=$CAPTURE_FILE
-  if [[ -z $CAPTURE_FILE ]]; then
-    captureFile="$TMP_MEM_PATH/capture.txt"
-    $IS_DOCKER && captureFile="${captureFile/$HOME/$DOCKER_HOST}"
-  fi
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -m | --mode) echo "append override edit";;
-    -t | --title) echo "TITLE";;
-    -f | --file)
-      getFileList --pwd "$(dirname "$captureFile")" '*.txt'
-      getFileList --pwd "$(dirname "$captureFile")" '*.out';;
-    *) echo "-f --file -t --title - -m --mode -e --edit -n --new -i -s"
-    esac
-    return 0
-  fi # }}}
-  local tmp=$TMP_MEM_PATH/out.$$ title= mode="append" out="/dev/stdout"
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -t | --tile) title="$2"; shift;;
-    -f | --file) # {{{
-      case $2 in
-      */* | -) captureFile="$2";;
-      *) captureFile="$(dirname "$captureFile")/$2";;
-      esac; shift;; # }}}
-    -e | --edit) mode="edit";;
-    -n | --new)  mode="override";;
-    -i) echo "$captureFile"; return 0;;
-    -s) out="/dev/null";;
-    -) captureFile="-";;
-    esac; shift
-  done # }}}
-  case $mode in
-  edit) # {{{
-    vim $captureFile;; # }}}
-  append | override) # {{{
-    case $mode in
-    override) rm -f $captureFile;;
-    esac
-    [[ -t 0 ]] && echor "not in pipie" && return 1
-    echo "# $([[ ! -z $title ]] && echo "$title # ")$(command date +$DATE_FMT) # {{{" >>$tmp
-    /bin/cat - | tee -a $tmp >$out
-    echo "# }}}" >>$tmp
-    if [[ $captureFile != '-' ]]; then
-      [[ -e $captureFile ]] && cat $captureFile >>$tmp
-      mv $tmp $captureFile
-    else
-      /bin/cat $tmp
-    fi
-    rm -rf $tmp;; # }}}
-  esac
-}
-export PHISTORY_IGNORED_COMMANDS+=":capture" # }}}
+  $ALIASES_SCRIPTS/small-utils/capture.sh "$@"
+} # }}}
 mapShortCutToFull() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "-a --all PREFIX SET"
@@ -329,40 +161,13 @@ bash-on-list() { # @@ # {{{
   OLDPWD="$oPWD"
   return $retVal
 } # }}}
-cp-sturct() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -f) echo "CONTENT-FILE";;
-    *)  echo "-m --move DST";;
-    esac
+fix-agent() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "--start --start-if --fix --fix-tmux"
     return 0
-  fi # }}}
-  local dst= move=false contentFile=$TMP_MEM_PATH/cp.struct.$$ userCF=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -f) contentFile=$2; userCF=true; shift;;
-    -m | --move) move=true;;
-    *) break;;
-    esac; shift
-  done # }}}
-  dst=$1
-  if [[ ! -t 0 ]]; then
-    cat - $contentFile
-  elif ! $userCF; then
-    f +tee=false . | fzf --prompt "Files > " >$contentFile
   fi
-  [[ -s $contentFile ]] || eval $(die -r "no content")
-  [[ ! -z "$dst" ]] || dst="out"
-  [[ -e "$dst" ]] || mkdir -p "$dst"
-  tar -cf - -T $contentFile | tar -C $dst -xf -
-  [[ $? == 0 ]] || eval $(die -r "copy has failed")
-  if $move; then # {{{
-    local i=
-    while read i; do
-      rm -rf "$i"
-    done <<<$(cat $contentFile)
-  fi # }}}
-  $userCF || rm -f $contentFile
+  [[ -z $1 ]] && set -- --fix
+  source $SCRIPT_PATH/bin/fix_ssh_agent.sh "$@"
 } # }}}
 clr() { # @@ # {{{
   local scr=true reset=false hist=false
@@ -393,6 +198,7 @@ clr() { # @@ # {{{
   if $hist && [[ -n $TMUX ]]; then
     tmux clear-history
   fi
+  unset PS1_CONVERTER_ADD_SEPARATOR
   return 0
 } # }}}
 getCurPos() { # {{{
@@ -407,119 +213,7 @@ sudo() { # {{{
     command sudo --preserve-env=HOME -s
   fi
 } # }}}
-psgrep() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -o)
-      echo "pid,cmd pid,user,start,cmd cmd";;
-    *)
-      echo "-p -a -o"
-      ! $IS_MAC && echo "-t --tree"
-      echo "PROCESS";;
-    esac
-    return 0
-  fi # }}}
-  local paramCmd="cmd"
-  $IS_MAC && paramCmd="command"
-  local phrase= i= mode='all' list= params="xh -o pid,start,$paramCmd"
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -p)   mode='pid';;
-    -a)   params="axh -o pid,user,start,$paramCmd";;
-    -o)   params="${params%% -o *} -o $2"; shift;;
-    -t | --tree) # {{{
-      $IS_MAC && eval $(die "tree not supported on OS/X")
-      command ps $params --forest | { if isInstalled grcat; then grcat conf.ps; else /bin/cat -; fi; }
-      return;; # }}}
-    *)    list+=" $1";;
-    esac; shift
-  done # }}}
-  local w="$(command ps $params)"
-  for i in ${list:-^}; do
-    echo "$w" | command grep -iE "$i" | \
-    case $mode in
-    all) { if isInstalled grcat; then grcat conf.ps; else /bin/cat -; fi; };;
-    pid) awk '{print $1}';;
-    esac
-  done
-}
-alias pg="psgrep" # @@
-# }}}
-loop() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -c | --cnt) echo "1 5 10 100";;
-    -m | --msg) echo "MSG";;
-    --progress-params) echo "PROGRESS-PARAMS";;
-    --on-change) echo "@@-f";;
-    *) echo "-c --cnt -m --msg -h -s -ss CMD --progress-params --on-change --run-first --clear +time +ts";;
-    esac
-    return 0
-  fi # }}}
-  local cnt=-1 msg= cmd= stopOnErr=false silent=0 progressParams= waitOnFirst=true monitoredFile= addTime=false addTS=false clearOnStart=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -c | --cnt) cnt="$2"; shift;;
-    -m | --msg) msg="$2"; shift;;
-    --progress-params) progressParams+=" $2"; shift;;
-    --on-change) monitoredFile="$2"; shift;;
-    --run-first) waitOnFirst=false;;
-    --clear) clearOnStart=true;;
-    +time) addTime=true;;
-    +ts)   addTS=true;;
-    -h)  stopOnErr=true;;
-    -s)  silent=$((silent+1));;
-    -ss) silent=2;;
-    *)   cmd="$@"; shift $#;;
-    esac; shift
-  done # }}}
-  [[ -z $cmd ]] && return 1
-  if [[ ! -z $monitoredFile ]]; then
-    [[ $monitoredFile == '-' ]] && monitoredFile="${cmd%% *}"
-    progressParams+=" --file-mod $monitoredFile"
-  fi
-  local err=0 devOut=/dev/stdout devErr=/dev/stderr
-  local progr_colors=($CYellow $CPurple $CBlue $CGreen) progr_i=0
-  [[ $silent -ge 1 ]] && devOut=/dev/null
-  [[ $silent -ge 2 ]] && devErr=/dev/null
-  if [[ -z $msg ]]; then # {{{
-    msg="${cmd%% *}"
-    [[ $msg == */* ]] && msg="$(basename "$msg")"
-  elif [[ $msg == '-' ]]; then
-    msg=
-  fi # }}}
-  local ts="0.000"
-  while true; do # {{{
-    local m= key=
-    if [[ $err = 0 ]]; then
-      m="$(cl ok $err)|"
-    else
-      m="$(cl err $err)|"
-    fi
-    $addTime && m+="$(cl info $(date +$TIME_FMT))|"
-    $addTS && m+="$(cl ts $ts)|"
-    [[ ! -z $msg ]] && m+=" $msg"
-    ! $waitOnFirst || key="$(progress --key --keys "cC" --no-err --color "${progr_colors[progr_i]}" --msg "$m" $progressParams)" || break
-    progr_i="$(((progr_i+1)%${#progr_colors[*]}))"
-    case $key in
-    c) clear;;
-    C) clear; continue;;
-    *) $clearOnStart && clear;;
-    esac
-    waitOnFirst=true
-    ts="$(getTS)"
-    $cmd >$devOut 2>$devErr
-    ts="$(getTS -o s.ms $ts)"
-    err=$?
-    [[ $err == 0 ]] || ! $stopOnErr || break
-    if [[ $cnt -gt 0 ]]; then
-      cnt=$((cnt - 1))
-      [[ $cnt == 0 ]] && break
-    fi
-  done # }}}
-  return $err
-} # }}}
-for_do() { # {{{
+for-do() { # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "- -l"
     return 0
@@ -533,7 +227,7 @@ for_do() { # {{{
     esac; shift
   done # }}}
   if [[ ! -t 0 ]]; then # {{{
-    arg="$(cat -)"
+    arg="$(<-)"
     cmd="$@" # }}}
   elif [[ "$@" == *\ --\ * ]]; then # {{{
     arg="$@"
@@ -546,79 +240,10 @@ for_do() { # {{{
     cmd="$@"
   fi # }}}
   ! $wasBracketParam && [[ $cmd == *{}* ]] && xargsP+=" -I{}"
-  echo -n "$arg" | { if $processWords; then sed 's/ /\n/g'; else cat -; fi; } | sed '/^\s*$/d' | eval xargs $xargsP $cmd
-}
-alias for-do='for_do' # }}}
+  echo -n "$arg" | { if $processWords; then sed 's/ /\n/g'; else command cat -; fi; } | sed '/^\s*$/d' | eval xargs $xargsP $cmd
+} # }}}
 change-monitor() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    --dst) echo "FILE @@-f";;
-    -d) echo "DELAY 1 5 10 30";;
-    *)  echo "--dst -d -s --stop @@-f @@-d";;
-    esac
-    return 0
-  fi # }}}
-  local dst=$TMP_MEM_PATH/change-monitor.$$ toMonitor="." delay=5 useProgress=true stopOnChange=false
-  local dstTmp=$dst.tmp
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --dst) dst="$2"; shift;;
-    -d | --delay) delay="$2"; shift;;
-    -s) useProgress=false;;
-    --stop) stopOnChange=true;;
-    *) toMonitor="$@"; shift $#; break;;
-    esac; shift
-  done # }}}
-  local i= k= list= shaLast= sha=
-  for i in $toMonitor; do # {{{
-    if [[ -d $i ]]; then
-      list+=" $(find "$i" \
-          -name '*.tmp' -prune \
-          -o -name '*.out' -prune \
-          -o -name '*.o'   -prune \
-          -o -name 'Session*.vim'   -prune \
-          -o \( -path '*/.vim/*' \)   -prune \
-          -o \( -path '*/.git/*' \)   -prune \
-          -o \( -path '*/.venv*/*' \) -prune \
-          -o \( -path '*/.tmp/*' \)   -prune \
-          -o -name "$(basename $dst)" -prune \
-          -o -type f -print)"
-    elif [[ -f $i ]]; then
-      list+=" $i"
-    fi
-  done # }}}
-  [[ -z ${list// /} ]] && return 1
-  mkdir -p "$(dirname "$dst")" >/dev/null
-  $useProgress && progress-dot --init --dots-in-packet 10 --packets-in-row 3
-  sha1sum $list >"$dst"
-  shaLast=$(sha1sum "$dst")
-  local exitByChange=true
-  while true; do # {{{
-    sleep-precise -s
-    sha1sum $list>"$dstTmp"
-    mv "$dstTmp" "$dst"
-    sha="$(sha1sum "$dst")"
-    if $useProgress; then
-      if [[ $sha == $shaLast ]]; then
-        progress-dot
-      else
-        progress-dot --dot=yellow:
-      fi
-    fi
-    if [[ $sha != $shaLast ]]; then
-      shaLast=$sha
-      $stopOnChange && break
-    fi
-    if ! read -t $(sleep-precise -i $delay) -s -n1 k; then
-      [[ -e $dst ]] || { exitByChange=false; break; }
-      continue
-    fi
-    case ${k,,} in
-    q) exitByChange=false; break;;
-    esac
-  done # }}}
-  $useProgress && progress-dot --end
-  $exitByChange && return 0 || return 1
+  $ALIASES_SCRIPTS/small-utils/change-monitor.sh "$@"
 } # }}}
 fix_caps() { # {{{
   which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
@@ -627,49 +252,13 @@ fix_caps() { # {{{
     xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
   fi
 } # }}}
-pid-tree() ( # {{{
-  local p= pp=
-  declare -A childs
-  walk() { # {{{
-    echo $1
-    local p=
-    for p in ${childs[$1]};do
-      walk $p
-    done
-  } # }}}
-  while read p pp;do
-    childs[$pp]+="$p "
-  done < <(ps -e -o pid= -o ppid=)
-  for p in "${@:-$$}";do
-    walk $p
-  done
-)
+pid-tree() { # @@ # {{{
+  $ALIASES_SCRIPTS/small-utils/pid-tree.sh "$@"
+}
 export PHISTORY_IGNORED_COMMANDS+=":pid-tree" # }}}
 kill-rec() { # @@ # {{{
-  if [[ "$1" == '@@' ]]; then # {{{
-    pids="$(command ps --no-headers -o pid,comm)"
-    echo "$pids" | command grep -v "$$"
-    echo "-SIGTERM -SIGKILL -SIGABRT -9 --dbg"
-    return 0
-  fi # }}}
-  local signal='-SIGTERM' verbose=false i=
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --dbg)        verbose=true;;
-    -*)           signal="$1";;
-    *)            break;;
-    esac; shift
-  done # }}}
-  [[ -z $1 ]] && echor "PID needed" && return 1
-  for i; do
-    local pids=$(pid-tree $i)
-    echor -c $verbose "pids: [$pids]"
-    kill $signal $pids >/dev/null 2>&1
-    wait $pids >/dev/null 2>&1
-  done
-  return 0
+  $ALIASES_SCRIPTS/small-utils/kill-rec.sh "$@"
 }
-alias kr='kill-rec' # @@
 export PHISTORY_IGNORED_COMMANDS+=":kill-rec:kr" # }}}
 zipf() { # {{{
   [ -d "$1" ] && zip -r $1.zip $@ && return 0
@@ -684,54 +273,25 @@ logout() { # {{{
     tmux detach -P
   fi
 } # }}}
-dum() { # @@ # {{{
-  if [[ $1 == @@ ]]; then # {{{
-    local ret=
-    if $IS_MAC; then # {{{
-      local i=
-      for i in $(command mount | awk '/\/Volumes\// { print $3 }'); do
-        [[ $i == *MobileBackups ]] && continue
-        ret+=" $i"
-      done
-      for i in $(command mount | awk '/\/Volumes\// { print $1 }'); do
-        [[ $i == localhost* ]] && continue
-        ret+=" $i"
-      done # }}}
-    else # {{{
-      ret="$(command mount | awk '/\/media\/'$USER'\// { print $3 }')"
-    fi # }}}
-    echo "${ret:----}"
-    return 0
-  fi # }}}
-  local src="$1"; shift
-  [[ -z $src ]] && ! $IS_MAC && src="$(getFileList -t -1 "/media/$USER/*")"
-  [[ -z $src ]] && echor "Mountpoint not specified" && return 1
-  while [[ ! -z $src ]]; do
-    local err=
-    [[ ! -e $src ]] && echor "Mountpoint does not exist [$src]" && return 1
-    progress --mark --msg "Unmounting $src" --dots --delay 0.1
-    if $IS_MAC; then # {{{
-      if [[ $src == /dev/* ]]; then
-        diskutil unmountDisk $src >/dev/null && diskutil eject $src >/dev/null
-      elif [[ $src == /Volumes/* ]]; then
-        diskutil unmount "$src" >/dev/null
-      fi # }}}
-    else # {{{
-      if [[ $src == /dev/* ]]; then
-        umount $src
-      elif [[ $src == /media/* ]]; then
-        umount $src
-      else
-        ( set -xv
-          sudo umount $src
-        )
-      fi
-    fi # }}}
-    err=$?
-    progress --unmark --err=$err
-    src="$1"; shift
-  done
-  return $err
+byebye() { # {{{
+  local ask=true overSSH=false
+  [[ $1 == '-' ]] && ask=false
+  $ask && ! progress --msg "suspend & log off" --wait 3s --key && return 0
+  if [[ -n $TMUX ]]; then
+    local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
+    if $IS_MAC; then
+      pstree -p $cpid | command grep -q ' sshd:\?\($\| \)' && overSSH=true
+    else
+      pstree -A -s $cpid | command grep -q -e '---sshd---' && overSSH=true
+    fi
+  elif [[ -n $SSH_CONNECTION ]]; then
+    overSSH=true
+  fi
+  ( sleep 5 && suspend ) &
+  disown
+  if $overSSH; then
+    logout
+  fi
 } # }}}
 Exit() { # {{{
   if [[ ! -n $TMUX ]]; then
@@ -775,8 +335,9 @@ bash-trace() { # @@ # {{{
         echo
       ) >"$file"
     fi # }}}
-    local no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") + 1 ))"
-    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mS$ms$ms" >>"$file"
+    local no=1
+    [[ -e $file ]] && no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") + 1 ))"
+    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mS$mS$mS" >>"$file"
     eval "exec $xtraceFD>>\"$file\""
     export BASH_XTRACEFD=$xtraceFD
     set -x;; # }}}
@@ -788,7 +349,7 @@ bash-trace() { # @@ # {{{
     echo "$(time2s now): trace#$(printf "%02d" "$no") # $mE$mE$mE" >>"$file";; # }}}
   follow) # {{{
     if [[ $file == '-' ]]; then
-      file="$(getFileList -t -1 "$TMP_MEM_PATH/trace.*.log")"
+      file="$(get-file-list -t -1 "$TMP_MEM_PATH/trace.*.log")"
       [[ -e $file ]] && echor "Following $(basename "$file")"
     fi
     if [[ ! -e $file && $file != /* && $file != ./* ]]; then # {{{
@@ -804,6 +365,15 @@ bash-trace() { # @@ # {{{
   *) # {{{
     echor "Wrong mode [$mode]"; return 1;; # }}}
   esac
+}
+export -f bash-trace # }}}
+remove-dups() { # {{{
+  local sep="${2:-:}"
+  printf "%s" "$1" | /usr/bin/awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
+} # }}}
+remove-dups() { # {{{
+  local sep="${2:-:}"
+  printf "%s" "$1" | /usr/bin/awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
 } # }}}
 # OS specifics # {{{
 if ! $IS_MAC; then
@@ -863,4 +433,5 @@ else
   } # }}}
 fi
 # }}}
+export -f is-installed save-in-backup mapShortCutToFull rpath change-monitor pid-tree kill-rec bash-trace remove-dups capture
 

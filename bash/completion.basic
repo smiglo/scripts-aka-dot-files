@@ -9,10 +9,6 @@ compl-add() { # {{{
     complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i
   done
 }
-completion_add() {
-  compl-add "$@"
-}
-export -f compl-add completion_add
 # }}}
 _completion_generic() { # {{{
   local cur= prev= opts= cmd= _alias= param= i=
@@ -26,7 +22,7 @@ _completion_generic() { # {{{
     cmd=${COMP_WORDS[0]}
   fi
   param="@@"
-  if [[ $cmd == 'git' ]]; then
+  if [[ $cmd == 'git' || ( $cmd == 'g' && $(alias g 2>/dev/null) =~ 'git' ) ]]; then
     cmd="git-cmds.sh"
     param+="${COMP_WORDS[1]}"
   else
@@ -58,7 +54,7 @@ _completion_generic() { # {{{
              done < <(compgen ${1:2} -- "$cur");; # }}}
          esac;; # }}}
     ---) opts="---"; break;;
-    *) opts+=" ${1//@SP@/\\ }";;
+    *) opts+=" $1";;
     esac
     shift
   done # }}}
@@ -66,16 +62,16 @@ _completion_generic() { # {{{
   if [[ "$opts" != '---' ]]; then
     i=0
     while read -r opts; do # {{{
-      COMPREPLY[$i]="${opts// /\\ }"
+      COMPREPLY[$i]="${opts//\\/\\\\}"
       i=$(($i+1))
-    done < <(compgen -W "${opts//\\/\\\\}" -- "$cur") # }}}
+    done < <(compgen -W "$opts" -- "$cur") # }}}
   else
     COMPREPLY[0]=""
   fi
   __ltrim_colon_completions "$cur"
 }
-export -f _completion_generic
 # }}}
+export -f compl-add _completion_generic
 
 source $SCRIPT_PATH/bash/completion.alias
 

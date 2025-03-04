@@ -5,7 +5,7 @@ aawk() { # @@ # {{{
   local scriptPath="$SCRIPT_PATH/bin/awk.script"
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
-    -f) getFileList '*.awk'; getFileList --pwd "$scriptPath" '*.awk';;
+    -f) get-file-list '*.awk'; get-file-list --pwd "$scriptPath" '*.awk';;
     -F) echo "\'[=\\ ]\'";;
     *)  echo "1 2 3 -F -f";;
     esac
@@ -21,17 +21,16 @@ aawk() { # @@ # {{{
     esac; shift
   done # }}}
   if [[ -z $script ]]; then
-    echorm "awk $params '$pre{print \"${print#,}\"}'"
+    echormf "awk $params '$pre{print \"${print#,}\"}'"
     eval awk $params "'$pre{print "${print#,}"}'"
   else
     if [[ $script != /* ]]; then
       [[ ! -e $script ]] && script="$scriptPath/$script"
-      [[ ! -e $script ]] && echorm -C 0 "script file [$script] %err:%s" "not found" && return 1
+      [[ ! -e $script ]] && echormf -C 0 "script file [$script] %err:%s" "not found" && return 1
     fi
-    echorm "awk $params -f $script"
+    echormf "awk $params -f $script"
     eval awk $params -f $script
   fi
 } # }}}
-
 export PHISTORY_IGNORED_COMMANDS+=":aawk"
 

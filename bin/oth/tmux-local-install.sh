@@ -40,7 +40,7 @@ if [[ -e $ROOT/local ]]; then
   mv $ROOT/local $ROOT/local-${suffix}
 fi
 DST="$ROOT/local-$TMUX_INSTALL_VERSION"
-command mkdir -p $DST $ROOT/tmux_tmp
+mkdir -p $DST $ROOT/tmux_tmp
 cd $ROOT/tmux_tmp
 # Download source files for tmux, libevent, and ncurses # {{{
 if [[ -z $LOCAL_TARBALL ]]; then
@@ -91,7 +91,7 @@ else # {{{
 fi # }}}
 cp tmux $DST/bin
 if [[ -e 'tmux.1' ]]; then
-  [[ ! -e "$DST/share/man/man1" ]] && command mkdir -p "$DST/share/man/man1"
+  [[ ! -e "$DST/share/man/man1" ]] && mkdir -p "$DST/share/man/man1"
   cp 'tmux.1' "$DST/share/man/man1/"
   (
     echo ".Sh VERSION"

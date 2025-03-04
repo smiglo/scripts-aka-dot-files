@@ -26,8 +26,8 @@ is-found() { # @@ # {{{
   fi # }}}
   local dbg=${ACTIONS_DBG:-false} mod=-
   if $dbg; then
-    echorm -M -?
-    eval $(echorm -f?var dbg mod)
+    echormf -M -?
+    eval $(echormf -f?var dbg mod)
   fi
   local oOut=/dev/null oErr=/dev/null grepP="-q" inCmdOutput=true
   while [[ ! -z $1 ]]; do # {{{
@@ -48,7 +48,7 @@ is-found() { # @@ # {{{
   [[ -z $phrase || -z $cmd ]] && echor "wrong args [$phrase] [$cmd]" && return 1
   if ! $inCmdOutput; then
     [[ ! -e $cmd ]] && echor "file not exist [$cmd]" && return 1
-    cmd="cat $cmd"
+    cmd="command cat $cmd"
   fi
   $dbg && echorv -M cmd inCmdOutput
   eval "$cmd" | command grep $grepP "$phrase" >$oOut 2>$oErr
@@ -94,8 +94,8 @@ do-action() { # @@ # {{{
   fi # }}}
   local dbg=${ACTIONS_DBG:-false} mod=-
   if $dbg; then
-    echorm -M -?
-    eval $(echorm -f?var dbg mod)
+    echormf -M -?
+    eval $(echormf -f?var dbg mod)
   fi
   local neg=false cmd= ret= oOut=/dev/null oErr=/dev/null isFoundP=
   while [[ ! -z $1 ]]; do # {{{
@@ -164,4 +164,4 @@ tf() { # @@ # {{{
   fi # }}}
   do-action tf "$@"
 } # }}}
-
+export -f is-found do-action

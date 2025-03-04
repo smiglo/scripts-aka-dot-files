@@ -1,565 +1,17 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-randomTextDrawer() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -d) echo "0.01 0.05 0.1 0.3";;
-    --cnt) echo "10 20 100";;
-    --state | --print | --final) echo "CURRENT-STATE";;
-    *) echo "-d --cnt --once --state --final --infinity --print --no-tput";;
-    esac
-    return 0
-  fi # }}}
-  local jM="$((8 + RANDOM%15))" delay=0.1 once=false state= s= ns= final=false useTput=${USE_TPUT:-true} l=0
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -d)      delay="$2"; shift;;
-    --cnt)   jM="$2"; shift;;
-    --once)  once=true;;
-    --state) state="$2"; once=true; shift;;
-    --final) final=true; state="$2"; once=true; shift;;
-    --infinity) jM=0; once=true;;
-    --no-tput)  useTput=false;;
-    --print) # {{{
-      eval "$2"
-      $useTput && tput rc
-      printf "%s" "$ns"
-      [[ "$ns" != "$s" ]]
-      return;; # }}}
-    *) s="$@"; l=${#s}; shift $#; break;;
-    esac; shift
-  done # }}}
-  [[ -z $s && ! -t 0 ]] && s="$(cat -)" && l=${#s}
-  if [[ $jM -gt 0 && $jM -lt 2 ]]; then
-    jM=2
-  elif [[ $jM == 0 ]]; then
-    once=true
-  fi
-  local maxJ=() j=0 i= isHex=false
-  if [[ -z "$state" ]]; then # {{{
-    [[ -z $s ]] && return 1
-    local m=
-    for ((i=0; i<l; i++)); do
-      m=$jM
-      if [[ $jM -gt 0 ]]; then # {{{
-        case $(( i % 4 )) in
-        0) m=$(( $(getRangeValue $((jM-3))) ));;
-        1) m=$(( $(getRangeValue $((jM-5))) ));;
-        2) m=$(( $(getRangeValue $((jM-7))) ));;
-        *) m=$(( 4 + $(getRangeValue $((jM-4))) ));;
-        esac
-        [[ $m -le 0 || $m -ge $jM ]] && m=$((jM-1))
-      fi # }}}
-      maxJ[i]=$m
-    done
-    i=$(getRangeValue $l)
-    maxJ[i]=$jM
-    maxJ[$(((i+l-1)%l))]=$jM
-    [[ $s =~ ^'0x'([0-9A-F])*$ || $s =~ ^'0x'([0-9a-f])*$ ]] && isHex=true
-    trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cvvis || reset; fi; echo >$out; return 0;" INT
-    $useTput && tput sc && tput civis
-    # }}}
-  else # {{{
-    eval "$state"
-    l="${#s}"
-  fi # }}}
-  [[ -z $s ]] && return 1
-  $final && jM=-1
-  local special="-_=+{},.<>/?!@#%^&*()~"
-  local arr_a_z="abcdefghijklmnopqrstuvwz"
-  local arr_A_Z="${arr_a_z^^}"
-  local arr_0_9="0123456789"
-  local r_a_z=${#arr_a_z} r_0_9=10 r_special=${#special}
-  local d= rnd= wasRandom= startTimeUS=${EPOCHREALTIME/[,.]} delayAdjusted=false
-  while true; do # {{{
-    rnd=$RANDOM && d=$rnd
-    ns= wasRandom=false
-    if [[ ( $j != $jM || $jM == 0 ) ]] && ! $final; then
-      for ((i=0; i<l; i++)); do
-        local c="${s:$i:1}"
-        local b=0 r=0
-        if   false; then :
-        elif $isHex && [[ $i -le 1 ]]; then r=-1
-        fi
-        if [[ $r != -1 && ( $j -le ${maxJ[i]} || $jM == 0 ) ]]; then # {{{
-          wasRandom=true
-          local arr=
-          case $c in
-          [A-Z]) arr=$arr_A_Z; r=$r_a_z;;
-          [a-z]) arr=$arr_a_z; r=$r_a_z;;
-          [0-9]) arr=$arr_0_9; r=$r_0_9;;
-          *)     arr=$special; r=$r_special;;
-          esac
-          d=$(((d + rnd) % r))
-          c="${arr:$d:1}"
-        fi # }}}
-        ns+="$c"
-      done
-    else
-      ns="$s"
-    fi
-    if ! $once || $final; then # {{{
-      $useTput && tput rc
-      echo -n "$ns"
-    else
-      echo "ns=\"$ns\""
-    fi # }}}
-    [[ $jM != -1 ]] && j=$((j+1))
-    if [[ $j -gt $jM ]] || ! $wasRandom || $once; then # {{{
-      break
-    fi # }}}
-    if ! $delayAdjusted; then
-      local timeOffsetUS=$((${EPOCHREALTIME/[,.]}-startTimeUS+50000))
-      delay=$(echo "$delay $timeOffsetUS" | awk '{print ($1*10 - $2/10^6)/10}')
-      delayAdjusted=true
-    fi
-    sleep $delay
-  done # }}}
-  if $once && ! $final; then # {{{
-    echo "s=\"$s\""
-    echo "useTput=$useTput"
-    declare -p maxJ
-    echo "j=$j jM=$jM isHex=$isHex"
-  else
-    printf "\n"
-    if $useTput; then
-      ${TPUT_USE_CVVIS:-true} && tput cvvis || reset
-    fi
-    trap - INT
-  fi # }}}
+random-text-drawer() { # @@ # {{{
+  $ALIASES_SCRIPTS/progress/random-text-drawer.sh "$@"
 } # }}}
 progress() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    [[ $2 == --shorts ]] && return 0
-    local retVal=""
-    case $3 in
-    --cnt)     retVal="CNT";;
-    --color | --end-color) retVal="COLOR";;
-    --delay)   retVal="DELAY";;
-    --end-msg) retVal="ON-SUCC:ON-FAIL";;
-    --keys)    retVal="KEYS";;
-    --mark-do) retVal="CMD";;
-    --out)     retVal="/dev/stdout /dev/stderr";;
-    --steps)   retVal="STEPS";;
-    --msg | --end-msg) retVal="MSG";;
-    --unmark)  retVal="--err=0 --err=1 --err=true --err=false -c";;
-    *) # {{{
-      retVal+=" --msg --end-msg --out --color --end-color --clean"
-      retVal+=" --cmd --every-step --file-mod"
-      retVal+=" --delay --cnt --steps --wait --wait-pv"
-      retVal+=" --key --get-key --keys"
-      retVal+=" --err --no-err --err-on-timeout"
-      retVal+=" --mark --unmark --mark-do"
-      retVal+=" --tmux --tmux-only"
-      retVal+=" --dbg --dbg2"
-      retVal+=" --tput --no-tput"
-      retVal+=" --pv --dots --spin --random-text"
-      retVal+=" MSG"
-      ;; # }}}
-    esac
-    echo "$retVal"
-    return 0
-  fi # }}}
-  # Init # {{{
-  [[ -z $COff ]] && source $BASH_PATH/colors
-  local cmd= delay= msg= cnt=0 every=false steps= dbg= endTime=
-  local method= rndTxt=
-  local out="/dev/stderr" color="${CHLSearch}" end_message= end_color=
-  local key=false get_key=false pressed_key= extra_keys=
-  local mark_file="$TMP_MEM_PATH/progress-$PPID.tmp" do_mark=false
-  local tmux_progress=false tmux_entry="PR#$PPID" tmux_text="P[%s]" tmux_progress_only=false
-  local report_error=true report_error_timeout=false retVal=0 useTput=
-  local fileModFile= fileModSha=0
-  if [[ -z $PROGRESS_DOTS_SUPPORTED ]]; then # {{{
-    PROGRESS_DOTS_SUPPORTED=true
-    if [[ ! -z $LC_CTYPE ]] && ! echo "$LC_CTYPE" | command grep -q "UTF-8"; then
-      PROGRESS_DOTS_SUPPORTED=false
-    elif which locale >/dev/null 2>&1 && ! locale | command grep -q "LC_CTYPE=.*UTF-8"; then
-      PROGRESS_DOTS_SUPPORTED=false
-    fi
-  fi # }}}
-  set -- $PROGRESS_PARAMS "$@"
-  local argCnt=$#
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --cmd)        shift; cmd=$1;;
-    --clean)      rm -f $TMP_MEM_PATH/progress-*; return 0;;
-    --delay)      shift; delay=$1;;
-    --msg)        shift; msg=$1;;
-    --cnt)        shift; cnt=$1;;
-    --out)        shift; out=$1;;
-    --color)      shift; color=$1;;
-    --end-color)  shift; end_color=$1;;
-    --end-msg)    shift; end_message=$1;;
-    --steps)      shift; steps=$1;;
-    --file-mod) # {{{
-                  shift
-                  fileModFile=$1
-                  fileModSha=0
-                  [[ -e $fileModFile ]] && fileModSha="$(sha1sum $fileModFile | cut -d" " -f1)"
-                  cmd='[[ -e '"$fileModFile"' && '"$fileModSha"' != $(sha1sum '"$fileModFile"' | cut -d" " -f1) ]]';; # }}}
-    --no-err)     report_error=false;;
-    --err)        report_error=true;;
-    --err-on-timeout) report_error=false; report_error_timeout=true;;
-    --key)        key=true; report_error=false;;
-    --keys | --get-key) # {{{
-                  [[ $1 == '--keys' ]] && shift && extra_keys=$1
-                  get_key=true;; # }}}
-    --every-step) every=true;;
-    --pv)         method='pv';;
-    --dots)       ${PROGRESS_DOTS_SUPPORTED:-true} && method='dots';;
-    --spin)       method='spin';;
-    --random-text)      shift; rndTxt="$1";     [[ -z $rndTxt ]] && rndTxt="work" && end_message="done:fail"; method='random-text';;
-    --tmux | --tmux-only) # {{{
-                  case $1 in
-                  --tmux-only) # {{{
-                    if ! $do_mark; then
-                      progress --mark-raw "$@"
-                      return 0
-                    fi
-                    tmux_progress_only=true;; # }}}
-                  esac
-                  tmux_progress=true
-                  [[ ! -z "$2" && "$2" != '--'* ]] && tmux_text="$2" && shift
-                  [[ $tmux_text == '-' ]] && tmux_text=""
-                  ;; # }}}
-    --mark-do) # {{{
-      local toDo="$2"; shift 2
-      progress --mark "$@"
-      eval "$toDo" >/dev/null 2>&1
-      sleep 0.2
-      progress --unmark
-      return 0;; # }}}
-    --mark)       shift; ( progress --mark-raw "$@" & : ); return 0;;
-    --mark-f | --mark-raw) # {{{
-                  case $1 in
-                  --mark-f)     shift; mark_file="$TMP_MEM_PATH/progress-$1.tmp"; tmux_entry="PR#$1";;
-                  esac
-                  touch $mark_file; echo "$@" >$mark_file; cmd="[[ ! -e $mark_file ]]"; do_mark=true; every=true;; # }}}
-    --unmark)     shift; local delay= err=0 # {{{
-                  rm -f "${mark_file%.tmp}.err.tmp"
-                  while [[ ! -z $1 ]]; do # {{{
-                    case $1 in
-                    --err=*) err=${1#--err=}; if [[ $err == 'true' ]]; then err=0; elif [[ $err == 'false' ]]; then err=1; fi;;
-                    -c)      shift; end_color="$1";;
-                    *)       mark_file="$TMP_MEM_PATH/progress-$1.tmp" && tmux_entry="PR#$1";;
-                    esac
-                    shift
-                  done # }}}
-                  (
-                    echo "retVal=$err"
-                    [[ ! -z $end_color ]] && echo "end_color=\"$end_color\""
-                  ) >"${mark_file%.tmp}.err.tmp"
-                  [[ -e $mark_file ]] && set -- $(cat $mark_file)
-                  while [[ ! -z $1 ]]; do # {{{
-                    case $1 in
-                    --delay) delay=$2; shift;;
-                    --pv | --dots | --spin) method="$1";;
-                    --random-text) method="$1"; shift;;
-                    --tmux | --tmux-only)   tmux_progress=true;;
-                    esac
-                    shift
-                  done # }}}
-                  if [[ -z $delay ]]; then # {{{
-                    case $method in
-                    dots) delay=0.15;;
-                    pv)   delay=1;;
-                    spin) delay=1;;
-                    random-text) delay=0.25;;
-                    *)    delay=1;;
-                  esac
-                  fi # }}}
-                  if [[ $method == 'spin' && $(echo $delay | awk '{print $1 * 100}') -lt 50 ]]; then # {{{
-                    delay=0.5
-                  fi # }}}
-                  rm -f $mark_file
-                  $tmux_progress && tmux_progress $tmux_entry end 0
-                  sleep $delay; return ${err:-20};; # }}}
-    --wait-pv | --wait) # {{{
-                  [[ $1 == '--wait-pv' ]] && method='pv' && report_error=false
-                  shift
-                  endTime="$(time2s -o abs-s $1)"; every=true;; # }}}
-    --dbg)        dbg="l1"; useTput=false;;
-    --dbg2)       dbg="l2"; useTput=false;;
-    --tput)       useTput=true;;
-    --no-tput)    useTput=false;;
-    *)            if [[ $argCnt == 1 ]]; then # {{{
-                    endTime="$(time2s -o abs-s $1)"; every=true
-                    key=true; report_error=false
-                  else
-                    msg="$1"
-                  fi;; # }}}
-    esac
-    shift
-  done # }}}
-  if [[ -z $useTput ]]; then
-    [[ -t 1 ]] && useTput=${USE_TPUT:-true} || useTput=false
-  fi
-  if [[ -z $method ]]; then # {{{
-    ${PROGRESS_DOTS_SUPPORTED:-true} && method='dots' || method='spin'
-  fi # }}}
-  if [[ -z $delay ]]; then # {{{
-    case $method in
-    dots) delay=0.15;;
-    pv)   delay=1;;
-    spin) delay=1;;
-    random-text) delay=0.10;;
-    *)    delay=1;;
-    esac
-  fi # }}}
-  if [[ -z $steps ]]; then # {{{
-    [[ $method == 'dots' ]] && steps=10 || steps=4
-  fi # }}}
-  if [[ $method == 'spin' && $(echo $delay | awk '{print $1 * 100}') -lt 50 ]]; then # {{{
-    delay=0.5
-  fi # }}}
-  # }}}
-  if $tmux_progress; then # {{{
-    eval tmux_progress $tmux_entry $([[ ! -z $tmux_text ]] && echo "--text \"$tmux_text\"")
-    $tmux_progress_only && return 0
-  fi # }}}
-  [[ -z $cmd ]] && key=true && cmd=false
-  local chars=() local charIdx=0
-  unset -f setCursor
-  case $method in
-  pv) # {{{
-    local fName="$TMP_MEM_PATH/progress-pv-$$.tmp" writes="$cnt" do_break=false pkey=
-    rm -f "$fName" && touch "$fName"
-    [[ ! -z $msg ]] && echo "$msg " >>$out
-    echo -n "${color}" >>$out
-    if [[ ! -z $endTime ]]; then
-      cnt="$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{printf "%.0f", $1/$2}')"
-      writes="$cnt"
-    fi
-    for ((; cnt>=0; --cnt)); do
-      [[ -e "$fName" && $writes -gt 0 ]] && echo -n "." >>"$fName" && : $((--writes))
-      if ! $do_break && [[ ! -z $cmd ]]; then # {{{
-        eval $cmd >/dev/null 2>&1 && do_break=true
-      fi # }}}
-      if ! $do_break; then # {{{
-        if $key; then
-          if read -s -t $delay -n 1 pkey </dev/tty >/dev/null; then
-            retVal=$((10+2))
-            case $pkey in
-            n|N|q|Q) retVal=255; do_break=true;;
-            '')      do_break=true;;
-            *)       echo "$extra_keys" | command grep -sq "$pkey" && do_break=true
-            esac
-            $do_break && pressed_key=$pkey
-          fi
-        else
-          sleep $delay
-        fi
-      fi # }}}
-      if $do_break || [[ $cnt == 1 ]]; then # {{{
-        if [[ -e "$fName" ]]; then
-          [[ $writes -gt 0 ]] && echo -n "." >>"$fName" && : $((--writes))
-          rm -f "$fName"
-        else
-          echo "$retVal $pressed_key" >"$fName"
-          break
-        fi
-      fi # }}}
-    done | tail -s 0.1 --follow=name "$fName" 2>/dev/null | pv -s $cnt -i $(echo "$delay" | awk '{printf "%d", $1/2}') -t -e --progress | cat - >/dev/null
-    echo -n "${COff}" >>$out
-    stty echo 2>/dev/null
-    retVal=0 pressed_key=
-    [[ -e "$fName" ]] && { read retVal pressed_key <<< $(cat "$fName"); rm -f "$fName"; }
-    if ! $report_error; then # {{{
-      case $retVal in
-      11) $report_error_timeout || retVal=0;;
-      0|10|12) retVal=0;;
-      esac
-    fi # }}}
-    $get_key && echo "$pressed_key"
-    $tmux_progress && tmux_progress $tmux_entry end $retVal
-    return $retVal
-    ;; # }}}
-  dots) # {{{
-    genChars() {
-      chars=()
-      local i=
-      if [[ -e $BASHRC_RUNTIME_PATH/progress-dots ]]; then
-        source $BASHRC_RUNTIME_PATH/progress-dots
-      else
-        for ((i=1; i<0xFF; i++)); do chars+=("$(printf "%x" $((0x2800+$i)))"); done
-        echo "chars=(${chars[*]})" >$BASHRC_RUNTIME_PATH/progress-dots
-      fi
-    }
-    nextChar()    { local l=${#chars[*]}; charIdx=$((($charIdx+1+$RANDOM%($l-1))%$l)); }
-    getChar()     { echo -en "\u${chars[$charIdx]}"; }
-    getLastChar() { echo -en "\u28ff"; }
-    ;; # }}}
-  spin) # {{{
-    [[ -z $end_message ]] && end_message="DONE:BREAK"
-    genChars() { chars=('-' '\' '|' '/'); }
-    nextChar() { charIdx=$((($charIdx + 1) % ${#chars[*]})); }
-    getChar()  { echo -en "${chars[$charIdx]}"; }
-    getLastChar() {
-      local msg='   '
-      case $1 in
-      0|10|11|12) [[ ! -z "${end_message/:*}" ]] && msg="${end_message/:*}";;
-      *)          [[ ! -z "${end_message/*:}" ]] && msg="${end_message/*:}";;
-      esac
-      echo -ne "$msg"
-    }
-    ;; # }}}
-  random-text) # {{{
-    genChars() {
-      unset chars
-      local j="--infinity"
-      if [[ ! -z $endTime ]]; then # {{{
-        local cnt=$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{printf "%d", $1/$2}')
-        j="--once --cnt $cnt"
-      fi # }}}
-      chars="$(randomTextDrawer --no-tput $j "$rndTxt")"
-    }
-    nextChar() {
-      chars="$(randomTextDrawer --state "$chars")"
-    }
-    getChar()  {
-      randomTextDrawer --print "$chars"
-    }
-    getLastChar() {
-      local t=
-      if [[ ! -z $end_message ]]; then # {{{
-        case $1 in
-        0|10|11|12) t="${end_message/:*}";;
-        *)          t="${end_message/*:}";;
-        esac
-      fi # }}}
-      if [[ ! -z $t ]]; then # {{{
-        chars="$(echo -e "$chars;\nexport s=\"$t\"")"
-        if $useTput; then
-          tput el
-        else
-          printf "%$((${#rndTxt}+2))s" " "
-          setCursor
-        fi
-      fi # }}}
-      randomTextDrawer --final "$chars"
-    }
-    setCursor() {
-      $useTput && tput rc || printf "\b%.0s" $(seq $((${#rndTxt}+2)))
-    }
-    ;; # }}}
-  esac
-  if ! declare -f setCursor >/dev/null 2>&1; then # {{{
-    setCursor() {
-      $useTput && tput rc || printf "\b\b\b"
-    }
-  fi # }}}
-  cleanChars() { unset charIdx chars; unset -f genChars getChar getLastChar nextChar setCursor; }
-  genChars
-  local i=0 chpid=
-  [[ ! -z $msg ]] && echo -n "$msg " >>$out
-  trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cvvis || reset; fi; echo >$out; return 0;" INT
-  $useTput && tput sc && tput civis
-  echo -en "${color}[$(getChar)]${COff}" >>$out
-  if [[ ! -z $dbg ]]; then # {{{
-    echo >/dev/stderr
-    echo "cmd=($cmd)" >/dev/stderr
-    echo >/dev/stderr
-  fi # }}}
-  if [[ $out != '/dev/stderr' && "$cmd" != 'false' ]] && ! $do_mark; then # {{{
-    exec 3>&2
-    exec 2> /dev/null
-  fi # }}}
-  stty -echo 2>/dev/null
-  while true; do # {{{
-    if [[ ! -z $chpid ]] && ! command ps -o pid | command grep -q "$chpid"; then # {{{
-      wait $chpid && { chpid=; break; } || chpid=
-    fi # }}}
-    if $every || [[ $i == 0 ]]; then # {{{
-      if [[ ! -z $dbg ]]; then
-        local lerr=
-        case $dbg in
-        l1) eval $cmd; lerr=$?; echorv lerr; [[ $lerr == 0 ]] && break;;
-        l2) ( set -xv; eval $cmd ); lerr=$?; echorv lerr; [[ $lerr == 0 ]] && break;;
-        esac
-      else
-        if [[ $out != '/dev/stderr' && "$cmd" != 'false' ]] && ! $do_mark; then
-          if [[ -z $chpid ]]; then
-            ( eval $cmd >/dev/null 2>&1 ) &
-            chpid=$!
-          fi
-        else
-          ( eval $cmd >/dev/null 2>&1 ) && break
-        fi
-      fi
-      if [[ ! -z $endTime && ${EPOCHSECONDS:-$(epochSeconds)} -gt $endTime ]]; then
-        [[ $cmd == 'false' ]] && retVal=$((10+1)) || retVal=1
-        break
-      fi
-    fi # }}}
-    if $key; then # {{{
-      if read -s -t $delay -n 1 pressed_key; then
-        retVal=$((10+2))
-        local do_break=false
-        case $pressed_key in
-        n|N|q|Q) retVal=255; do_break=true;;
-        '')      do_break=true;;
-        *)       echo "$extra_keys" | command grep -sq "$pressed_key" && do_break=true
-        esac
-        $do_break && break
-      fi
-      # }}}
-    else # {{{
-      sleep $delay
-    fi # }}}
-    i=$(( ($i + 1) % $steps))
-    nextChar
-    echo -ne "$(setCursor)${color}[$(getChar)]${COff}" >>$out
-    if [[ $cnt != 0 ]]; then # {{{
-      cnt=$(( $cnt - 1 ))
-      if [[ $cnt == 0 ]]; then
-        [[ $cmd == 'false' ]] && retVal=$((10+1)) || retVal=1
-        break
-      fi
-    fi # }}}
-  done # }}}
-  stty echo 2>/dev/null
-  if [[ ! -z $chpid ]] && ! command ps -o pid | command grep -q "$chpid"; then # {{{
-    wait $chpid
-  fi # }}}
-  if [[ $out != '/dev/stderr' && "$cmd" != 'false' ]] && ! $do_mark; then # {{{
-    exec 2>&3
-    exec 3>&-
-  fi # }}}
-  if $do_mark && [[ -e "${mark_file%.tmp}.err.tmp" ]]; then
-    retVal=20
-    [[ -s "${mark_file%.tmp}.err.tmp" ]] && source "${mark_file%.tmp}.err.tmp"
-    rm "${mark_file%.tmp}.err.tmp"
-  fi
-  case $retVal in # {{{
-  0|10|11|12) # {{{
-    [[ $color != ${COff} ]] && color=${end_color:-$CIGreen}
-    echo -ne "$(setCursor)${color}[$(getLastChar $retVal)]${COff}" >>$out
-    echo >>$out
-    ;; # }}}
-  *) # {{{
-    [[ $color != ${COff} ]] && color=${CIRed}
-    echo -ne "$(setCursor)${color}[$(getLastChar $retVal)]${COff}" >>$out
-    echo >>$out
-    ;; # }}}
-  esac # }}}
-  cleanChars
-  $get_key && echo "$pressed_key"
-  if ! $report_error; then # {{{
-    case $retVal in
-    11) $report_error_timeout || retVal=0;;
-    0|10|12) retVal=0;;
-    esac
-  fi # }}}
-  if $useTput; then
-    ${TPUT_USE_CVVIS:-true} && tput cvvis || reset
-  fi
-  trap - INT
-  $tmux_progress && tmux_progress $tmux_entry end $retVal
-  return $retVal
-}
-alias PC='progress --clean' # }}}
+  export PROGRESS_PID=$PPID
+  local err=0
+  $ALIASES_SCRIPTS/progress/progress.sh "$@"
+  err=$?
+  unset PROGRESS_PID
+  return $err
+} # }}}
 progress-dot() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
@@ -568,31 +20,31 @@ progress-dot() { # @@ # {{{
     -r | --packets-in-row) echo 3 5 10;;
     -o | --out)            echo "/dev/stdout /dev/stderr";;
     --dot | -d)            echo "dot-small dot-medium dot-big . icon-ok icon-err romb";;
-    -c)                    colorList;;
+    -c)                    color-list;;
     *)
       case ${4:-$3} in
       --init) echo "-s --steps-per-dot -p --dots-in-packet -r --packets-in-row --ts -o --out --dot --align";;
       *) # {{{
         echo "--init -c"
         echo --{end,hold}{,=MSG}
-        echo "-d" --dot{,={{,COLOR:}{CHAR,UC@ICON},COLOR,ok,err,0,1}}
+        echo "-d" --dot{,={{,COLOR:}{CHAR,ICON@UC},COLOR,ok,err,0,1}}
         ;; # }}}
       esac;;
     esac
     return 0
   fi # }}}
-  eval $(colorCacheInit)
+  eval $(color-cache-init)
   local pre="__progress_dot" c= force=false d=
   local -n i=${pre}_i step=${pre}_step inPacket=${pre}_packet inRow=${pre}_row ts=${pre}_ts out=${pre}_out dot=${pre}_dot
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -c) c=$2; shift;;
     -f) force=true;;
-    -d | --dot) d=$2; shift; [[ ${#d} -gt 1 ]] && d="$(getUnicodeChar $d)";;
+    -d | --dot) d=$2; shift; [[ ${#d} -gt 1 ]] && d="$(get-unicode-char $d)";;
     --dot=*) # {{{
       case $1 in
-      --dot=ok  | --dot=0)           d="$(getUnicodeChar icon-ok)";  [[ -z $c ]] && c='ok';  force=true;;
-      --dot=err | --dot=[0-9][0-9]*) d="$(getUnicodeChar icon-err)"; [[ -z $c ]] && c='err'; force=true;;
+      --dot=ok  | --dot=0)           d="$(get-unicode-char icon-ok)";  [[ -z $c ]] && c='ok';  force=true;;
+      --dot=err | --dot=[0-9][0-9]*) d="$(get-unicode-char icon-err)"; [[ -z $c ]] && c='err'; force=true;;
       --dot=*)
         local v=${1#--dot=}
         if [[ $v == *:* ]]; then
@@ -601,7 +53,7 @@ progress-dot() { # @@ # {{{
         fi
         if [[ ! -z $v ]]; then
           d=$v
-          [[ $d == UC@* ]] && d="$(getUnicodeChar ${d#UC@})"
+          [[ $d == *@UC ]] && d="$(get-unicode-char ${d%@UC})"
         fi
         force=true;;
       esac;; # }}}
@@ -616,7 +68,7 @@ progress-dot() { # @@ # {{{
         -p | --dots-in-packet) inPacket=$2; shift;;
         -r | --packets-in-row) inRow=$2; shift;;
         -o | --out)            out=$2; shift;;
-        --dot)                 dot=$2; shift; [[ ${#dot} -gt 1 ]] && dot="$(getUnicodeChar $dot)";;
+        --dot)                 dot=$2; shift; [[ ${#dot} -gt 1 ]] && dot="$(get-unicode-char $dot)";;
         --ts)                  ts=$(time2s now);;
         esac; shift
       done
@@ -653,7 +105,7 @@ progress-dot() { # @@ # {{{
     [[ -z $inPacket ]] && inPacket=10
     [[ -z $inRow    ]] && inRow=3
     [[ -z $out      ]] && out='/dev/stderr'
-    [[ -z $dot      ]] && dot="$(getUnicodeChar dot-small)"
+    [[ -z $dot      ]] && dot="$(get-unicode-char dot-small)"
     [[ -z $ts       ]] && ts="$(time2s now)"
     # echorv -nl i step inPacket inRow
     echo -n "$(cl 'ts' $ts): " >$out
@@ -673,4 +125,5 @@ progress-dot() { # @@ # {{{
   fi >$out
   i=$((i+1))
 } # }}}
+export -f progress random-text-drawer progress-dot
 

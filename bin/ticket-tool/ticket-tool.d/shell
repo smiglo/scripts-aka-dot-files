@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-if [[ $1 == '@@' ]]; then # {{{
+if [[ $1 == '@@' ]]; then 
   ret="--cmd --dbg --file -n"
   if [[ $# -ge 2 ]]; then
     case ${@: -1} in
@@ -11,8 +11,8 @@ if [[ $1 == '@@' ]]; then # {{{
   fi
   echo "$ret"
   exit 0
-fi # }}}
-setCmd() { # {{{
+fi 
+setCmd() { 
   if [[ "$1" == '-i' ]]; then
     lastIssue="$issue" issue="$2"
     shift 2
@@ -25,10 +25,10 @@ setCmd() { # {{{
   shift
   subcmd="$@"
   completion="$($cmd_TT "$issue" "$cmd" @@ 2>/dev/null </dev/tty)"
-} # }}}
-execute() { # {{{
+} 
+execute() { 
   local cmd="$(echo "$@" | sed -e 's/^ *//' -e 's/ *$//' -e 's/ \+/ /g' -e 's/\s*#.*//')"
-  if ! $dry; then # {{{
+  if ! $dry; then 
     if [[ "$cmd" != @@* ]]; then
       eval $cmd_TT "$issue" $cmd
     else
@@ -36,15 +36,15 @@ execute() { # {{{
       eval $c
     fi </dev/tty >/dev/tty
     err=$?
-    # }}}
-  else # {{{
+    
+  else 
     if [[ "$cmd" != @@* ]]; then
       echo "${cmd_TT##*/} "$issue" $cmd"
     else
       local c="${cmd#@@}" && c="${c# }"
       echo "$c"
     fi
-  fi # }}}
+  fi 
   local line=
   if [[ "$cmd" != @@* ]]; then
     line="$([[ $origIssue != $issue ]] && echo "-j $issue ")$cmd$([[ $err != 0 ]] && echo " # err($err)")"
@@ -52,8 +52,8 @@ execute() { # {{{
     line="$cmd$([[ $err != 0 ]] && echo " # err($err)")"
   fi
   [[ ! -z "$histFile" && "$(tail -n1 "$histFile")" != "$line" ]] && echo "$line" >>"$histFile"
-} # }}}
-getPrompt() { # {{{
+} 
+getPrompt() { 
   if [[ "$1" == '-r' ]]; then
     shift
   elif [[ "$origIssue" != "$issue" ]]; then
@@ -63,12 +63,12 @@ getPrompt() { # {{{
   local cErr="$CIYellow"
   [[ $err != 0 ]] && cErr="$CIRed"
   printf "${cErr}%s${COff} " ">"
-} # }}}
+} 
 commands="$($cmd_TT "$issue" @@ 2>/dev/null)"
 lastIssues="-j@- $($TICKET_TOOL_PATH/j-cmd.sh @@ 2 -j | tr ' ' '\n' | sed 's/^/-j@/' | tr '\n' ' ')"
 origCmd='setup' dbg=false dry=false histFile="${TICKET_CONF_SHELL_HISTORY_FILE}" origIssue="$issue" lastIssue="$issue" err=0 load=false loop=false
 [[ -z $COff ]] && source $BASH_PATH/colors
-while [[ ! -z $1 ]]; do # {{{
+while [[ ! -z $1 ]]; do 
   case $1 in
   --cmd)  origCmd="$2"; shift;;
   --dbg)  dbg=true;;
@@ -78,60 +78,60 @@ while [[ ! -z $1 ]]; do # {{{
   -n)     dry=true;;
   esac
   shift
-done # }}}
-if [[ -z "$histFile" && ( "${TICKET_CONF_SHELL_HISTORY_SAVE:-false}" != 'false' || "$load" == 'true' ) ]]; then # {{{
+done 
+if [[ -z "$histFile" && ( "${TICKET_CONF_SHELL_HISTORY_SAVE:-false}" != 'false' || "$load" == 'true' ) ]]; then 
   if [[ "$TICKET_CONF_SHELL_HISTORY_SAVE" == 'true' ]]; then
-    histFile="$(command cd "$path_issue" && pwd)"
+    histFile="$(cd "$path_issue" && pwd)"
     [[ ! -z $histFile ]] && histFile+="/.tt-shell-history"
   elif [[ "$TICKET_CONF_SHELL_HISTORY_SAVE" == '/'* ]]; then
     histFile="$TICKET_CONF_SHELL_HISTORY_SAVE"
   else
-    histFile="$(command cd "$path_issue" && pwd)"
+    histFile="$(cd "$path_issue" && pwd)"
     [[ ! -z "$histFile" ]] && histFile+="/$TICKET_CONF_SHELL_HISTORY_SAVE"
   fi
-  if [[ -z "$histFile" ]] && $load; then # {{{
-    histFile="$(command cd "$path_issue" && pwd)"
+  if [[ -z "$histFile" ]] && $load; then 
+    histFile="$(cd "$path_issue" && pwd)"
     [[ ! -z "$histFile" ]] && histFile+="/.tt-shell-history"
-  fi # }}}
-fi # }}}
+  fi 
+fi 
 setCmd "$origCmd"
-if [[ ! -t 0 || "$load" == 'true' ]]; then # {{{
+if [[ ! -t 0 || "$load" == 'true' ]]; then 
   [[ ! -t 0 ]] && histFile='-'
   [[ $histFile != '-' && ! -s "$histFile" ]] && exit 1
   while read input; do
     issue="$origIssue"
-    if [[ "$input" == '---' || "$input" == "#"* ]]; then # {{{
-      continue # }}}
-    elif [[ "$input" == '@'* ]]; then # {{{
+    if [[ "$input" == '---' || "$input" == "#"* ]]; then 
+      continue 
+    elif [[ "$input" == '@'* ]]; then 
       execute "$input"
       continue
-      # }}}
-    elif [[ "$input" =~ ^-?j(\ +|@)([^\ ]+)\ +(.*) ]]; then # {{{
+      
+    elif [[ "$input" =~ ^-?j(\ +|@)([^\ ]+)\ +(.*) ]]; then 
       issue="${BASH_REMATCH[2]}"
       [[ "$issue" == '-' ]] && issue="$origIssue"
       input="${BASH_REMATCH[3]}"
-      # }}}
-    elif [[ " $completion " != *" $input "* ]]; then # {{{
-      for i in $commands; do # {{{
+      
+    elif [[ " $completion " != *" $input "* ]]; then 
+      for i in $commands; do 
         if [[ "${input%% *}" == "$i" ]]; then
           execute "$input"
           continue 2
         fi
-      done # }}}
-    fi # }}}
+      done 
+    fi 
     execute "$cmd $input"
   done <<<"$(cat "$histFile")"
   exit 0
-fi # }}}
+fi 
 ! type rlwrap >/dev/null 2>&1 && echo "rlwrap not installed, cannot continue" >/dev/stderr && exit 1
 echo 'The shell'
 export TICKET_CONF_SHELL_IN=true
 title="${TICKET_CONF_SHELL_TITLE:-$TICKET_CONF_TITLE}"
 if [[ ! -z $title ]]; then
   if [[ $title == \$* ]]; then
-    set_title "$(eval $title)"
+    set-title "$(eval $title)"
   else
-    set_title "$title"
+    set-title "$title"
   fi
 fi
 if [[ ! -z "$histFile" && ! -e "$histFile" ]]; then
@@ -141,19 +141,19 @@ fi
 emptyInput=false
 completionMethod='short'
 trap "kill -s SIGINT 0" INT
-while true; do # {{{
-  if [[ -z $subcmd ]]; then # {{{
-    case $completionMethod in # {{{
-    short) # {{{
+while true; do 
+  if [[ -z $subcmd ]]; then 
+    case $completionMethod in 
+    short) 
       completionList="$(echo "$completion" | tr ' ' '\n' | grep "^[a-zA-Z]")"
-      ;; # }}}
-    full) # {{{
+      ;; 
+    full) 
       completionList=""
       completionList+="$(echo "$completion" | tr ' ' '\n')\n"
       completionList+="$(echo "$lastIssues" | tr ' ' '\n')\n"
       completionList+="$(echo "c -c j -j quit" | tr ' ' '\n')\n"
-      ;; # }}}
-    esac # }}}
+      ;; 
+    esac 
     input="$(eval rlwrap $RLWRAP_OPTS -n -o -w 10 -g \"---\" -D 2 \
         -S \"$(getPrompt)\" \
         $([[ ! -z "$histFile" ]] && echo "-H $histFile -s -10000") \
@@ -162,7 +162,7 @@ while true; do # {{{
     [[ $? != 0 ]] && break
     [[ "$input" == '---' || "$input" == "#"* ]] && continue
     case "$input" in
-    help | hh) # {{{
+    help | hh) 
       echo "q        - quit"
       echo "!*       - skip extra-interpretation, invoke as a subcommand"
       echo "^*       - skip extra-interpretation, invoke as a full command for current ticket"
@@ -181,22 +181,22 @@ while true; do # {{{
       echo "-j             - choose ticket from a list"
       echo "j@ticket [CMD] - change ticket and optionally change command"
       echo "j ticket [CMD] - change ticket and optionally change command"
-      continue;; # }}}
-    q | quit ) # {{{
-      break;; # }}}
-    !*) # {{{
-      input="${input#!}"; input="${input# }";; # }}}
-    compl-toggle | ct) # {{{
+      continue;; 
+    q | quit ) 
+      break;; 
+    !*) 
+      input="${input#!}"; input="${input# }";; 
+    compl-toggle | ct) 
       case $completionMethod in
       short) completionMethod='full';;
       full)  completionMethod='short';;
       esac
       continue
-      ;; # }}}
-    @@*) # {{{
+      ;; 
+    @@*) 
       execute "$input"
-      continue;; # }}}
-    @\ *) # {{{
+      continue;; 
+    @\ *) 
       input="${input#@ }"
       if [[ " $completion " == *" ${input%% *} "* ]]; then
         execute "wait-on @ \"$cmd $input\""
@@ -204,23 +204,23 @@ while true; do # {{{
         execute "wait-on @ \"$input\""
       fi
       continue
-      ;; # }}}
-    @*) # {{{
+      ;; 
+    @*) 
       if [[ " $completion " == *\ ${input%% *}\ * ]]; then
         execute $cmd "$input"
       elif [[ ! -z "$TICKET_CONF_SHELL_FALLBACK_CMD" ]]; then
         execute $TICKET_CONF_SHELL_FALLBACK_CMD "${input#@}"
       fi
-      continue;; # }}}
-    c | -c | c\ *) # {{{
-      if [[ "$input" == 'c' ]]; then # {{{
-        setCmd "$origCmd" # }}}
+      continue;; 
+    c | -c | c\ *) 
+      if [[ "$input" == 'c' ]]; then 
+        setCmd "$origCmd" 
         continue
-      elif [[ "$input" == '-c' ]]; then # {{{
+      elif [[ "$input" == '-c' ]]; then 
         input="$(eval rlwrap $RLWRAP_OPTS -n -o -w 10 -H /dev/null -S \"$(getPrompt "command")\" -f <(echo "$commands" | tr ' ' '\n') cat)"
         setCmd $input
-        [[ ! -z $completion ]] && continue # }}}
-      else # {{{
+        [[ ! -z $completion ]] && continue 
+      else 
         input="${input#c }"
         setCmd $input
         [[ ! -z $completion ]] && continue
@@ -229,31 +229,31 @@ while true; do # {{{
         else
           input=""
         fi
-      fi # }}}
-      ;; # }}}
-    j | -j | j@* | j\ * ) # {{{
-      if [[ "$input" == 'j' ]]; then # {{{
+      fi 
+      ;; 
+    j | -j | j@* | j\ * ) 
+      if [[ "$input" == 'j' ]]; then 
         setCmd -i "$lastIssue"
-        continue # }}}
-      elif [[ "$input" == '-j' ]]; then # {{{
+        continue 
+      elif [[ "$input" == '-j' ]]; then 
         newIssue="$(eval rlwrap $RLWRAP_OPTS -n -o -w 10 -H /dev/null -S \"$(getPrompt -r 'issue')\" -f <($TICKET_TOOL_PATH/j-cmd.sh @@ 2 -jj | tr ' ' '\n') cat)"
         [[ ! -z "$newIssue" ]] && setCmd -i $newIssue
-        continue # }}}
-      elif [[ "$input" =~ ^j(\ +|@)([^\ ]+)\ *$ ]]; then # {{{
+        continue 
+      elif [[ "$input" =~ ^j(\ +|@)([^\ ]+)\ *$ ]]; then 
         setCmd -i ${BASH_REMATCH[2]}
-        continue # }}}
-      elif [[ "$input" =~ ^j(\ +|@)([^\ ]+)\ +(.*) ]]; then # {{{
+        continue 
+      elif [[ "$input" =~ ^j(\ +|@)([^\ ]+)\ +(.*) ]]; then 
         input="${BASH_REMATCH[3]}"
         setCmd -i ${BASH_REMATCH[2]} $input
         [[ ! -z "$subcmd" ]] && input=
-      fi # }}}
-      ;; # }}}
-    ^*) # {{{
+      fi 
+      ;; 
+    ^*) 
       input="${input#^}"
       execute "$input"
-      continue;; # }}}
-    *) # {{{
-      if [[ -z "$subcmd" && " $completion " != *" ${input%% *} "* ]]; then # {{{
+      continue;; 
+    *) 
+      if [[ -z "$subcmd" && " $completion " != *" ${input%% *} "* ]]; then 
         for i in $commands; do
           if [[ "$input" == "$i" ]]; then
             setCmd "$input"
@@ -267,17 +267,17 @@ while true; do # {{{
             continue 2
           fi
         done
-      fi # }}}
-      ;; # }}}
+      fi 
+      ;; 
     esac
-    # }}}
-  else # {{{
+    
+  else 
     input="$(eval rlwrap $RLWRAP_OPTS -n -o -w 10 -H /dev/null -S \"$(getPrompt "$cmd $subcmd")\" -f <(echo "$completion" | tr ' ' '\n') cat)"
     [[ $? != 0 ]] && break
     [[ "$input" == '---' || "$input" == "#"* ]] && continue
-  fi # }}}
-  if [[ ! -z "$input" ]]; then # {{{
-    if [[ ( "$input" == *' ' && -z $subcmd ) || "$input" == *'?' ]]; then # {{{
+  fi 
+  if [[ ! -z "$input" ]]; then 
+    if [[ ( "$input" == *' ' && -z $subcmd ) || "$input" == *'?' ]]; then 
       subcmd+=" ${input%?}"
       subcmd="${subcmd# }"
       if [[ ! -z "$subcmd" ]]; then
@@ -288,16 +288,16 @@ while true; do # {{{
         fi
         input=""
       fi
-    fi # }}}
+    fi 
   elif [[ -z "$subcmd" ]]; then
     $emptyInput && break
     emptyInput=true
     continue
-  fi # }}}
+  fi 
   emptyInput=false
   execute "$cmd $subcmd $input"
   setCmd
-done # }}}
+done 
 trap - INT
 echo 'Bye'
 

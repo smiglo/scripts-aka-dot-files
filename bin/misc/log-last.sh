@@ -46,7 +46,7 @@ reset_vars() { # {{{
   user_margin=0
 } # }}}
 save_info() { # {{{
-  local mem_file=$TMP_MEM_PATH/.work_time.nfo list=
+  local mem_file=$MEM_KEEP/work_time.nfo list=
   list+=" user_margin user_comment paused paused_time paused_last_time pause_margin pause_buffer extra_added end_at"
   list+=" overtime_msg_sent pause_auto_unpause"
   list+=" inactivity_pause inactivity_ts inactivity_pause_allowed inactivity_pause_not_allowed_end"
@@ -61,7 +61,7 @@ reschedule() { # {{{
   local schedule_f="$APPS_CFG_PATH/log-last/schedule.txt"
   [[ -e "$schedule_f" ]] || return 1
   local days=( [1]="pn" [2]="wt" [3]="sr" [4]="czw" [5]="pt" )
-  local dow=$(command date +'%w') today=$((10#$(command date +%m%d)))
+  local dow=$(date +'%w') today=$((10#$(date +%m%d)))
   local dbg=false
   local t= w= cond= action= checkForRemval= extraLLCmd=
   cat "$schedule_f" | sed -n -e '/^\s*#/d' -e '/^'"${days[dow]}"':/,/^[^ ]/p' | sed -e '/^[^ ]/d' | \
@@ -144,10 +144,10 @@ __util_loglast_extra() { # {{{
     return 0;; # }}}
   suspend) # {{{
     tm --b-dump
-    tm --l-dump --all --file "susp-$(command date +"$DATE_FMT").layout";; # }}}
+    tm --l-dump --all --file "susp-$(date +"$DATE_FMT").layout";; # }}}
   reset) # {{{
     local resetFile="$TMP_MEM_PATH/log-last-reset.tmp"
-    if [[ ! -e $resetFile || "$(stat -c %y "$resetFile" | awk '{print $1}')" != "$(command date +"%Y-%m-%d")" ]]; then
+    if [[ ! -e $resetFile || "$(stat -c %y "$resetFile" | awk '{print $1}')" != "$(date +"%Y-%m-%d")" ]]; then
       $BASH_PATH/runtime --force --clean-tmp-silent
       touch -d '' "$resetFile"
     fi
@@ -168,21 +168,21 @@ __util_loglast_extra() { # {{{
   [[ -e $APPS_CFG_PATH/log-last/extra-work.sh ]] && $APPS_CFG_PATH/log-last/extra-work.sh "$cmd" $@
 } # }}}
 loglast() { # {{{
-  local FILE=$LOGLAST_FILE
-  [[ -z $FILE ]] && FILE=$APPS_CFG_PATH/log-last/work_time.default
-  local FILE_DATA=${FILE}.nfo CMD_FILE=$TMP_MEM_PATH/.loglast.cmd
-  [[ ! -e "$(dirname $FILE)" ]] && mkdir -p "$(dirname $FILE)"
+  local LOGLAST_FILE=$APPS_CFG_PATH/log-last/work_time.default
+  [[ -e $APPS_CFG_PATH/log-last/conf.sh ]] && source $APPS_CFG_PATH/log-last/conf.sh
+  local FILE_DATA=${LOGLAST_FILE}.nfo CMD_FILE=$TMP_MEM_PATH/.loglast.cmd
+  [[ ! -e "$(dirname $LOGLAST_FILE)" ]] && mkdir -p "$(dirname $LOGLAST_FILE)"
   local LOOP_TIME=60
   local CMsg='[38;5;8m'
   local to_do='' to_do_extra=''
-  local margin_s= TODAY= TODAY_YMD= end_delay= i=
+  local margin_s= TODAY= TODAY_YMD= end_delay= end_delay_ask=15 i=
   local colors=true force_new_day=false isDbg=false isRlWrap=true
   local pause_msg_last_time=0
   local inactivity_delta=$((15*60)) pause_lock_delta=$((15*60)) pause_msg_delta=$((10*60)) paused_suspend_delta=$((30*60)) overtime_delta=$((20*60))
-  local inactivity_f=$TMP_MEM_PATH/.locks/ssh-lock
-  local pause_char="$(getUnicodeChar 'pause')" normal_char="$(getUnicodeChar 'play')"
-  local iconOk="$(getUnicodeChar 'icon-ok')" iconNok="$(getUnicodeChar 'icon-err')"
-  isInstalled rlwrap || isRlWrap=false
+  local inactivity_f=$MEM_KEEP/locks/ssh-lock
+  local pause_char="$(get-unicode-char 'pause')" normal_char="$(get-unicode-char 'play')"
+  local iconOk="$(get-unicode-char 'icon-ok')" iconNok="$(get-unicode-char 'icon-err')"
+  is-installed rlwrap || isRlWrap=false
   # Vars cleared in reset_vars() # {{{
   local end_at end_margin extra_added extra_comment extra_margin
   local inactivity_pause inactivity_pause_allowed inactivity_pause_not_allowed_end inactivity_ts
@@ -237,10 +237,10 @@ loglast() { # {{{
   fi
   [[ -e $TMP_PATH/.log-last.today ]] && source $TMP_PATH/.log-last.today
   [[ -e $TMP_MEM_PATH/log-last.new-day ]] && force_new_day=true && rm $TMP_MEM_PATH/log-last.new-day
-  ! is_to_be_done 'nested' && ! is_to_be_done 'tmux' && set_title 'Working Time'
-  ! is_to_be_done 'nested' && mutex_init "work-time" --auto-clean-after 60 --no-trap
+  ! is_to_be_done 'nested' && ! is_to_be_done 'tmux' && set-title 'Working Time'
+  ! is_to_be_done 'nested' && mutex-init "work-time" --auto-clean-after 60 --no-trap
   while true; do # {{{
-    if [[ $((10#$(command date +%H%M))) -gt 2330 ]]; then # {{{
+    if [[ $((10#$(date +%H%M))) -gt 2330 ]]; then # {{{
       if is_to_be_done 'tmux'; then
         echo -n "#[fg=yellow]H$pause_char#[fg=white]"
         return 0
@@ -253,9 +253,9 @@ loglast() { # {{{
         done
       fi
     fi # }}}
-    local new_today="$(LC_TIME=en_US.UTF-8 command date +'%b %_d' | tr -s ' ')"
+    local new_today="$(LC_TIME=en_US.UTF-8 date +'%b %_d' | tr -s ' ')"
     $force_new_day && TODAY= && force_new_day=false
-    local dow=$(command date +'%w')
+    local dow=$(date +'%w')
     if [[ "$new_today" != "$TODAY" ]]; then # {{{
       if ! is_to_be_done 'nested' && [[ -z $(loglast --nested-default | cut -c8-12) ]]; then # {{{
         progress \
@@ -264,7 +264,7 @@ loglast() { # {{{
           --cmd "! test -z \$(loglast --nested-default | head -n1 | cut -c8-12)"
       fi # }}}
       TODAY=$new_today
-      TODAY_YMD="$(command date +"%Y%m%d")"
+      TODAY_YMD="$(date +"%Y%m%d")"
       (
         echo "export TODAY='$TODAY'"
         echo "export TODAY_YMD='$TODAY_YMD'"
@@ -288,7 +288,6 @@ loglast() { # {{{
       0 | 6) paused=true ;;
       esac # }}}
       if is_to_be_done 'loop'; then # {{{
-        fix_caps
         __util_loglast_extra 'new-day'
         ec="$(__util_loglast_extra 'set-comment')"
         if [[ ! -z $ec ]]; then
@@ -297,7 +296,7 @@ loglast() { # {{{
           extra_comment="${extra_comment#, }" && extra_comment="${extra_comment%, }"
         fi
         to_do_extra+=" store-force stats-main send "
-        if [[ ! -e $FILE_DATA || $(command date -ud "@$(stat -c %Y $FILE_DATA)" +"%Y%m%d") != $TODAY_YMD ]]; then
+        if [[ ! -e $FILE_DATA || $(date -ud "@$(stat -c %Y $FILE_DATA)" +"%Y%m%d") != $TODAY_YMD ]]; then
           save_info
         fi
       fi # }}}
@@ -331,7 +330,7 @@ loglast() { # {{{
           &&  case ${key,,} in
               q) return 0;;
               esac
-          case $(command date +'%w') in
+          case $(date +'%w') in
           0 | 6);;
           *) continue 2;;
           esac
@@ -344,9 +343,9 @@ loglast() { # {{{
     local cmd=""
     if is_to_be_done 'first' || is_to_be_done 'today'; then # {{{
       if ! $IS_MAC; then
-        cmd+=" | command grep '^$TODAY'"
+        cmd+=" | grep '^$TODAY'"
       else
-        cmd+=" | command grep -e '$TODAY'"
+        cmd+=" | grep -e '$TODAY'"
       fi
       to_do=${to_do//'highlight'}
       ! is_to_be_done 'nested' && cmd+=" | cut -c8-"
@@ -358,7 +357,7 @@ loglast() { # {{{
       if ! $IS_MAC; then
         local gr_cmd= resOk=false
         if false && ! is_to_be_done 'full'; then # {{{
-          gr_cmd="command zgrep -a -h \"gkr-pam: unlocked login keyring\" $(ls -rt /var/log/auth.log*)"
+          gr_cmd="zgrep -a -h \"gkr-pam: unlocked login keyring\|gdm-fingerprint.*: gkr-pam: no password is available for user\" $(ls -rt /var/log/auth.log*)"
           if is_to_be_done 'first' || is_to_be_done 'today'; then
             local _cmd="$gr_cmd | tr -s ' ' $cmd"
             local res="$(eval $_cmd)"
@@ -366,7 +365,7 @@ loglast() { # {{{
           fi
         fi # }}}
         if is_to_be_done 'full' || ! $resOk; then # {{{
-          gr_cmd="command zgrep -a -h \"gkr-pam: unlocked login keyring\|New session .\+ of user $USER\" $(ls -rt /var/log/auth.log*)"
+          gr_cmd="zgrep -a -h \"gkr-pam: unlocked login keyring\|New session .\+ of user $USER\|gdm-fingerprint.*: gkr-pam: no password is available for user\" $(ls -rt /var/log/auth.log*)"
         fi # }}}
         is_to_be_done 'full' || gr_cmd+=" | cut -c-12"
         cmd="$gr_cmd | tr -s ' ' $cmd"
@@ -377,22 +376,22 @@ loglast() { # {{{
     fi # }}}
     is_to_be_done 'clear-screen' && ! $isDbg && clear
     echorm "[$to_do] [$to_do_extra]" >/dev/stderr # DBG
-    local d_cur=$(command date +"%H:%M")
+    local d_cur=$(date +"%H:%M")
     if $paused; then
       [[ -z $paused_time ]] && paused_time=$d_cur
       d_cur=$paused_time
     fi
-    local d_cur_s=$(command date -d "$d_cur" '+%s')
+    local d_cur_s=$(date -d "$d_cur" '+%s')
     if is_to_be_done 'show-current-time'; then # {{{
       printf 'Time: %6s ' $d_cur
       if $paused; then
         printf "${CRed}%s${COff}" "$pause_char"
         ! $pause_locked && printf " %b" "$iconOk" || printf " %b" "$iconNok"
-        printf "%b" "$(getUnicodeChar 'padlock')"
+        printf "%b" "$(get-unicode-char 'padlock')"
         $pause_auto_unpause && printf " %b" "$iconOk" || printf " %b" "$iconNok"
-        printf "%b" "$(getUnicodeChar 'play')"
+        printf "%b" "$(get-unicode-char 'play')"
         if [[ ! -z $paused_last_time && $paused_last_time != -1 ]]; then
-          printf " ${CYellow}@ $(command date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
+          printf " ${CYellow}@ $(date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
         fi
       else
         printf "${CGreen}%s${COff}" "$normal_char"
@@ -404,18 +403,18 @@ loglast() { # {{{
           fi
         fi
         if [[ ! -z $paused_last_time && $paused_last_time != -1 ]]; then
-          printf " ${CRed}!!! $(command date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
+          printf " ${CRed}!!! $(date +"%H:%M" -d @"$(($paused_last_time+$paused_suspend_delta))")${COff}"
         fi
       fi
       local reminderTime= reminderWhat= reminderRest=
       reminder --list | while read reminderTime reminderWhat reminderRest; do
         local reminderNext="$reminderTime $reminderWhat $reminderRest"
-        local reminderChar="$(getUnicodeChar 'bell') " llCmd=
+        local reminderChar="$(get-unicode-char 'bell') " llCmd=
         case $reminderWhat in
         C) continue;;
         -) continue;;
-        P)  reminderChar="$(getUnicodeChar 'pause')"; reminderNext="$reminderTime $reminderRest";;
-        GH) reminderChar="$(getUnicodeChar 'home')";  reminderNext="$reminderTime $reminderRest";;
+        P)  reminderChar="$(get-unicode-char 'pause')"; reminderNext="$reminderTime $reminderRest";;
+        GH) reminderChar="$(get-unicode-char 'home')";  reminderNext="$reminderTime $reminderRest";;
         ll-*) # {{{
           if [[ $reminderNext =~ ([0-9:]*)': ll-'(.*)'@'(.*) ]]; then
             llCmd=${BASH_REMATCH[2]%% *}
@@ -425,8 +424,8 @@ loglast() { # {{{
             llCmd=${BASH_REMATCH[2]%% *}
           fi
           if [[ ! -z $llCmd ]]; then
-            local reminderChar=$(getUnicodeChar "ll-$llCmd")
-            [[ -z $reminderChar ]] && llChar=$(getUnicodeChar 'disk')
+            local reminderChar=$(get-unicode-char "ll-$llCmd")
+            [[ -z $reminderChar ]] && llChar=$(get-unicode-char 'disk')
           fi;; # }}}
         esac
         printf " %b ${CMsg}%s${COff}" "$reminderChar" "${reminderNext%: }"
@@ -447,7 +446,7 @@ loglast() { # {{{
     local update_file=false
     if is_to_be_done 'remaining' || is_to_be_done 'store'; then # {{{
       local d_log=$(loglast --nested-default | cut -c8-12)
-      local d_log_s=$(command date -d "$d_log" '+%s')
+      local d_log_s=$(date -d "$d_log" '+%s')
       local d_end_s=$((d_log_s - $margin_s + 8 * 60 * 60))
       if is_to_be_done 'remaining'; then # {{{
         local percentage=$(( ( ($d_cur_s - $d_log_s + $margin_s) * 100) / (8 * 60 * 60) ))
@@ -500,11 +499,11 @@ loglast() { # {{{
           if is_to_be_done 'show-left'; then # {{{
             ! is_to_be_done 'tmux' && echo -n "Left:  ${color_term}"
             if [[ $d_end_s -gt $d_cur_s ]]; then
-              echo -n "$(command date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M')"
+              echo -n "$(date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M')"
             else
               if is_to_be_done 'passed'; then
                 ! is_to_be_done 'tmux' && echo -en "\b"
-                echo -n "-$(command date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
+                echo -n "-$(date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
               else
                 printf "%5s" 'END'
               fi
@@ -512,18 +511,18 @@ loglast() { # {{{
             ! is_to_be_done 'tmux' && echo -n "${COff}"
           fi # }}}
           if is_to_be_done 'show-end'; then # {{{
-            local d_print="$(command date -u -d "$(echo $(command date +'%z') | cut -c2-) $d_end_s seconds" '+%H:%M')"
+            local d_print="$(date -u -d "$(echo $(date +'%z') | cut -c2-) $d_end_s seconds" '+%H:%M')"
             if ! is_to_be_done 'tmux'; then
               echo
               echo -en "End:   ${CGreen}$d_print${COff}"
               if [[ ! -z $end_at ]]; then
                 echo -n " ${CMsg}"
-                local diff=$(($(command date +%s -d $end_at) - $(command date +%s -d $d_print))) sign="+"
+                local diff=$(($(date +%s -d $end_at) - $(date +%s -d $d_print))) sign="+"
                 if [[ $diff -ge -120 && $diff -le 120 ]]; then
                   echo -n "@"
                 else
                   [[ $diff -lt 0 ]] && sign="-" && diff=$((-diff))
-                  echo -n " $sign$(command date +%H:%M -d @$diff --utc)"
+                  echo -n " $sign$(date +%H:%M -d @$diff --utc)"
                 fi
                 echo -n "${COff}"
               fi
@@ -540,7 +539,7 @@ loglast() { # {{{
       fi # }}}
       if is_to_be_done 'store'; then # {{{
         local d_mod_s=0
-        [[ -e $FILE ]] && d_mod_s="$(stat -c %Y $FILE)"
+        [[ -e $LOGLAST_FILE ]] && d_mod_s="$(stat -c %Y $LOGLAST_FILE)"
         local DELTA=5 # {{{
         if   [[ $percentage -lt $(( ( 4 * 100 +  0 ) * 125 / 10 / 100 )) ]]; then     # < 4h00m
           DELTA=30
@@ -552,44 +551,44 @@ loglast() { # {{{
           DELTA=2
         fi # }}}
         if [[ $d_cur_s -ge $(( d_mod_s + $DELTA * 60 )) ]] || is_to_be_done 'store-force'; then # {{{
-          if mutex_lock 3; then
+          if mutex-lock 3; then
             update_file=true
             if [[ ! -z $LOGLAST_BACKUP_FILE && ( ! -e $LOGLAST_BACKUP_FILE || $d_cur_s -ge $(( $(stat -c %Y $LOGLAST_BACKUP_FILE) + 3 * 60 * 60 )) ) ]] || is_to_be_done 'store-force'; then
               to_do_extra+=" send "
             fi
             local over=
             if [[ $d_end_s -gt $d_cur_s ]]; then
-              over="-$(command date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M')"
+              over="-$(date -d "0 $(($d_end_s - $d_cur_s)) seconds" '+%H:%M')"
             else
-              over=" $(command date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
+              over=" $(date -d "0 $(($d_cur_s - $d_end_s)) seconds" '+%H:%M')"
             fi
-            local entry="$TODAY_YMD: $(command date -d "0 $(($d_cur_s - $d_log_s + $margin_s)) seconds" '+%H:%M') | $over | $d_log -> $d_cur"
+            local entry="$TODAY_YMD: $(date -d "0 $(($d_cur_s - $d_log_s + $margin_s)) seconds" '+%H:%M') | $over | $d_log -> $d_cur"
             local comment=
             [[ ! -z $user_comment ]] && comment+="${user_comment#, } "
             [[ $user_margin != 0 ]] && comment+="M($user_margin) "
             [[ $pause_margin != 0 ]] && comment+="P($pause_margin) "
             comment=$(echo "$comment" | xargs)
             [[ ! -z $comment ]] && entry+=" # $comment"
-            if [[ -e $FILE ]] && command grep -q "^$TODAY_YMD:" $FILE; then
-              sed -i "s/^$TODAY_YMD:.*/$entry/" $FILE
+            if [[ -e $LOGLAST_FILE ]] && grep -q "^$TODAY_YMD:" $LOGLAST_FILE; then
+              sed -i "s/^$TODAY_YMD:.*/$entry/" $LOGLAST_FILE
             else
-              echo "$entry" >>$FILE
+              echo "$entry" >>$LOGLAST_FILE
             fi
-            mutex_unlock
+            mutex-unlock
           fi
         fi # }}}
       fi # }}}
     fi # }}}
-    if is_to_be_done 'stats-main' && [[ -e $FILE ]]; then # {{{
+    if is_to_be_done 'stats-main' && [[ -e $LOGLAST_FILE ]]; then # {{{
       local pos=
       local sum=0
       local cnt=0
-      local lines="$(wc -l $FILE | cut -d ' ' -f1)"
-      # Find last sum of time in file # {{{
-      local file_cmd="cat $FILE"
-      local last_sum_line="$(command grep -n '@' $FILE | tail -n2 | head -n1 | cut -d ':' -f1)"
+      local lines="$(wc -l $LOGLAST_FILE | cut -d ' ' -f1)"
+      # Find last sum of time in LOGLAST_FILE # {{{
+      local file_cmd="cat $LOGLAST_FILE"
+      local last_sum_line="$(grep -n '@' $LOGLAST_FILE | tail -n2 | head -n1 | cut -d ':' -f1)"
       if [[ ! -z $last_sum_line && $last_sum_line -lt $lines ]]; then
-        file_cmd="tail -n +$last_sum_line $FILE"
+        file_cmd="tail -n +$last_sum_line $LOGLAST_FILE"
       else
         last_sum_line=
       fi
@@ -620,7 +619,7 @@ loglast() { # {{{
       if $update_file; then # {{{
         local sum_time2=" $sum_time"
         [[ $pos == -1 ]] && sum_time2="-$sum_time"
-        sed -i -e "s/^\($TODAY_YMD: [^#@]*\)\( | @..[0-9][0-9]:[0-9][0-9]\)\?\( # .*\)\?/\1 | @ $sum_time2\3/" $FILE
+        sed -i -e "s/^\($TODAY_YMD: [^#@]*\)\( | @..[0-9][0-9]:[0-9][0-9]\)\?\( # .*\)\?/\1 | @ $sum_time2\3/" $LOGLAST_FILE
       fi # }}}
       if is_to_be_done 'stats'; then # {{{
         echo 'Stats:'
@@ -636,16 +635,16 @@ loglast() { # {{{
         fi # }}}
         # local sed_params_extra=
         # ! is_to_be_done 'stats-full' && sed_params_extra="-e \"s/ @.*//\""
-        tail -n $max_lines $FILE | head -n $lines | eval sed -e \"s/^/\ \ /\" # $sed_params_extra
-        tail -n 2 $FILE                           | eval sed -e \"s/^/\ \ /\" # ${sed_params_extra/@/\#}
+        tail -n $max_lines $LOGLAST_FILE | head -n $lines | eval sed -e \"s/^/\ \ /\" # $sed_params_extra
+        tail -n 2 $LOGLAST_FILE                           | eval sed -e \"s/^/\ \ /\" # ${sed_params_extra/@/\#}
         echo  '------------------------------------------------------'
         echo -n "${CCyan}                     "
         [[ $pos == -1 ]] && echo -en '\b-'
         echo -n "${sum_time}${CMsg} | ${COff}"
         if [[ $pos == -1 ]]; then # {{{
-          local d_cur_stats=$(tail -n1 $FILE | tr -s ' ' | cut -d' ' -f8)
-          local d_cur_s_stats=$(command date -d "$d_cur_stats" '+%s')
-          echo -n "         ${CCyan}$(command date -u -d "$(echo $(command date +'%z' | cut -c2-)) $(( $d_cur_s_stats + $sum )) seconds" +'%H:%M')"
+          local d_cur_stats=$(tail -n1 $LOGLAST_FILE | tr -s ' ' | cut -d' ' -f8)
+          local d_cur_s_stats=$(date -d "$d_cur_stats" '+%s')
+          echo -n "         ${CCyan}$(date -u -d "$(echo $(date +'%z' | cut -c2-)) $(( $d_cur_s_stats + $sum )) seconds" +'%H:%M')"
         fi # }}}
         echo
         echo  "${CMsg}------------------------------------------------------${COff}"
@@ -653,7 +652,7 @@ loglast() { # {{{
       # }}}
     fi # }}}
     if is_to_be_done 'send'; then # {{{
-      [[ ! -z $LOGLAST_BACKUP_FILE ]] && saveInBackup -s "$FILE" -d "$LOGLAST_BACKUP_FILE"
+      [[ ! -z $LOGLAST_BACKUP_FILE ]] && save-in-backup -s "$LOGLAST_FILE" -d "$LOGLAST_BACKUP_FILE"
       __util_loglast_extra 'send' >/dev/null
     fi # }}}
     if is_to_be_done 'plot' || is_to_be_done 'plot-full'; then # {{{
@@ -661,7 +660,7 @@ loglast() { # {{{
       local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot='cat -'
       is_to_be_done 'plot' && full_plot='tail -n100'
       printf "%6s %2s %6s %6s\n" 'No' '8h' 'W' 'A' >$FILE_PLOT
-      cat $FILE | $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
+      cat $LOGLAST_FILE | $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
         printf "%-6s" '8'
         for i in $line; do
           local res="$(calc -q -- ${i/:*}+${i/*:}/60 | sed -e 's/~//' -e 's/\s//' | cut -c-5)"
@@ -676,7 +675,7 @@ loglast() { # {{{
       gnuplot -p -e "set term wxt size 2300,1100; plot for[col=2:4] '$FILE_PLOT' using 1:col title columnheader(col) with lines" 2>/dev/null
     fi # }}}
     if is_to_be_done 'suspend' || is_to_be_done 'shutdown'; then # {{{
-      [[ -z $end_delay ]] && end_delay=10
+      [[ -z $end_delay ]] && end_delay=${LOGLAST_END_DELAY:-10}
       paused_last_time=
       if [[ ! -z $(pgrep -x ssh) ]]; then # {{{
         echo "The following ssh sessions are going to be termianted:"
@@ -686,35 +685,33 @@ loglast() { # {{{
         echo
       fi # }}}
       local was_break=false param="--err-on-timeout"
-      local cImp=$(getColor imp) cErr=$(getColor err) cWrn=$(getColor wrn) cOk=$(getColor ok) cInfo=$(getColor info) cOff=$COff fridayAfternoon=false
-      [[ $(command date +%w) == 5 && $(command date +%H%M) -gt 1520 ]] && fridayAfternoon=true
+      local cImp=$(get-color imp) cErr=$(get-color err) cWrn=$(get-color wrn) cOk=$(get-color ok) cInfo=$(get-color info) cOff=$COff fridayAfternoon=false
+      [[ $(date +%w) == 5 && $(date +%H%M) -gt 1520 ]] && fridayAfternoon=true
       $fridayAfternoon && param="--no-err"
       case $(__util_loglast_extra ask-for-shutdown) in
       1) # {{{
-        if progress --wait $end_delay $param --msg "${cOk}Long uptime${cOff}, maybe ${cImp}shutdown${cOff}?"; then
+        if progress --wait $end_delay_ask $param --msg "${cOk}Long uptime${cOff}, maybe ${cImp}shutdown${cOff}?"; then
           to_do_extra="${to_do_extra/suspend/shutdown}"
         fi;; # }}}
       2) # {{{
-        if progress --wait $end_delay $param --msg "${cWrn}It is getting serious${cOff} - long uptime, ${cImp}shutdown${cOff} highly suggested"; then
+        if progress --wait $end_delay_ask $param --msg "${cWrn}It is getting serious${cOff} - long uptime, ${cImp}shutdown${cOff} highly suggested"; then
           to_do_extra="${to_do_extra/suspend/shutdown}"
         fi;; # }}}
       3) # {{{
-        case $(progress --wait $end_delay --keys 'Q' --msg "${cErr}It got too serious${cOff} - long uptime, doing ${cImp}shutdown${cOff} (almost-Q) without an ask") in
+        case $(progress --wait $end_delay_ask --keys 'Q' --msg "${cErr}It got too serious${cOff} - long uptime, doing ${cImp}shutdown${cOff} (almost-Q) without an ask") in
         Q)
-          if $fridayAfternoon; then
+          if $fridayAfternoon && progress --wait $end_delay_ask --no-err --msg "Well, it is Friday, sorry, shutting down anyway"; then
             to_do_extra="${to_do_extra/suspend/shutdown}"
-            echo "Well, it is Friday, sorry, shutting down anyway..."
-            sleep 3
           fi;;
         *) to_do_extra="${to_do_extra/suspend/shutdown}";;
         esac;; # }}}
       0 | *) # {{{
         local uptimeTime="$(cat /proc/uptime | awk '{print $1}' | sed 's/\..*//')"
-        if [[ $(command date +%w) == 5 && $uptimeTime -gt $(( 1 * 24 * 60 * 60 )) ]]; then
-          if progress --wait $end_delay --no-err --msg "${cOk}It's Friday${cOff}, maybe ${cImp}shutdown${cOff}?"; then
+        if [[ $(date +%w) == 5 && $uptimeTime -gt $(( 1 * 24 * 60 * 60 )) ]]; then
+          if progress --wait $end_delay_ask --no-err --msg "${cOk}It's Friday${cOff}, maybe ${cImp}shutdown${cOff}?"; then
             to_do_extra="${to_do_extra/suspend/shutdown}"
           fi
-        elif ! progress --wait $end_delay --no-err --msg "Going into $(is_to_be_done "suspend" && echo "${cOk}sleep${cOff}" || echo "${cImp}shutdown${cOff}") in $end_delay seconds..."; then
+        elif [[ $end_delay != '-' ]] && ! progress --wait $end_delay --no-err --msg "Going into $(is_to_be_done "suspend" && echo "${cOk}sleep${cOff}" || echo "${cImp}shutdown${cOff}") in $end_delay seconds..."; then
           was_break=true
         fi;; # }}}
       esac
@@ -724,14 +721,14 @@ loglast() { # {{{
         pkill -x -u $USER 'ssh'
         paused_last_time=-1
         if [[ ! -z $end_at ]]; then
-          local diff=$(($EPOCHSECONDS - $(command date +%s -d $end_at)))
+          local diff=$(($EPOCHSECONDS - $(date +%s -d $end_at)))
           if [[ $diff -ge -300 ]]; then
             end_at=""
             save_info
           fi
         fi
         if is_to_be_done 'suspend'; then # {{{
-          local suspendTime_s=$(command date '+%s')
+          local suspendTime_s=$(date '+%s')
           while true; do
             if [[ ! -z $RUN_AS_ROOT ]]; then
               $RUN_AS_ROOT suspend
@@ -743,7 +740,7 @@ loglast() { # {{{
               sleep $suspendDelay
               lastUnlock_time="$(loglast --nested --logins --today | tail -n1)"
               [[ -z $lastUnlock_time || $lastUnlock_time =~ ^0+$ ]] && continue
-              lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s' 2>/dev/null)
+              lastUnlock_s=$(date -d "$lastUnlock_time" '+%s' 2>/dev/null)
               [[ $? != 0 ]] && continue
               [[ $lastUnlock_s -ge $((suspendTime_s - 60)) ]] && break 2
             done
@@ -770,9 +767,9 @@ loglast() { # {{{
       break
     fi # }}}
     if $paused; then # {{{
-      local pt_s=$(command date -d "$paused_time" '+%s')
+      local pt_s=$(date -d "$paused_time" '+%s')
       local lastUnlock_time="$(loglast --nested --logins --today | tail -n1 | cut -c8-12)"
-      local lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s')
+      local lastUnlock_s=$(date -d "$lastUnlock_time" '+%s')
       ! $inactivity_pause && [[ -e "$inactivity_f" ]] && inactivity_pause_allowed=false
       if $inactivity_pause && [[ ! -e "$inactivity_f" ]]; then # {{{
         local ts="$((EPOCHSECONDS - pt_s))"
@@ -828,7 +825,7 @@ loglast() { # {{{
     cmdsCompl+=" $(__util_loglast_extra @@ | sed -e 's/^/ /' -e 's/\s\+$//' -e 's/\s\s\+/ /' -e 's/ / extra-/g')"
     local stopAtTS=$((EPOCHSECONDS + LOOP_TIME)) isInactivePause=false
     tput sc
-    while true; do # Wait for a key or input file # {{{
+    while true; do # Wait for a key or input LOGLAST_FILE # {{{
       tput rc
       if [[ -e $CMD_FILE ]]; then # {{{
         key="$(cat $CMD_FILE)"
@@ -854,7 +851,7 @@ loglast() { # {{{
         fi # }}}
       fi # }}}
       if $isRlWrap; then # {{{
-        key=$(run_for_some_time --wait $waitForKey:10 \
+        key=$(run-for-some-time --wait $waitForKey:10 \
           --cmd "rlwrap $RLWRAP_OPTS -o -S '$prompt' -w 0 -C log-last -H /dev/null --histsize -1 -f <(echo '$cmdsCompl') cat -")
       else
         read -t $waitForKey key
@@ -1033,11 +1030,11 @@ loglast() { # {{{
               inactivity_pause_not_allowed_end=$((EPOCHSECONDS + 5*60))
             fi
             pause_auto_unpause=true
-            d_cur=$(command date +"%H:%M")
-            d_cur_s=$(command date -d "$d_cur" '+%s')
+            d_cur=$(date +"%H:%M")
+            d_cur_s=$(date -d "$d_cur" '+%s')
             local lastUnlock_time="$(loglast --nested --logins --today | tail -n1 | cut -c8-12)"
-            local lastUnlock_s=$(command date -d "$lastUnlock_time" '+%s')
-            local pt_s=$(command date -d "$paused_time" '+%s')
+            local lastUnlock_s=$(date -d "$lastUnlock_time" '+%s')
+            local pt_s=$(date -d "$paused_time" '+%s')
             [[ $lastUnlock_s -gt $pt_s ]] && d_cur_s=$lastUnlock_s
             pt_s=$((($d_cur_s - $pt_s)/60))
             if [[ $pt_s -gt 2 ]]; then
@@ -1069,9 +1066,9 @@ loglast() { # {{{
           e!|E!) # {{{
             end_delay=3;; # }}}
           *) # {{{
-            echo $1 | command grep -q '[0-9]\+' && end_delay=$1 && shift
-            if ! $already_paused; then
-              local left=$((59 - 10#$(command date +"%S")))
+            echo $1 | grep -q '[0-9]\+' && end_delay=$1 && shift
+            if ! $already_paused && ${LOGLAST_END_WAIT_FULL_MINUTE:-true}; then
+              local left=$((59 - 10#$(date +"%S")))
               [[ $left -lt 5 ]] && left=5
               if ! progress --wait $left --color "${CGreen}" --msg "${CBlue}Waiting ${left}s for full minute...${COff}"; then
                 echo -e "${CGold}Waiting has been skipped${COff}"
@@ -1093,7 +1090,7 @@ loglast() { # {{{
               inactivity_pause=false
             fi
             pause_auto_unpause=${doUnpause:-true}
-            paused_time=$(command date +"%H:%M")
+            paused_time=$(date +"%H:%M")
             paused=true
             pause_msg_show=true
             pause_msg_last_time=$EPOCHSECONDS
@@ -1136,9 +1133,9 @@ loglast() { # {{{
           local delta=$((5*60)) curTime_s="$EPOCHSECONDS" onTime_before=
           case $onTime in
           '' | -) # {{{
-            onTime="$(command date -d "$endTime" +"%s")"
+            onTime="$(date -d "$endTime" +"%s")"
             if [[ $onTime -le $((curTime_s+60)) ]]; then
-              onTime="$(command date -d @$((curTime_s+60)) +"%H:%M")"
+              onTime="$(date -d @$((curTime_s+60)) +"%H:%M")"
             else
               onTime="$endTime"
             fi ;; # }}}
@@ -1149,11 +1146,11 @@ loglast() { # {{{
               d=$(time2s $d -o s)
               [[ $onTime == +* ]] && d="-$d"
             fi
-            onTime_before="$(($(command date -d "$endTime" +"%s") - d))"
+            onTime_before="$(($(date -d "$endTime" +"%s") - d))"
             if [[ $onTime_before -gt $((curTime_s+60)) ]]; then
-              onTime="$(command date -d @$onTime_before +"%H:%M")"
+              onTime="$(date -d @$onTime_before +"%H:%M")"
             else
-              progress --msg "Reminder is in the past [${CRed}$(command date -d @$onTime_before +"%H:%M")${COff}]" --wait 5s
+              progress --msg "Reminder is in the past [${CRed}$(date -d @$onTime_before +"%H:%M")${COff}]" --wait 5s
               shift $#; continue
             fi
             ;; # }}}
@@ -1161,10 +1158,10 @@ loglast() { # {{{
           arg="$1" && shift
           case $arg in
           '') # {{{
-            onTime_before="$(command date -d "$onTime" +"%s")"
+            onTime_before="$(date -d "$onTime" +"%s")"
             onTime_before="$((onTime_before - delta))"
             if [[ $onTime_before -gt $((curTime_s+60)) ]]; then
-              onTime_before="$(command date -d @$onTime_before +"%H:%M")"
+              onTime_before="$(date -d @$onTime_before +"%H:%M")"
               reminder -s "-Going home in 5m..." $onTime_before
             fi
             arg='go-home.sh';; # }}}
@@ -1185,7 +1182,7 @@ loglast() { # {{{
     to_do_extra=" $to_do_extra "
     save_info # }}}
   done # }}}
-  mutex_deinit
+  mutex-deinit
   unset is_to_be_done
 } # }}}
 export -f loglast

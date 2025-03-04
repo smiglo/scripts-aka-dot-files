@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-mutex_init() { # @@ # {{{
+mutex-init() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "--auto-clean-after --no-trap --clean-on-start --dbg"
     return 0
   fi # }}}
   [[ -z $1 ]] && echo "Mutex not specified" >/dev/stderr && return 1
-  local LOCK_DIR="$TMP_MEM_PATH/.locks"
+  local LOCK_DIR="$MEM_KEEP/locks"
   local newMutex="$1"
   [[ $newMutex != ./* && $newMutex != /* ]] && newMutex="$LOCK_DIR/$newMutex"
   [[ ! -z $MUTEX_LOCK_FILE && $MUTEX_LOCK_FILE != $newMutex ]] && echo "Mutex already set [${MUTEX_LOCK_FILE/*\/}], nested mutexes are not allowed" >/dev/stderr && return 1
   export MUTEX_LOCK_FILE="$newMutex"
-  mutex_dbg() { # {{{
-    $MUTEX_DBG && echo "${MUTEX_LOCK_FILE/*\/} $(date +"$DATE_FMT") $@" >/dev/stderr
+  mutex-dbg() { # {{{
+    $MUTEX_DBG && echo "${MUTEX_LOCK_FILE/*\/} $(command date +"$DATE_FMT") $@" >/dev/stderr
   } # }}}
-  mutex_lock() { # {{{
+  mutex-lock() { # {{{
     local timeout=${1:-0}
-    mutex_dbg "Locking (wait=$timeout)"
+    mutex-dbg "Locking (wait=$timeout)"
     if [[ -e $MUTEX_LOCK_FILE && $MUTEX_ACCESS_MIN_DELTA -gt 0 ]]; then
-      local accessTime=$(stat -c %Y $MUTEX_LOCK_FILE)
+      local accessTime=$(command stat -c %Y $MUTEX_LOCK_FILE)
       local currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
-      mutex_dbg "Mutex already exists, (at=$accessTime, ct=$currentTime, d=$MUTEX_ACCESS_MIN_DELTA)"
+      mutex-dbg "Mutex already exists, (at=$accessTime, ct=$currentTime, d=$MUTEX_ACCESS_MIN_DELTA)"
       if [[ $(($accessTime + $MUTEX_ACCESS_MIN_DELTA)) -lt $currentTime ]]; then
-        mutex_dbg "Removing old mutex"
+        mutex-dbg "Removing old mutex"
         rm -rf $MUTEX_LOCK_FILE
       fi
     fi
@@ -31,42 +31,43 @@ mutex_init() { # @@ # {{{
     local ct=0
     while [[ $ct -lt $time ]]; do
       if command mkdir $MUTEX_LOCK_FILE 1>/dev/null 2>&1; then
-        mutex_dbg "Mutex locked"
+        mutex-dbg "Mutex locked"
         export MUTEX_CREATED=true
         return 0
       fi
       sleep "$(echo $RANDOM | awk '{print 0.2 + ( $1 % 10 ) / 15}')"
       ct=${EPOCHSECONDS:-$(epochSeconds)}
     done
-    mutex_dbg "Mutex not locked"
+    mutex-dbg "Mutex not locked"
     return 1
   } # }}}
-  mutex_unlock() { # {{{
-    mutex_dbg "Unlocking (created=$MUTEX_CREATED)"
+  mutex-unlock() { # {{{
+    mutex-dbg "Unlocking (created=$MUTEX_CREATED)"
     $MUTEX_CREATED && rm -rf $MUTEX_LOCK_FILE
     local err=$?
-    mutex_dbg "Mutex unlocked ($err)"
+    mutex-dbg "Mutex unlocked ($err)"
     return $err
   } # }}}
-  mutex_deinit() { # {{{
-    mutex_dbg "De-initialization"
+  mutex-deinit() { # {{{
+    mutex-dbg "De-initialization"
     export MUTEX_CREATED=false
     export MUTEX_LOCK_FILE=
-    unset MUTEX_CREATED MUTEX_LOCK_FILE MUTEX_ACCESS_MIN_DELTA mutex_lock mutex_unlock mutex_deinit mutex_exit mutex_dbg
+    unset MUTEX_CREATED MUTEX_LOCK_FILE MUTEX_ACCESS_MIN_DELTA
+    unset -f mutex-lock mutex-unlock mutex-deinit mutex-exit mutex-dbg
   } # }}}
-  mutex_exit() { # {{{
-    mutex_dbg "Exit trap"
-    mutex_unlock
-    mutex_deinit
+  mutex-exit() { # {{{
+    mutex-dbg "Exit trap"
+    mutex-unlock
+    mutex-deinit
     return 0
   } # }}}
-  export -f mutex_lock mutex_unlock mutex_deinit mutex_exit
+  export -f mutex-lock mutex-unlock mutex-deinit mutex-exit
   export MUTEX_ACCESS_MIN_DELTA="$((10*60))"
   export MUTEX_CREATED=false
   export MUTEX_DBG=false
   local set_trap=true
   local clean_on_start=false
-  [[ ! -e $LOCK_DIR ]] && command mkdir -p $LOCK_DIR
+  [[ ! -e $LOCK_DIR ]] && command mkdir -p $LOCK_DIR >/dev/null
   shift
   while [[ ! -z $1 ]]; do
     case $1 in
@@ -77,8 +78,9 @@ mutex_init() { # @@ # {{{
     esac
     shift
   done
-  mutex_dbg "Mutex initialized [$MUTEX_LOCK_FILE, clean=$clean_on_start, trap=$set_trap, delta=$MUTEX_ACCESS_MIN_DELTA)"
+  mutex-dbg "Mutex initialized [$MUTEX_LOCK_FILE, clean=$clean_on_start, trap=$set_trap, delta=$MUTEX_ACCESS_MIN_DELTA)"
   $clean_on_start && rm -rf $MUTEX_LOCK_FILE
-  $set_trap && trap 'mutex_exit' EXIT
+  $set_trap && trap 'mutex-exit' EXIT
 } # }}}
+export -f mutex-init
 

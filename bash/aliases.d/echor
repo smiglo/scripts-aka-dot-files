@@ -77,22 +77,24 @@ __echor_util() { # {{{
     local ffu_name=$ffu exe_name=$exe
     exe=${exe^^} exe=${exe//./_} exe=${exe//-/_}
     ffu=${ffu^^} ffu=${ffu//./_} ffu=${ffu//-/_}
-    local var_ffu=${ffu}_DBG
-    local var_exe=${exe}_DBG
+    local var_ffu=_${ffu}_DBG
+    local var_exe=_${exe}_DBG
     local -n ref_ffu=$var_ffu
     local -n ref_exe=$var_exe
-    if [[ ! -z $ffu && ( ! -z $ref_ffu || $2 == '--no-fallback' || " $EXPORTED_FUNCTIONS " == *" $ffu_name "* || $exe_name == 'cli' ) ]]; then
+    local f_prev_to_last=${FUNCNAME[$((${#FUNCNAME[*]}-2))]}
+    if [[ ! -z $ffu && ( ! -z $ref_ffu || $2 == '--no-fallback' || $exe_name == 'cli' ) ]]; then
       echo "$ffu_name"
+    elif [[ ! -z $exe_name ]] && ( ( [[ $f_prev_to_last =~ ^_[a-z] && $f_prev_to_last == _$exe_name ]] ) || ( [[ ! -z ${BASH_ALIASES[$exe_name]} ]] ) ); then
+      echo "$exe_name"
     elif [[ ! -z $ref_exe ]]; then
       echo "$exe_name"
     else
       echo "${ffu_name:-$exe_name}"
-    fi
-    ;; # }}}
+    fi;; # }}}
   --convert-to-var) # {{{
     local mod="${2:-$(__echor_util --get-name)}"
     mod="${mod//[.,:-]/_}"
-    echo "${mod^^}";; # }}}
+    echo "_${mod^^}";; # }}}
   esac
 } # }}}
 echorm() { # @@ # {{{
@@ -118,8 +120,7 @@ echorm() { # @@ # {{{
           echo "$i"
         done
         echo "$ECHOR_KNOWN_NAMES"
-        echo "$EXPORTED_FUNCTIONS"
-        declare -Fx | cut -d' ' -f3
+        declare -Fx | cut -d' ' -f3 | command grep -v "^_"
       ) | tr ' ' '\n' | command grep -v "^_\|echor\|FAT\|ERR\|WRN\|INF\|DBG\|TRC";; # }}}
     -f) # {{{
       echo "on off 1 0 true false + - true:2 true:3";; # }}}
@@ -140,7 +141,7 @@ echorm() { # @@ # {{{
       echo "-xv +xv -v +v"
       (
         echo "$ECHOR_KNOWN_NAMES"
-        echo "$EXPORTED_FUNCTIONS"
+        declare -Fx | cut -d' ' -f3
       ) | tr ' ' '\n' | command grep -v "^_\|echor\|FAT\|ERR\|WRN\|INF\|DBG\|TRC" | sed 's/^/+/';; # }}}
     esac
     if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
@@ -403,6 +404,12 @@ echorm() { # @@ # {{{
   $convertColors && str="$(eval printfc "${@@Q}")" && str="${str#\'}" && str="${str%\'}"
   echo -e $echoParam "$($addHeader && __echor_util --get-header -c:$colorsOn -m:$module --msg:"$userMsg" -l:${levelCurrent:-1}/$level)${str:-$@}" >$out
   if [[ ! -z $flagsOut ]]; then set -$flagsOut; fi
+} # }}}
+echormf() { # {{{
+  local f=${FUNCNAME[1]} exe=${0##*/}
+  [[ ! -z $f ]] || return 0
+  [[ _$exe == $f* ]] && f=${f#_}
+  echorm -m $f "$@"
 } # }}}
 echor() { # @@ # {{{
   local flagsIn=$-
@@ -699,7 +706,7 @@ echore() { # {{{
   fi # }}}
   echo "$@" >/dev/stderr
 } # }}}
-getTS() { # @@ # {{{
+get-ts() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     -o) # {{{
@@ -778,6 +785,9 @@ die() { # {{{
     -b* | --break=*) mode='break';    n=$1; n=${n#-b}; n=${n#--break=};;
     -rv | --ret-val) retVal=$2; shift;;
     -s)              silent=true;;
+    -s=true | -s=false) silent=${1#-s=};;
+    -s=!true)        silent=false;;
+    -s=!false)       silent=true;;
     *) break;;
     esac; shift
   done # }}}
@@ -794,8 +804,7 @@ die() { # {{{
   break)     echo "break $n"
   esac
 } # }}}
-alias echo="echo -e"
-export -f __echor_util echorm echor echorc echorv echore die getTS
+export -f __echor_util echorm echormf echor echorc echorv echore die get-ts
 export ECHOR_PATH="$BASH_ESSENTIALS_PATH/aliases.d"
-export PHISTORY_IGNORED_COMMANDS+=":getTS:die"
+export PHISTORY_IGNORED_COMMANDS+=":get-ts:die"
 

@@ -14,7 +14,7 @@ currentTime=0
 # Functions # {{{
 if ! declare -f epochSeconds >/dev/null 2>&1; then # {{{
   epochSeconds() {
-    command date +%s
+    date +%s
   }
 fi # }}}
 do_update() { # {{{
@@ -29,7 +29,7 @@ do_update() { # {{{
 } # }}}
 saveTime() { # {{{
   [[ $currentTime == 0 ]] && currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
-  if [[ -e $DATE_FILE ]] && command grep -q '^tLastUpdateTime=' $DATE_FILE; then
+  if [[ -e $DATE_FILE ]] && grep -q '^tLastUpdateTime=' $DATE_FILE; then
     sed -i 's/^tLastUpdateTime=.*/tLastUpdateTime='$currentTime'/' $DATE_FILE
     return
   fi
@@ -42,8 +42,8 @@ checkTime() { # {{{
   $forced && return 0
   if ${SETUP_UPDATER_ASK_EVERYDAY:-true}; then
     local lastMod=0
-    [[ -e $DATE_FILE ]] && lastMod="$(command date +%Y%m%d -d @$(stat -c %Y $DATE_FILE))"
-    [[ "$(command date +%Y%m%d)" == "$lastMod" ]] && return 1
+    [[ -e $DATE_FILE ]] && lastMod="$(date +%Y%m%d -d @$(stat -c %Y $DATE_FILE))"
+    [[ "$(date +%Y%m%d)" == "$lastMod" ]] && return 1
     if $ask; then
       local msg="$(echor --colors=force -1 "Update repos [Yn]")"
       $ALIASES progress --wait 5s --key --no-err --msg "$msg" --out /dev/stderr || return 1
@@ -65,20 +65,24 @@ check() { # {{{
 } # }}}
 start() { # {{{
   check || return 1
-  mutex_init "setup-update" --auto-clean-after $((10*60))
-  mutex_lock || return 1
+  mutex-init "setup-update" --auto-clean-after $((10*60))
+  mutex-lock || return 1
   local key=$SETUP_UPDATER_KEY
   if [[ ! -n "$SSH_CLIENT" && ! -z $key ]]; then
     [[ $key == /* ]] || key="$HOME/.ssh/keys/$key"
     [[ ! -e $key ]] && echor "Updater key not set" && return 1
-    if ! ssh-add -l | command grep $(ssh-keygen -lf $key | cut -d' ' -f2 ) >/dev/null; then
+    if ! ssh-add -l | grep $(ssh-keygen -lf $key | cut -d' ' -f2 ) >/dev/null; then
       ssh-add $key >/dev/null 2>&1
     fi
   fi
   saveTime
   do_update
   [[ ! -z $key ]] && ssh-add -d $key >/dev/null 2>&1 || true
-  $do_install && $MY_PROJ_PATH/scripts/bin/mk_install_scripts.sh --all-no --silent --no-exec
+  mutex-unlock
+  mutex-deinit
+  if $do_install; then
+    $MY_PROJ_PATH/scripts/bin/mk_install_scripts.sh --all-no --silent --no-exec
+  fi
 } # }}}
 # }}}
 # MAIN # {{{

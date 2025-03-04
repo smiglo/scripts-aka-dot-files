@@ -1,0 +1,79 @@
+From 45c816db309a1bb47cdc508a681ef840a7e2190a Mon Sep 17 00:00:00 2001
+From: Tomasz <>
+Date: Mon, 13 Jan 2025 15:13:52 +0100
+Subject: [PATCH] parse docs.json from stdin if in pipe
+
+---
+ Cargo.lock   |  1 +
+ Cargo.toml   |  1 +
+ src/fetch.rs | 31 ++++++++++++++++++-------------
+ 3 files changed, 20 insertions(+), 13 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index a2e33b5..71d50fb 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -98,6 +98,7 @@ name = "dedoc"
+ version = "0.2.5"
+ dependencies = [
+  "attohttpc",
++ "atty",
+  "html2text",
+  "serde",
+  "serde_json",
+diff --git a/Cargo.toml b/Cargo.toml
+index d1c44d9..aef2639 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -31,3 +31,4 @@ serde         = { version = "1.0.188", features = ["derive"] }
+ serde_json    = "1.0.106"
+ html2text     = "0.11.0"
+ terminal_size = "0.3.0"
++atty          = "0.2.14"
+diff --git a/src/fetch.rs b/src/fetch.rs
+index 401f90f..51344a9 100644
+--- a/src/fetch.rs
++++ b/src/fetch.rs
+@@ -35,21 +35,26 @@ fn show_fetch_help() -> ResultS
+ 
+ fn fetch_docs() -> Result<Vec<DocsEntry>, String>
+ {
+-  let user_agent = format!("{DEFAULT_USER_AGENT}/{VERSION}");
+-
+-  let response = get(DEFAULT_DOCS_JSON_LINK)
+-    .header_append("user-agent", user_agent)
+-    .send()
+-    .map_err(|err| {
+-      format!("Could not fetch `{DEFAULT_DOCS_JSON_LINK}`: {err}")
+-    })?;
+-
+-  let body =
+-    response.text()
+-            .map_err(|err| format!("Unable to read response body: {err}"))?;
++  let mut body = String::new();
++  if atty::is(atty::Stream::Stdin) {
++    let user_agent = format!("{DEFAULT_USER_AGENT}/{VERSION}");
++
++    let response = get(DEFAULT_DOCS_JSON_LINK)
++        .header_append("user-agent", user_agent)
++        .send()
++        .map_err(|err| {
++        format!("Could not fetch `{DEFAULT_DOCS_JSON_LINK}`: {err}")
++        })?;
++
++     body = response.text()
++             .map_err(|err| format!("Unable to read response body: {err}"))?;
++  } else {
++    body = std::io::read_to_string(std::io::stdin())
++             .map_err(|err| format!("Unable to read from stdin: {err}"))?;
++  }
+ 
+   let docs: Vec<DocsEntry> =
+-    serde_json::from_str(body.as_str()).map_err(|err| {
++    serde_json::from_str(&body).map_err(|err| {
+       let result = write_to_logfile(format!(
+         "Error while parsing JSON body: {err}\n\n{body}"
+       ));
+-- 
+2.43.0
+

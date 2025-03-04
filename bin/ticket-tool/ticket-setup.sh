@@ -8,7 +8,7 @@ getPath() { # {{{
   local issue="$1" must_exisit="${2:-false}" ext=
   local path_issue="$TICKET_PATH/$issue"
   [[ -e "$path_issue/${issue}-data.txt" || -e "$path_issue/.${issue}-data.txt" ]] && echo "$path_issue" && return 0
-  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+  for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
     path_issue=$($ext --ticket-path $issue)
     if $must_exisit; then
       [[ -e "$path_issue/${issue}-data.txt" || -e "$path_issue/.${issue}-data.txt" ]] && break
@@ -44,7 +44,7 @@ while [[ ! -z $1 ]]; do # {{{
   --title)     title=true;;
   -*) # -mdh # {{{
     v="${1:1}"
-    echo "$v" | command grep -q "^[adhmt]\+$" || break
+    echo "$v" | grep -q "^[adhmt]\+$" || break
     while [[ ! -z $v ]]; do
       case ${v:0:1} in
       a) always=true;; d) done=true;; h) hidden=true;; m) minimal=true;; t) title=true;;
@@ -62,7 +62,7 @@ shift
 if [[ -z $issue ]]; then # {{{
   if $do_open; then # {{{
     [[ ! -z $TICKET_TMUX_SESSION ]] && tmux-startup.sh --do-env -- "$TICKET_TMUX_SESSION"
-    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       $ext --open
     done # }}}
   fi # }}}
@@ -80,7 +80,7 @@ fnameH="$path_issue/.${issue}-data.txt"
 $recreate && { mv $fname ${fname}.old; mv $fnameH ${fnameH}.old; } >/dev/null 2>&1
 if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
   cnt=10
-  while ! command mkdir -p "$path_issue"; do
+  while ! mkdir -p "$path_issue"; do
     sleep 0.5
     [[ -e "$fname" ]] && break
     cnt="$(($cnt-1))"
@@ -92,7 +92,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
   $hidden && fname="$fnameH"
   touch "$fname"
   # Pre-setup # {{{
-  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do
+  for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do
     $ext --setup "$@"
   done
   # }}}
@@ -144,7 +144,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			@@ INFO @@
 			# }}}
 		EOF
-    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       $ext --template-main "$fname" "$@"
     done # }}}
     # }}}
@@ -156,7 +156,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			@@ BROWSER @@
 			# }}}
 		EOF
-    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       $ext --template-oth "$fname" "$@"
     done # }}}
     # Tmux # {{{
@@ -164,7 +164,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
 			# tmux -# {{{
 		EOF
     tmux_template_added=false
-    for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+    for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
       $ext --template-tmux "$fname" "$@" && tmux_template_added=true && break
     done # }}}
     if ! $tmux_template_added; then # {{{
@@ -197,7 +197,7 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
   fi # }}}
   # }}}
   # Post-setup # {{{
-  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+  for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
     $ext --setup-post "$fname" "$@"
   done # }}}
   # }}}
@@ -220,20 +220,20 @@ if [[ ! -e "$fname" && ! -e "$fnameH" ]]; then # {{{
   # }}}
   # Auto-commit # {{{
   if git -C $TICKET_PATH rev-parse 2>/dev/null; then
-    command cd $path_issue
+    cd $path_issue
     git add -f "${fname#${path_issue}/}"
     git add .
     git commit -m"[$issue]" --no-verify
     echo
-    command cd - >/dev/null 2>&1
+    cd - >/dev/null 2>&1
   fi # }}}
 fi # }}}
 if $do_open; then # {{{
   [[ ! -z $TICKET_TMUX_SESSION ]] && tmux-startup.sh --do-env -- "$TICKET_TMUX_SESSION" "$issue"
-  for ext in $(command find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
+  for ext in $(find -L $PROFILES_PATH/ -path \*ticket-tool/ticket-setup-ext.sh); do # {{{
     $ext --open "$issue"
   done # }}}
-  if [[ ! -z $TICKET_TMUX_SESSION ]] && ! tmux list-windows -t $TICKET_TMUX_SESSION -F '#W' | command grep -qi "$issue"; then
+  if [[ ! -z $TICKET_TMUX_SESSION ]] && ! tmux list-windows -t $TICKET_TMUX_SESSION -F '#W' | grep -qi "$issue"; then
     $TICKET_TOOL_PATH/ticket-tool.sh --issue $issue tmux 'INIT'
   fi
   if $do_layout; then # {{{

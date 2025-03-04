@@ -60,7 +60,7 @@ if [[ $1 == '--complete' ]]; then # {{{
     *) # {{{
       case $first in
       --gen) # {{{
-        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --key --update --padding --no-padding --plain --pass-save --no-pass-save"
+        opts+=" --cnt --upper --special --digit --no-sp --upper-first --save --no-save --key --update --padding --no-padding --plain --pass-save --no-pass-save"
         opts+=" --in --in= --seq --seq="
         opts+=" --pass --pass= --no-pass";; # }}}
       --get | '') # {{{
@@ -123,7 +123,7 @@ if [[ -z $KEEP_PASS_JOURNAL ]]; then
   fi
 fi
 [[ -z $KEEP_PASS_KEYS ]] && export KEEP_PASS_KEYS="$APPS_CFG_PATH/keep-pass/keep-pass.keys"
-[[ -e $APPS_CFG_PATH/keep-pass ]] || command mkdir -p $APPS_CFG_PATH/keep-pass/
+[[ -e $APPS_CFG_PATH/keep-pass ]] || mkdir -p $APPS_CFG_PATH/keep-pass/
 if [[ ! -z "$KEEP_PASS_KEYS" ]]; then # {{{
   if [[ -e "$KEEP_PASS_KEYS" ]]; then
     source "$KEEP_PASS_KEYS"
@@ -350,7 +350,7 @@ getPass() { # {{{
     local f= line=
     for f in $(getJournals); do
       [[ ! -e $f ]] && continue
-      line="$(command grep "^$phrase\(:.*\)\{0,1\}:\s\+" "$f" | head -n1)"
+      line="$(grep "^$phrase\(:.*\)\{0,1\}:\s\+" "$f" | head -n1)"
       [[ ! -z $line ]] && break
     done
     seq="$(echo "$line" | sed 's/.*:\s\+//')"
@@ -421,7 +421,7 @@ getPass() { # {{{
 genPass() { # {{{
   local cnt=4 i= v= seq= words= pass= params= input= info= \
     upper=false special=false digit=false spaces=true upper_first=false use_pass=false read_input=false \
-    save=false add_padding=true do_encode=true update=false check= save_pass= passV= key=
+    save= add_padding=true do_encode=true update=false check= save_pass= passV= key=
   set -- $KEEP_PASS_GEN_PARAMS "$@"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -440,6 +440,7 @@ genPass() { # {{{
     --seq)             seq="$2"; shift;;
     --update | --key)  update=true;&
     --save)            save=true; info="$2"; use_pass=true; shift;;
+    --no-save)         save=false;;
     --no-padding)      add_padding=false;;
     --padding)         add_padding=true;;
     --pass-save)       save_pass=true;;
@@ -447,7 +448,7 @@ genPass() { # {{{
     --plain)           do_encode=false; add_padding=false; spaces=false; seq="$2"; shift;;
     *) # {{{
       if [[ $# == 2 ]]; then
-        save=true
+        [[ -z $save ]] && save=true
         use_pass=true
         info="$1"
         shift
@@ -459,6 +460,7 @@ genPass() { # {{{
     esac
     shift
   done # }}}
+  [[ -z $save ]] && save=false
   if $read_input; then # {{{
     [[ -z $input ]] && read -r -p 'Enter input: ' input >/dev/stderr
     seq=
@@ -564,31 +566,35 @@ genPass() { # {{{
       esac
     done # }}}
     if [[ ! -z $pass ]]; then # {{{
+      local mkey="$(getMasterkey true)"
+      if [[ -z $mkey ]]; then
+        local answ=
+        while read -p "Do you want to store key in plain format [y/N]? " answ; do
+          case ${answ^^} in
+          Y) break;;
+          N | '') return 0;;
+          esac
+        done || return 1
+      fi
+      local env=
+      if [[ ! -z $mkey ]]; then
+        if [[ -z $passV ]]; then
+          passV="KEEP_PASS_KEY_FOR_THIS_PASS"
+          dbg 2 "Pass-enc: $passV=\"@$(encrypt "$pass" "$mkey")\""
+        fi
+        env="@$(encrypt "$pass" "$mkey")"
+      else
+        env="$pass"
+      fi
       if ${save_pass:-false} \
-         && [[ ! -z "$KEEP_PASS_KEYS" ]] && [[ -e "$KEEP_PASS_KEYS" || ( "$KEEP_PASS_KEYS" == /* && "$KEEP_PASS_KEYS" != //* ) ]]; then # {{{
-        local mkey="$(getMasterkey true)"
-        if [[ -z $mkey ]]; then
-          local answ=
-          while read -p "Do you want to store key in plain format [y/N]? " answ; do
-            case ${answ^^} in
-            Y) break;;
-            N | '') return 0;;
-            esac
-          done || return 1
-        fi
-        if [[ ! -z $mkey ]]; then
-          if [[ -z $passV ]]; then
-            passV="KEEP_PASS_KEY_TMP_PASS_$((1+(RANDOM%1000)))"
-            dbg 2 "Pass-enc: $passV=\"@$(encrypt "$pass" "$mkey")\""
-          fi
-          echo "export $passV=\"@$(encrypt "$pass" "$mkey")\"" >>"$KEEP_PASS_KEYS"
-        else
-          echo "export $passV=\"$pass\"" >>"$KEEP_PASS_KEYS"
-        fi
-      fi # }}}
-      seq="*$(encrypt "$seq" "$pass")"
-      params="--pass=$pass"
+        && [[ ! -z "$KEEP_PASS_KEYS" ]] && [[ -e "$KEEP_PASS_KEYS" || ( "$KEEP_PASS_KEYS" == /* && "$KEEP_PASS_KEYS" != //* ) ]]; then # {{{
+        echo "export $passV=\"$env\"" >>"$KEEP_PASS_KEYS"
+      else
+        echo "export $passV=\"$env\""
+      fi
     fi # }}}
+    seq="*$(encrypt "$seq" "$pass")"
+    params="--pass=$pass"
   fi # }}}
   if [[ $verbose -ge 1 ]]; then
     dbg 1 "$(basename "$0") ${params:-\b} --seq $seq"
@@ -605,7 +611,7 @@ genPass() { # {{{
    return 1
   fi # }}}
   if $save; then # {{{
-    [[ -z $info ]] && info="$(command date +"%Y%m%d-%H%M%S")"
+    [[ -z $info ]] && info="$(date +"%Y%m%d-%H%M%S")"
     local entry="${info// /-}:" journalFile="${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}"
     if [[ ! -z $journalMainFile ]]; then
       journalFile="$journalMainFile"
@@ -634,7 +640,7 @@ genPass() { # {{{
 hasKey() { # {{{
   local f=
   for f in $(getJournals); do
-    [[ -e $f ]] && command grep -q "^$1:" "$f" && return 0
+    [[ -e $f ]] && grep -q "^$1:" "$f" && return 0
   done
   return 1
 } # }}}
@@ -678,7 +684,7 @@ iosDigits='0123456789'
 iosVovels='aeiouy'
 iosConsonants='bcdfghjklmnpqrstvwz'
 iosGetChar() { # {{{
-  local i=$(getRangeValue ${#1})
+  local i=$(get-range-value ${#1})
   echo "${1:$i:1}"
 } # }}}
 iosIsVovel() { # {{{
@@ -693,8 +699,8 @@ genIOSLikePass() { # {{{
     esac; shift
   done # }}}
   local charCount=$((parts * charsInPart))
-  local idxDigit=$(getRangeValue $charCount)
-  local idxUpper=$(((idxDigit + 1 + $(getRangeValue $((charCount - 1)))) % charCount))
+  local idxDigit=$(get-range-value $charCount)
+  local idxUpper=$(((idxDigit + 1 + $(get-range-value $((charCount - 1)))) % charCount))
   local idx=0 l= out=
   for ((;parts>0;parts--)); do # {{{
     local i=$charsInPart next='letter'

@@ -28,7 +28,7 @@ fi
 case $todo in
 save) # {{{
   if ! $use_stdout; then
-    if ! command grep -q "^# j-info: -*$entry:" "$f"; then
+    if ! grep -q "^# j-info: -*$entry:" "$f"; then
       $quiet || ( echo "No '$entry' section in the header"; echo "Add '# j-info: -$entry:' there first"; ) >/dev/stderr
       exit 1
     fi
@@ -39,7 +39,7 @@ save) # {{{
   fi
   ;; # }}}
 restore) # {{{
-  tmux display-message -t $TMUX_PANE -pF '#{window_flags}' | command grep -q "Z" && exit 0
+  tmux display-message -t $TMUX_PANE -pF '#{window_flags}' | grep -q "Z" && exit 0
   layout_old="$layout"
   if ! $use_stdin; then
     if [[ -z "$layoutSaved" ]]; then

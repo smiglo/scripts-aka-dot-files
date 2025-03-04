@@ -10,23 +10,23 @@ xaa() { # @@ # {{{
   local cmd= args=
   while [[ ! -z 1 ]]; do # {{{
     case $1 in
-    -v) echorm +;;
+    -v) echormf +;;
     *)  cmd=$1; shift; break;;
     esac
     shift
   done # }}}
-  eval local $(echorm -f?var)
+  eval local $(echormf -f?var)
   args="$@"
   [[ -z $cmd ]] && cmd="echo"
   if [[ -e "$cmd" ]]; then # {{{
-    $dbg && echorm -m $module -l1 -xv
+    echormf -l1 -xv
     xargs -r -n1 -I{} "$cmd" $args "{}"
-    $dbg && echorm -m $module -l1 +xv
+    echormf -l1 +xv
     # }}}
   elif declare -F "$cmd" >/dev/null 2>&1; then # {{{
-    $dbg && echorm -m $module -l1 -xv
+    echormf -l1 -xv
     xargs -r -n1 -I{} $(which bash) -c "$(declare -f $cmd); $cmd $args {}"
-    $dbg && echorm -m $module -l1 +xv
+    echormf -l1 +xv
     # }}}
   else # {{{
     if [[ $cmd != *{}* && $cmd != *\$1* && $cmd != *\$@* ]]; then
@@ -37,9 +37,9 @@ xaa() { # @@ # {{{
       fi
     fi
     args="${args# }" && args="${args% }"
-    $dbg && echorm -m $module -l1 -xv
+    echormf -l1 -xv
     xargs -r -n1 -I{} $(which bash) -c 'f() { '"eval $cmd"'; }; f '"$args"' {}'
-    $dbg && echorm -m $module -l1 +xv
+    echormf -l1 +xv
   fi # }}}
 } # }}}
 alias xa='xargs -r -n1 -I{}'

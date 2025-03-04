@@ -29,6 +29,3 @@
 	path = bash/personalities
 	url = ../scripts-personalities.git
 	branch = master
-[submodule "bash/inits/gdb/pwn-dbg"]
-	path = bash/inits/gdb/pwn-dbg
-	url = https://github.com/pwndbg/pwndbg.git

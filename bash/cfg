@@ -10,9 +10,9 @@ export RCSTUFF_CFG_INSTALLED=true
 # Term # {{{
 if ! ${TERM_ALREADY_SET:-false}; then
   [[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
-  if [[ -e $TMP_MEM_PATH/.alacritty-is ]] || ( pidof 'alacritty' && infocmp 'alacritty' )>/dev/null 2>&1; then
+  if [[ -e $MEM_KEEP/alacritty-is ]] || ( pidof 'alacritty' && infocmp 'alacritty' )>/dev/null 2>&1; then
     TERM="alacritty"
-    [[ -e $TMP_MEM_PATH/.alacritty-is ]] || touch $TMP_MEM_PATH/.alacritty-is
+    [[ -e $MEM_KEEP/alacritty-is ]] || touch $MEM_KEEP/alacritty-is
   else
     case $TERM_ORIG in
     *) [[ ! -n $TMUX ]] && export TERM="xterm" || export TERM="screen" ;;&
@@ -29,7 +29,7 @@ export GIT_PS1_SHOWSTASHSTATE=true
 export GIT_PS1_SHOWUNTRACKEDFILES=true
 export GIT_PS1_SHOWUPSTREAM="auto"
 export GIT_PS1_DESCRIBE_STYLE="branch"
-export GIT_PS1_SHOWCOLORHINTS=true
+unset GIT_PS1_SHOWCOLORHINTS
 export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
 # }}}
 # Ack # {{{
@@ -63,9 +63,12 @@ fi
 # }}}
 # FZF # {{{
 if $FZF_INSTALLED; then
-  if which fdfind >/dev/null 2>&1; then # {{{
-    export FZF_DEFAULT_COMMAND="command fdfind -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
-    export FZF_ALT_C_COMMAND="command fdfind -d ${FZF_MAX_DEPTH:-12} --type d --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
+  fdfindCmd="fdfind"
+  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
+  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
+  if [[ ! -z $fdfindCmd ]]; then # {{{
+    export FZF_DEFAULT_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
+    export FZF_ALT_C_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type d --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
     # }}}
   elif which ag >/dev/null 2>&1; then # {{{
     export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS --follow -g "" | sort' # }}}
@@ -88,7 +91,7 @@ if $FZF_INSTALLED; then
       echo "$FZF_ALT_C_COMMAND" >$BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env
     fi # }}}
   fi # }}}
-  fzf_exe="$ALIASES fzf_exe" # has to be in this form for vim fzf-plugin
+  fzf_exe="$ALIASES fzf-exe" # has to be in this form for vim fzf-plugin
   if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
   else
@@ -115,7 +118,7 @@ if $FZF_INSTALLED; then
   export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
   export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
   export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
-  unset fzf_exe
+  unset fzf_exe fdfindCmd
   export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
 else
   [[ ! -z "$PS1" ]] && echor "FZF not found"
@@ -173,12 +176,15 @@ if [[ ! -n $TMUX && -e "$BASH_PHISTORY_FILE" ]] && ! pgrep tmux >/dev/null 2>&1;
   sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
 fi
 [[ -z $BASH_PHISTORY_SUM_CMD ]] && export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
-shopt -s histappend
-shopt -s checkwinsize
-shopt -s extglob
 shopt -s cdspell
+shopt -s checkwinsize
 shopt -s dirspell
-# shopt -s direxpand
+shopt -s extglob
+# shopt -s globstar
+shopt -s histappend
+shopt -s progcomp
+shopt -s progcomp_alias
+export GLOBIGNORE=.:..
 # }}}
 # InputRC: Bash shortcuts # {{{
 goto_vi_command() { # {{{
@@ -222,6 +228,7 @@ if [[ ! -z $PS1 ]]; then
       bind '"\e[6~": history-search-backward'
       bind -x '"\C-kk": "history -r && echorm -m bash 0 history reloaded"'
       bind    '"\C-kl": "\C-g logout\C-m"'
+      bind    '"\C-k\C-b": "\C-g byebye\C-m"'
       if $FZF_INSTALLED; then
         bind -x '"\C-f": "fzfwr iRC"'
         bind -x '"\C-p": "fzf-file-widget"'
@@ -255,6 +262,13 @@ fi
 if ! declare -F __git_ps1 &>/dev/null; then
   $BASHRC_DBG && echo "Using internal __git_ps1" >/dev/stderr
   source $BASH_PATH/completion.d/git/git-prompt.sh
+else
+  (
+    type __git_ps1 | tail -n+2
+    type __git_eread | tail -n+2
+    type __git_is_repo_ignored | tail -n+2
+    type __git_ps1_show_upstream | tail -n+2
+  ) >$BASHRC_RUNTIME_PATH/tmux-git-ps1.sh 2>/dev/null
 fi
 # }}}
 # Less # {{{
@@ -283,29 +297,37 @@ export LESS_TERMCAP_ue="$COff"
 # }}}
 # PS1 # {{{
 if ${SET_TITLE_USE_SIMPLE_MODE:-true}; then
-  export PROMPT_COMMAND="set_title_pane;"
+  export PROMPT_COMMAND="set-title-pane;"
 else
-  export PROMPT_COMMAND="set_title --set-terminal --tmux-session;"
+  export PROMPT_COMMAND="set-title --set-terminal --tmux-session;"
 fi
 export PROMPT_COMMAND+=" bash_phistory; history -a"
 export PROMPT_DIRTRIM=3
 
-${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set_title; $PROMPT_COMMAND"
+${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set-title; $PROMPT_COMMAND"
 ${PS1_CHECK_ENV:-true} && export PROMPT_COMMAND="$PROMPT_COMMAND; PS1_envUpdater"
+PROMPT_COMMAND+="; set +f"
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 
 export PS1_SHORTEN_PATH=true
-if [[ -z $PS1_STATUS ]]; then
+if [[ -z $PS1_STATUS ]] || ( ! $IS_DOCKER && ! ${PS1_STATUS_KEEP_IT:-false} ); then
   export PS1_STATUS="short_git:default"
+  if $IS_VSCODE; then
+    export PS1_CFG_ADD_GIT=true
+    export PS1_CFG_ADD_SEPARATOR=false
+    export PS1_SSH_CHANGE=false
+  fi
   if $IS_DOCKER; then
-    export PS1_STATUS="short_git_ssh:default"
+    ! $IS_VSCODE && export PS1_STATUS="short_git_ssh:default"
     [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3}
   elif [[ $PERS_USERS != *\ $USER\ * && $USER != 'root' ]]; then
     export PS1_STATUS="usuper_full:short_git"
   fi
 fi
-[[ -n "$SSH_CLIENT" && $PS1_SSH_CHANGE ]] && export PS1_STATUS="short_git_ssh:default_ssh"
+if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
+  ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"
+fi
 [[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
 # }}}
 # CapsLock <-> Ctrl # {{{

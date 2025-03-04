@@ -99,13 +99,13 @@ phist () { # @@ # {{{
   fi
   local grep_output=
   readarray grep_output < \
-    <(  { [[ $tail_n == '-' ]] && cat $BASH_PHISTORY_FILE || tail -n $tail_n $BASH_PHISTORY_FILE; } \
+    <(  { [[ $tail_n == '-' ]] && command cat $BASH_PHISTORY_FILE || tail -n $tail_n $BASH_PHISTORY_FILE; } \
         | awk \
           -v icase="$igncase" \
           -v re="$BASH_PHISTORY_LAST_REGEXP" \
           'BEGIN{IGNORECASE = icase}; {if (match(substr($0, index($0, $6)), re)) print $0;}' \
         | sed 's//\\n/' \
-        | cat -n | sort -uk3,3 | sort -nrk1,1 | sort -uk7 | sort -nrk1,1 | cut -d'|' -f3- | sed 's/\s\+//')
+        | command cat -n | sort -uk3,3 | sort -nrk1,1 | sort -uk7 | sort -nrk1,1 | cut -d'|' -f3- | sed 's/\s\+//')
   [[ -z $grep_output ]] && echo "Empty list" >/dev/stderr && return 1
   export BASH_PHISTORY_LAST_REGEXP
   local color_off= color_nr= color_date= color_reg= color_hl=
@@ -128,7 +128,7 @@ phist () { # @@ # {{{
           o = gensub(re, c_r "\\0" c_off, "G", o)
           print o;
         }' | \
-        cat -n | \
+        command cat -n | \
         gawk -v c=${color_nr} -v c_off=${color_off} \
         '{
           o = gensub(/^(\s+[0-9]+)/, c "\\1" c_off, "G")
@@ -144,14 +144,14 @@ phist () { # @@ # {{{
         o = gensub(re, c_r "\\0" c_off, "G", o)
         print o;
       }' | \
-      cat -n | \
+      command cat -n | \
       gawk -v c=${color_nr} -v c_off=${color_off} \
       '{
         o = gensub(/^(\s+[0-9]+)/, c "\\1" c_off, "G")
         print o;
       }' | \
-      { $use_colors && hl --lines $color_hl || cat -; } | \
-      { ! $in_pipe && less || cat -; }
+      { $use_colors && hl --lines $color_hl || command cat -; } | \
+      { ! $in_pipe && less || command cat -; }
     $in_pipe && return 0
     local len=${#grep_output[*]} do_exec=
     read -p "Exec (Quit/First/[1,$len]) ? " do_exec # {{{
@@ -205,6 +205,7 @@ hist() { # {{{
   return 0
 }
 alias h="hist" # }}}
+export -f bash_phistory
 alias l="fc -s"
 export HISTIGNORE+=":h:hist:history"
 export HISTIGNORE+=":phist:H"

@@ -1,0 +1,6 @@
+{
+    "colors_file": ".hl-colors.json",
+    "regex_file": ".hl.json",
+    "colors_basic": [ "blue", "cyan", "green", "red", "yellow", "purple", "gold" ]
+}
+

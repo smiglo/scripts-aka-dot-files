@@ -22,7 +22,7 @@ dbgF() { # @@ # {{{
       elif [[ " $@ " == *" -f "* || " $@ " == *" -f="*" "* ]]; then # {{{
         local f= list=
         echo "--env --init -o1 -o2 --out"
-        list="$(getFileList '*.dbg') $(getFileList --pwd "$APPS_CFG_PATH/dbg" '*.dbg' 2>/dev/null)"
+        list="$(get-file-list '*.dbg') $(get-file-list --pwd "$APPS_CFG_PATH/dbg" '*.dbg' 2>/dev/null)"
         for f in $list; do
           echo "-f=$f"
         done # }}}
@@ -53,7 +53,7 @@ dbgF() { # @@ # {{{
   if [[ ! -z $__dbg_level ]]; then
     [[ $__dbg_level =~ ^-?[FEWIDT]$ ]] && set -- $__dbg_level "$@"
   else
-    __dbg_level=$__dbg_levelInf
+    __dbg_level=$(vGet $__dbg_prefixVar - $__dbg_levelInf)
   fi
   __dbg_prefixVar="__dbg_verbose_$__dbg_id"
   while [[ ! -z $1 ]]; do # {{{
@@ -106,7 +106,7 @@ dbgF() { # @@ # {{{
         local l=
         while IFS= read -r l; do
           dbgF -id=$__dbg_id $__dbg_level $__dbg_out "$l"
-        done <<<$(cat $__dbg_fDbg)
+        done <<<$(<$__dbg_fDbg)
       fi
       rm -f "$__dbg_fDbg"
       if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
@@ -114,7 +114,7 @@ dbgF() { # @@ # {{{
     --set | --init) # {{{
       [[ $1 == '--init' ]] && vClean $__dbg_prefixVar
       shift
-      local moduleDbg="$(__echor_util --convert-to-var)_DBG" __dbg_level=$__dbg_levelInf
+      local moduleDbg="$(__echor_util --convert-to-var)_DBG" __dbg_level=$(vGet $__dbg_prefixVar - $__dbg_levelInf)
       local -n refDbg=$moduleDbg
       if [[ ! -z $refDbg ]]; then # {{{
         case $refDbg in
@@ -152,7 +152,9 @@ dbgF() { # @@ # {{{
         --colors=*)    vSet $__dbg_prefixVar colors ${1#--colors=};;
         esac; shift
       done # }}}
-      case $(vGet $__dbg_prefixVar - $__dbg_level) in # {{{
+      local lvl=$(vGet $__dbg_prefixVar - $__dbg_level)
+      case $lvl in # {{{
+      [0-5]) ;;
       F) vSet $__dbg_prefixVar - $__dbg_levelFat;;
       E) vSet $__dbg_prefixVar - $__dbg_levelErr;;
       W) vSet $__dbg_prefixVar - $__dbg_levelWrn;;
@@ -255,7 +257,7 @@ dbgF() { # @@ # {{{
   fi # }}}
   local str=
   if [[ ! -t 0 && -z $@ ]] && $__dbg_printEmpty; then
-    cat -
+    command cat -
   else
     echo "${@@Q}"
   fi \

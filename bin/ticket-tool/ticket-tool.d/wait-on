@@ -33,7 +33,7 @@ while [[ ! -z $1 ]]; do # {{{
       v="$TICKET_CONF_WAIT_ON_PHRASE_DEF"
     else
       p="${1#@}"
-      v="$(echo -e "$TICKET_CONF_WAIT_ON_PHRASES_SHORT" | command grep "^$p:")"
+      v="$(echo -e "$TICKET_CONF_WAIT_ON_PHRASES_SHORT" | grep "^$p:")"
       v="${v#*:}"
     fi
     [[ -z $v ]] && echo "No configuration for '$p'" >/dev/stderr && exit 1
@@ -53,7 +53,7 @@ while true; do
   tailPid=$!
   tail -F "$f" -s 1 -n1 --pid $tailPid | while read l; do
     for ii in ${!phrase[*]}; do
-      if echo "$l" | command grep -q "${phrase[ii]}"; then # {{{
+      if echo "$l" | grep -q "${phrase[ii]}"; then # {{{
         $silent || progress --unmark $pid
         [[ $dbg -gt 0 ]] && echo "WaitOn: Matched [${phrase[ii]}]:[${action[ii]}]$([[ $dbg -gt 1 ]] && echo " [$l]")" >/dev/stderr
         a="${action[ii]}"

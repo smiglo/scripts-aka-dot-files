@@ -12,11 +12,11 @@ if [[ $1 == '@@' ]]; then # {{{
   --out  | -o)        echo "@@-f";;
   --sum-cmd) # {{{
     echo "dateSsum dateUSsum"
-    isInstalled xxh32sum && echo "xxh32sum xxh64sum xxh128sum"
-    isInstalled sha1sum  && echo "sha1sum sha256sum"
-    isInstalled md5sum   && echo "md5sum"
-    isInstalled cksum    && echo "cksum"
-    isInstalled hashrat  && echo "hashrat"
+    is-installed xxh32sum && echo "xxh32sum xxh64sum xxh128sum"
+    is-installed sha1sum  && echo "sha1sum sha256sum"
+    is-installed md5sum   && echo "md5sum"
+    is-installed cksum    && echo "cksum"
+    is-installed hashrat  && echo "hashrat"
     echo "Script Function Script:Function";; # }}}
   *) # {{{
     echo "-n --n-stop-at --n-start-at --sum-len --keep --file -f --out -o --hash-at-end"
@@ -26,7 +26,7 @@ if [[ $1 == '@@' ]]; then # {{{
     echo --map{,--sort} +map{,-v,-reuse}
     echo --{,single-}cpu
     echo "--sum-cmd --sum-no-repeat" --sum-buffered{,={100,500,1000}}
-    getFileList '*.log'; getFileList '*.txt'
+    get-file-list '*.log'; get-file-list '*.txt'
     ;; # }}}
   esac
   exit 0
@@ -62,25 +62,25 @@ fi
 keepFo=false
 workerMode=false
 if false; then :
-elif isInstalled hashrat;  then sum_cmd="hashrat -sha1"
-elif isInstalled xxh32sum; then sum_cmd="xxh32sum"
+elif is-installed hashrat;  then sum_cmd="hashrat -sha1"
+elif is-installed xxh32sum; then sum_cmd="xxh32sum"
 fi
 $IS_MAC && source-basic
 # }}}
 dateSsum() { # {{{
   local l=
   cat - | while read l; do
-    command date +%s -d "$l"
+    date +%s -d "$l"
   done
 } # }}}
 dateUSsum() { # {{{
   local l=
   cat - | while read l; do
-    echo "$(command date +%s -d "${l%.*}")${l##*.}"
+    echo "$(date +%s -d "${l%.*}")${l##*.}"
   done
 } # }}}
 cksum() { # {{{
-  local r=$(command cksum)
+  local r=$(cksum)
   printf "%011d" ${r/ }
 } # }}}
 worker() { # {{{
@@ -252,8 +252,8 @@ if [[ "$inFile" == '-' || ( ! -t 0 && -z $inFile ) ]]; then # {{{
 elif [[ ! -z $inFile ]]; then
   $keepFo || doReplace=true
 fi # }}}
-[[ -z "$inFile" ]] && inFile=$(getFileList -t -1 "*.log")
-[[ -z "$inFile" ]] && inFile=$(getFileList -t -1 "*.txt")
+[[ -z "$inFile" ]] && inFile=$(get-file-list -t -1 "*.log")
+[[ -z "$inFile" ]] && inFile=$(get-file-list -t -1 "*.txt")
 [[ -z "$inFile" ]] && echorm 0 "File [$inFile] not found" && exit 1
 if $workerMode; then # {{{
   if [[ ! -z $matches ]]; then # {{{
@@ -270,7 +270,7 @@ if $workerMode; then # {{{
   if $doRemove; then rm -f "$inFile"; fi
   exit 0
 fi # }}}
-isInstalled parallel split || singleCPU=true
+is-installed parallel split || singleCPU=true
 echorv -M n separator
 [[ -z $matches ]] && echorv -M n_stopAt n_startAt || echorv -M matches matches_skipOthers
 echorv -M mapMake mapBrowseMode mapBrowse_ignoreOthers
@@ -309,9 +309,9 @@ if ! $mapUseExisting || [[ ! -e "$foHash" || ! -e "$foMap" ]]; then # {{{
   if $makeMap; then # {{{
     cat "$foHash" \
     | if ! $hashAtEnd; then
-        command grep -v "^ \+$separator "
+        grep -v "^ \+$separator "
       else
-        command grep -v "$separator *$"
+        rep -v "$separator *$"
       fi \
     | if ! $mapSort; then
         cat -n | sort -k2,2 -s | uniq -c -s8 -w$n | sort -k2,2n -s | cut -c1-8,16-

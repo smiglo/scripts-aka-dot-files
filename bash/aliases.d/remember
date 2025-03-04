@@ -2,11 +2,58 @@
 # vim: fdl=0
 
 rem() { # @@ # {{{
+  __rem-reset-conf() { # {{{
+    var= var_use_file= var_file=
+    rm -f $file
+    touch $file
+  } # }}}
+  __rem-get-item() { # {{{
+    local p= i="$1" path=
+    i="${i//	/ /}"
+    if $do_split && [[ $i == *\ * ]]; then
+      set -- $i
+      local added=false
+      for i; do
+        __rem-get-item "$i"
+        [[ $? == 0 ]] && ! $added && added=true
+      done
+      ! $added && return 1
+      return 0
+    fi
+    if $as_file; then # {{{
+      if [[ $i == '..' ]]; then
+        p="$PWD"
+      elif [[ -e $i || -h $i ]]; then
+        [[ $i == /* ]] && p="$i" || path="$PWD"
+      elif [[ ! -z $last_working_path && -e "$last_working_path/$i" ]]; then
+        path="$last_working_path"
+      else
+        local path="$PWD"
+        while [[ ! -e "$path/$i" ]]; do
+          path="$(command cd "$path/.."; pwd)"
+          [[ $path == '/' || $path == "$HOME" ]] && break
+        done
+        [[ -e "$path/$i" ]] && last_working_path="$d" || path=
+      fi
+      [[ ! -z $path ]] && p="$path/$i"
+      if ${add_not_exst:-true}; then
+        [[ -z $p ]] && p="$i"
+      elif [[ ! -e $p ]]; then
+        p=""
+      fi
+      p="${p//\/.\//\/}"
+      # }}}
+    else # {{{
+      p="$i"
+    fi # }}}
+    [[ -z $p ]] && return 1
+    var+="$p\n"
+    return 0
+  } # }}}
   # Setup # {{{
   local var="${REMEMBER_CONF_VAR:-REMEMBER}" mask_file="${REMEMBER_CONF_MASK:-remember}" store_dir="${REMEMBER_CONF_DIR:-$TMUX_RUNTIME}" \
     ls_mode="${REMEMBER_CONF_LS_MODE:-rec}" keep_n_bck_files="${REMEMBER_CONF_KEEP_N:-7}"
-  local reset_conf="echo \$var=''; echo \$var_use_file=''; echo \$var_file=''; rm -f \$file; touch \$file"
-  local var_use_file= var_file= file= i= p= fzf_prompt= cmd= tild='~'
+  local var_use_file= var_file= file= i= p= fzf_prompt= cmd=
   local do_reset=false do_use_file=true do_edit=false do_keep=true do_append=true do_fzf=false do_quiet=false do_set_store_env=false \
     do_ls=false do_list=false show_abs=false do_restore=false do_browse=false do_cmd=false as_file=true add_not_exst= do_split=false \
     do_smart= do_block_reset= line_no=
@@ -39,8 +86,8 @@ rem() { # @@ # {{{
     case $1 in
     @@ | @@@) # {{{
       case $3 in
-      --file | -f | -F) getFileList --pwd "$store_dir" "${mask_file}*.txt";;
-      --restore)        getFileList --pwd "$store_dir" "${mask_file}*.txt-*.bck";;
+      --file | -f | -F) get-file-list --pwd "$store_dir" "${mask_file}*.txt";;
+      --restore)        get-file-list --pwd "$store_dir" "${mask_file}*.txt-*.bck";;
       --ls-mode)        echo "rec rec-all 1";;
       *) # {{{
         local params=
@@ -81,7 +128,7 @@ rem() { # @@ # {{{
         do_use_file=true; do_set_store_env=true; do_append=true;;& # }}}
     --file | -f) # {{{
         file=
-        [[ -z $file ]] && [[ $2 == '-' ]] && file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt")" && shift
+        [[ -z $file ]] && [[ $2 == '-' ]] && file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt")" && shift
         [[ -z $file ]] && [[ $2 == ${mask_file}* ]] && file="$store_dir/$2" && shift
         [[ -z $file ]] && [[ $2 == $store_dir/${mask_file}* ]] && file="$2" && shift
         [[ -z $file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && file="$store_dir/$2" && shift
@@ -110,11 +157,11 @@ rem() { # @@ # {{{
     --restore) # {{{
         do_restore=true
         local restore_file=
-        [[ -z $restore_file ]] && [[ $2 == '-' ]] && restore_file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt-*.bck")" && shift
+        [[ -z $restore_file ]] && [[ $2 == '-' ]] && restore_file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt-*.bck")" && shift
         [[ -z $restore_file ]] && [[ $2 == ${mask_file}* ]] && restore_file="$store_dir/$2" && shift
         [[ -z $restore_file ]] && [[ $2 == $store_dir/${mask_file}* ]] && restore_file="$2" && shift
         [[ -z $restore_file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && restore_file="$store_dir/$2" && shift
-        [[ -z $restore_file ]] && restore_file="$(getFileList -1 -t "$store_dir/${mask_file}*.txt-*.bck")"
+        [[ -z $restore_file ]] && restore_file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt-*.bck")"
         ;; # }}}
     --smart)      do_smart=true;;
     # NO* # {{{
@@ -142,7 +189,7 @@ rem() { # @@ # {{{
     --) shift; p="$@"; shift $#; set -- "$p"; as_file=false; break;;
     -)  shift; break;;
     --help | --help-all) # {{{
-      cat <<-EOF >/dev/stdout
+      command cat <<-EOF >/dev/stdout
 					Switches:
 					  -1 | -2 | ...      - shows particular entry
 					  --append | -a      - append to temporary file
@@ -168,7 +215,7 @@ rem() { # @@ # {{{
 					  -- | -             - separate inputs from arguments, "-" does not threat inputs as files
 				EOF
       if [[ $1 == '--help-all' ]]; then # {{{
-        cat <<-EOF >/dev/stdout
+        command cat <<-EOF >/dev/stdout
 						  --no-*
 						    --no-append
 						    --no-abs
@@ -186,7 +233,7 @@ rem() { # @@ # {{{
 					EOF
       fi # }}}
       echo
-      cat <<-EOF >/dev/stdout
+      command cat <<-EOF >/dev/stdout
 					Defaults are:
 					  --no-reset -f --no-edit --keep --append --no-fzf --no-quiet --no-list --no-abs --no-restore --no-browse --no-cmd --no-ign
 				EOF
@@ -199,8 +246,8 @@ rem() { # @@ # {{{
   done # }}}
   # }}}
   if [[ ! -z $do_block_reset ]]; then # {{{
-    var="${var}_CONF_BLOCK_RESET"
-    eval export $var="$do_block_reset"
+    local -n var="${var}_CONF_BLOCK_RESET"
+    var="$do_block_reset"
     return 0
   else
     do_block_reset="${var}_CONF_BLOCK_RESET"
@@ -211,10 +258,10 @@ rem() { # @@ # {{{
   [[ -z $file ]] && file="$store_dir/${mask_file}.txt"
   if $do_browse; then # {{{
     local files=
-    files+=" $(getFileList "$store_dir/${mask_file}*.txt")"
-    files+=" $(getFileList "$store_dir/${mask_file}*.txt-*.bck")"
+    files+=" $(get-file-list "$store_dir/${mask_file}*.txt")"
+    files+=" $(get-file-list "$store_dir/${mask_file}*.txt-*.bck")"
     local res=
-    res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | cat -n")"
+    res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | command cat -n")"
     [[ $? != 0 || -z $res ]] && return 0
     if [[ $res == *.bck ]]; then
       do_restore=true
@@ -225,31 +272,31 @@ rem() { # @@ # {{{
     fi
   fi # }}}
   if $do_restore; then # {{{
-    [[ ! -e $restore_file ]] && echo "File to restore from [$restore_file] does not exist" >/dev/stderr && return 1
+    [[ ! -e $restore_file ]] && eval $(die "file to restore from [$restore_file] does not exist")
     [[ -e $file ]] && mv "$file" "${file}-$(command date +"$DATE_FMT").bck"
     mv "$restore_file" "$file"
   fi # }}}
-  var_use_file="${var}_USE_FILE"; var_file="${var}_FILE"
+  local -n var_use_file="${var}_USE_FILE"
+  local -n var_file="${var}_FILE"
+  local -n var="${var}_SRC"
   var="${var}_SRC"
   if $do_set_store_env; then # {{{
     if $do_use_file; then
-      eval $var_use_file="\"true\"" # for vim syntax: "
-      eval $var_file="\"$file\"" # for vim syntax: "
+      var_use_file="true"
+      var_file="$file"
     else
-      eval $var_use_file="\"false\"" # for vim syntax: "
-    fi
-    # }}}
+      var_use_file="false"
+    fi # }}}
   else # {{{
-    local u="${!var_use_file}"
-    if [[ $u == "false" || $u == "true" ]]; then
-      do_use_file="$u"
-      $do_use_file && file="${!var_file}"
-    fi
+    case $var_use_file in false|true)
+      do_use_file="$var_use_file"
+      $do_use_file && file="$var_file"
+    esac
   fi # }}}
   $do_append && do_use_file=true
   $do_edit && do_use_file=true
   if $do_reset; then # {{{
-    $do_block_reset && echo "Reset blocked" >/dev/stderr && return 1
+    $do_block_reset && eval $(die "reset blocked")
     if $do_use_file && [[ -e $file ]]; then
       mv "$file" "${file}-$(command date +"$DATE_FMT").bck"
       local to_rem=
@@ -257,9 +304,9 @@ rem() { # @@ # {{{
         && to_rem="$(ls ${file}-*.bck | /usr/bin/tail -r | sed "1,${keep_n_bck_files} d")" \
         || to_rem="$(ls ${file}-*.bck | head -n -$keep_n_bck_files)" 
       [[ ! -z "$to_rem" ]] && rm $to_rem
-      command find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
+      find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
     fi
-    eval $(eval "$reset_conf")
+    __rem-reset-conf
   fi # }}}
   $do_fzf && do_keep=true
   # What to do # {{{
@@ -273,54 +320,9 @@ rem() { # @@ # {{{
   [[ -z $mode ]] && mode='recall'
   # }}}
   if [[ "$mode" == 'add' ]]; then # Remember files # {{{
-    eval $var=''
+    var=
     [[ -z $fzf_prompt ]] && fzf_prompt="To store> "
-    last_working_path=
-    getItem() { # {{{
-      local p= i="$1" path=
-      i="${i//	/ /}"
-      if $do_split && [[ $i == *\ * ]]; then
-        set -- $i
-        local added=false
-        for i; do
-          getItem "$i"
-          [[ $? == 0 ]] && ! $added && added=true
-        done
-        ! $added && return 1
-        return 0
-      fi
-      if $as_file; then # {{{
-        [[ $i == ${tild}* ]] && i="${i/$tild/$HOME}"
-        if [[ $i == '..' ]]; then
-          p="$PWD"
-        elif [[ -e $i || -h $i ]]; then
-          [[ $i == /* ]] && p="$i" || path="$PWD"
-        elif [[ ! -z $last_working_path && -e "$last_working_path/$i" ]]; then
-          path="$last_working_path"
-        else
-          local path="$PWD"
-          while [[ ! -e "$path/$i" ]]; do
-            path="$(command cd "$path/.."; pwd)"
-            [[ $path == '/' || $path == "$HOME" ]] && break
-          done
-          [[ -e "$path/$i" ]] && last_working_path="$d" || path=
-        fi
-        [[ ! -z $path ]] && p="$path/$i"
-        if ${add_not_exst:-true}; then
-          [[ -z $p ]] && p="$i"
-        elif [[ ! -e $p ]]; then
-          p=""
-        fi
-        p="${p/$HOME/$tild}"
-        p="${p//\/.\//\/}"
-        # }}}
-      else # {{{
-        p="$i"
-      fi # }}}
-      [[ -z $p ]] && return 1
-      eval $var+="\"${p// /%20} \""
-      return 0
-    } # }}}
+    local last_working_path=
     if [[ -t 0 ]]; then # {{{
       if [[ -z $1 ]] && $do_ls; then # {{{
         local c=
@@ -330,18 +332,18 @@ rem() { # @@ # {{{
                 ;;
         rec-all) c="command find . -mindepth 1 \( -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-";;
         1)       c="ls -A";;
-        *)       echo "ls mode [$ls_mode] not yet known" >/dev/stderr && return 1;;
+        *)       eval $(die "ls mode [$ls_mode] not yet known");;
         esac
         c+=" | fzf --height 100% --prompt '$fzf_prompt'"
         set -- $(eval "$c")
       fi # }}}
       for i; do # {{{
-        getItem "$i"
+        __rem-get-item "$i"
       done # }}}
       # }}}
     else # {{{
       local tmpFile="$TMP_MEM_PATH/rem/rem-$$.tmp"
-      [[ ! -e "${tmpFile%/*}" ]] && command mkdir "${tmpFile%/*}"
+      [[ ! -e "${tmpFile%/*}" ]] && command mkdir -p "${tmpFile%/*}"
       rm -f $tmpFile && touch $tmpFile
       while read i; do
         echo "$i" >> $tmpFile
@@ -356,7 +358,7 @@ rem() { # @@ # {{{
           i="\"${i//	/\" \"}\""
           eval set -- $i
           for j; do
-            getItem "$j"
+            __rem-get-item "$j"
             [[ $? == 0 ]] && ! $added && added=true
           done
         done < $tmpFile # }}}
@@ -371,14 +373,17 @@ rem() { # @@ # {{{
       done # }}}
       rm -f $tmpFile
     fi # }}}
-    unset getItem last_working_path
     if $do_use_file; then # {{{
-      $do_append && [[ -e $file ]] && eval $var="\"$(cat $file) ${!var}\""
-      echo "${!var}" | tr ' ' '\n' | sed '/^\s*$/ d' >$file
-      [[ ! -e $file ]] && touch $file
-      cat -n $file | sort -k2,2 -u | sort -k1,1 | awk '{print $2}' >$file.tmp
+      (
+        $do_append && [[ -e $file ]] && command cat $file
+        echo -e "$var"
+      ) \
+      | sed '/^\s*$/ d' \
+      | command cat -n - | sort -k2,2 -u | sort -k1,1 | cut -c8- \
+      >$file.tmp
       mv $file.tmp $file
       echo >>$file
+      var="$(<$file)"
     fi # }}}
   fi # }}}
   if [[ ! -t 1 ]] || $do_cmd; then
@@ -387,39 +392,34 @@ rem() { # @@ # {{{
   if [[ "$mode" == 'recall' ]]; then # Show remembered files # {{{
     if $do_edit; then # {{{
       local err=
-      sed -i -e 's/^\s\+//' -e 's/\s\+$//' -e 's/%20/ /g' $file
       $EDITOR $file </dev/tty >/dev/tty
       err=$?
-      sed -i -e 's/ /%20/g' $file
-      [[ $err != 0 ]] && { $do_quiet || echo "Error when editing" >/dev/stderr; return 1; }
+      [[ $err == 0 ]] || eval $(die -s=$do_quiet "error when editing")
     fi # }}}
     if $do_use_file; then # {{{
-      eval $var=
-      [[ -e $file ]] && eval $var="\"$(cat $file | tr '\n' ' ')\""
+      [[ -e $file ]] || eval $(die -s=$do_quiet "no file [$file]")
+      var="$(< $file)"
     fi # }}}
-    if [[ -z ${!var} ]]; then # {{{
+    if [[ -z $var ]]; then # {{{
       ( $do_reset || $do_use_file ) && return 0
-      $do_quiet || echo "No files remembered" >/dev/stderr
-      return 1
+      eval $(die -s=$do_quiet "no files remembered")
     fi # }}}
-    set -- ${!var}
     [[ -z $fzf_prompt ]] && fzf_prompt="To recall> "
-    for i; do # {{{
-      p="${i//%20/ }" && p="${p/$tild/$HOME}"
+    echo -e "$var" | while read -r p; do # {{{
       $show_abs || p="${p/$PWD/.}"
       echo "$p"
     done | \
     if $do_fzf; then
       fzf --height 100% --prompt "$fzf_prompt"
     else
-      cat -
+      command cat -
     fi | \
     if $do_cmd; then
-      xargs -ri $cmd
+      xargs -rI{} $cmd
     elif [[ ! -z $line_no ]]; then
       sed -n -e "${line_no}p"
     else
-      cat -
+      command cat -
     fi
     # }}}
     if ! $do_keep; then # {{{
@@ -430,9 +430,9 @@ rem() { # @@ # {{{
           && to_rem="$(ls ${file}-*.bck | /usr/bin/tail -r | sed "1,${keep_n_bck_files} d")" \
           || to_rem="$(ls ${file}-*.bck | head -n -$keep_n_bck_files)" 
         [[ ! -z "$to_rem" ]] && rm $to_rem
-        command find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
+        find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
       fi
-      eval $(eval $reset_conf)
+      __rem-reset-conf
     fi # }}}
   fi # }}}
   return 0

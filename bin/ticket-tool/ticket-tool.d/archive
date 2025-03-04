@@ -14,13 +14,13 @@ while [[ ! -z $1 ]]; do # {{{
     if $is_git; then
       list="$(git clean -dxfn . | cut -d' ' -f3)"
     else
-      list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
+      list="$(find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
     fi
     [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
     do_clean=true
     ;; # }}}
   --all-all) # {{{
-    list="$(command find . -print | sed '/^\.$/ d')"
+    list="$(find . -print | sed '/^\.$/ d')"
     list="$(echo "$list" | sort | fzf --height 100% --prompt "Choose files> ")"
     [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
     ;; # }}}
@@ -32,9 +32,9 @@ while [[ ! -z $1 ]]; do # {{{
 done # }}}
 if [[ -z $list ]]; then # {{{
   if $is_git; then
-    list="$(eval command find . \\\( $(git clean -n -dxf | cut -d\  -f3 | xargs -i echo "-path ./{} -o" | sed 's|/ -o|/\\* -o|') -path '../..' \\\) -print;)"
+    list="$(eval find . \\\( $(git clean -n -dxf | cut -d\  -f3 | xargs -i echo "-path ./{} -o" | sed 's|/ -o|/\\* -o|') -path '../..' \\\) -print;)"
   else
-    list="$(command find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print)"
+    list="$(find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print)"
   fi
   list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --height 100% --prompt "Choose files> ")"
 fi # }}}
@@ -48,7 +48,7 @@ if $is_git; then # {{{
   $cmd_tt commit
 fi # }}}
 if $do_clean; then # {{{
-  command mkdir -p $TMP_MEM_PATH/issue/$issue
+  mkdir -p $TMP_MEM_PATH/issue/$issue
   echo "$list" | tr ' ' '\n' | rsync -a --files-from=- . $TMP_MEM_PATH/issue/$issue/
   rm -rf $list
 fi # }}}

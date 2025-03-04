@@ -5,7 +5,7 @@ smart_alias() { # {{{
   local cmd= store=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --title) set_title "$2"; shift;;
+    --title) set-title "$2"; shift;;
     --cmd)   cmd="$2"; shift;;
     --store) store="$2"; shift;;
     --)      shift; break;;
@@ -26,7 +26,6 @@ smart_alias() { # {{{
 alias mcd="smart_alias --cmd 'command mkdir -pv \"\$1\" && cd_wrapper -- \"\$1\"'"  # Syntax fix for Vim in OS/X'"
 alias mcdd="smart_alias --cmd 'command mkdir -pv \"\$1\" && pushd \"\$1\"'"  # Syntax fix for Vim in OS/X'"
 alias ll*="smart_alias --store 'SMART_AL_LL_ASTER' --cmd 'ls -Alhv | command grep --color=yes \"\$1\"'"  # Syntax fix for Vim in OS/X'"
-alias chmod="smart_alias --cmd '[[ ! -f \"\$1\" ]] && command chmod \"\$@\" || command chmod +x \"\$@\"'"  # Syntax fix for Vim in OS/X'"
 # }}}
 alias vv='vim --Fast'
 alias v='vim --Fast'
@@ -47,14 +46,94 @@ else
   alias l.='ls -ABlhvd .*'
 fi
 # }}}
+# rsync # {{{
 alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
 alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
 alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
 alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
+# }}}
+# scripted # {{{
+alias bat="$ALIASES_SCRIPTS/small-utils/cat.sh" # @@
+alias batcat="$ALIASES_SCRIPTS/small-utils/cat.sh" # @@
+alias cat="$ALIASES_SCRIPTS/small-utils/cat.sh" # @@
+alias cp-struct="$ALIASES_SCRIPTS/small-utils/cp-struct.sh" # @@
+alias date="$ALIASES_SCRIPTS/time-tools/date-pipe.sh" # @@
+alias ded="$ALIASES_SCRIPTS/small-utils/ded.sh" # @@
+alias dum="$ALIASES_SCRIPTS/small-utils/dum" # @@
+alias loop="$ALIASES_SCRIPTS/small-utils/loop.sh" # @@
+alias psgrep="$ALIASES_SCRIPTS/small-utils/psgrep.sh" # @@
+alias repo-browse="$ALIASES_SCRIPTS/repo-browse.sh" # @@
+alias share="$ALIASES_SCRIPTS/share.sh" # @@
+alias show_notifications="$ALIASES_SCRIPTS/tmux/show-notifications.sh" # @@
+alias sshh="$ALIASES_SCRIPTS/ssh-tools/sshh.sh" # @@
+alias weather="$ALIASES_SCRIPTS/weather.sh" # @@
+# docker-tools # {{{
+if ! $IS_DOCKER; then
+  alias doc="$ALIASES_SCRIPTS/docker-tools/docker.sh"
+  compl-add doc
+else
+  alias snapshot="$ALIASES_SCRIPTS/docker-tools/snapshot.sh"
+  compl-add snapshot
+fi
+# }}}
+# file-tools # {{{
+alias file-eval="$ALIASES_SCRIPTS/file-tools/file-eval.sh" # @@
+alias matching-sections="$ALIASES_SCRIPTS/file-tools/matching-sections.sh" # @@
+alias update-file="$ALIASES_SCRIPTS/file-tools/update-file.sh" # @@
+alias bck="$ALIASES_SCRIPTS/file-tools/bck.sh" # @@
+# }}}
+# find-tools # {{{
+alias f="$ALIASES_SCRIPTS/find-tools/find-short.sh" # @@
+alias ff="$ALIASES_SCRIPTS/find-tools/find-short.sh +find" # @@
+# }}}
+# fzf-tools # {{{
+alias vimg="$ALIASES_SCRIPTS/fzf-tools/vimg.sh" # @@
+alias vims="$ALIASES_SCRIPTS/fzf-tools/vims.sh" # @@
+alias ffwr='fzfwr'
+alias vimf='set -f && vimf'
+# }}}
+# grep-tools # {{{
+alias ack-grep="$ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-ack" # @@
+alias ack="$ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-ack" # @@
+alias ag="$ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-ag" # @@
+alias rg="$ALIASES_SCRIPTS/grep-tools/ack-ag-wrapper.sh --cmd-rg" # @@
+
+alias grep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep" # @@
+alias egrep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-egrep"
+alias fgrep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-fgrep"
+alias zgrep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-zgrep"
+alias zegrep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-zegrep"
+alias zfgrep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-zfgrep"
+alias _grep="$ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep +tee=false"
+alias cgrep='command grep'
+
+alias hl-bash="$ALIASES_SCRIPTS/grep-tools/hl-bash.sh" # @@
+if ${HL_USE_PYTHON_VER:-true}; then
+  export HL_CONFIG_DIR="$SCRIPT_PATH/bash/inits/hl-python"
+  alias hl="$ALIASES_SCRIPTS/grep-tools/hl-python.sh" # @@
+else
+  alias hl="$ALIASES_SCRIPTS/grep-tools/hl-bash.sh" # @@
+fi
+
+alias output-to-file="$ALIASES_SCRIPTS/grep-tools/output-to-file.sh" # @@
+alias last-grep="$ALIASES_SCRIPTS/grep-tools/last-grep.sh" # @@
+# }}}
+# cpp-tools # {{{
+alias brun="$ALIASES_SCRIPTS/cpp/brun.sh" # @@
+alias gdbenv="$ALIASES_SCRIPTS/cpp/gdbenv.sh" # @@
+alias clang-smart='brun'
+alias gdb-core-enable='ulimit -c unlimited'
+# }}}
+alias kb-open="$TICKET_TOOL_PATH/kb-open.sh" # @@
+alias kb="$TICKET_TOOL_PATH/kb-open.sh" # @@
+# }}}
 alias more='less'
 alias cp='cp -R'
 alias du='du -sh'
+alias chr='$SCRIPT_PATH/bin/misc/chroma-effects-wrapper.sh'
 alias mkdir='mkdir -pv'
+alias man="$ALIASES_SCRIPTS/small-utils/man.sh" # @@
+alias rmF="$ALIASES_SCRIPTS/rmf-trash.sh" # @@
 if $IS_MAC; then
   alias df='df -h'
 else
@@ -67,10 +146,16 @@ rm-b() { # {{{
     mv $i $i.del && rm -rf $i.del &
   done
 } # }}}
+# git # {{{
 alias gg='git cba 1'
 alias gG='git cba --auto'
-alias gsar='git sync --all --reset'
+alias gsar='git sync --reset'
 alias gitst='git-cmds.sh gitst'
+alias g='git'
+declare -F __git_wrap__git_main >/dev/null && export -f __git_wrap__git_main
+complete -o bashdefault -o default -o nospace -F __git_wrap__git_main g
+export PHISTORY_IGNORED_COMMANDS+=":gg:gG:gsar:gitst:g"
+# }}}
 if which truecrypt >/dev/null 2>&1; then # {{{
   alias truecrypt='truecrypt -t'
 fi # }}}
@@ -98,7 +183,7 @@ if type grc >/dev/null 2>&1; then # {{{
   fi
   grc_prgs+="traceroute ::google.pl\nconfigure\ngcc\nnetstat\nwdiff\nlast\nps\ndig\nip\n"
   grc_prgs+="mtr ::google.pl @@case \\\$1 in 8) arg='8.8.8.8';; esac;\n"
-  grc_prgs+="ping ::-c:5:8.8.8.8 @@case \\\$1 in 8) arg='8.8.8.8';; .*) arg=\\\$(getip \\\$1);; esac;\n"
+  grc_prgs+="ping ::-c:5:8.8.8.8 @@case \\\$1 in 8) arg='8.8.8.8';; .*) arg=\\\$(get-ip \\\$1);; esac;\n"
   grc_prgs+="ifconfig\n"
   if $IS_MAC; then
     grc_prgs="${grc_prgs/mtr/sudo-mtr}"
