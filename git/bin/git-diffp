@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+rev="HEAD"
+[[ $1 == -b ]] && shift
+[[ -n $1 && $1 != -* && ! -e $1 ]] && rev=$1 && shift
+[[ -e $1 ]] && set -- -- "$@"
+git diff $rev~..$rev "$@"

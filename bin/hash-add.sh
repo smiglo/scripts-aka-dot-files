@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
+
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
   --sum-len)          echo "5 7 9 12";;

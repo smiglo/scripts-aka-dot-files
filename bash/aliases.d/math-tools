@@ -6,7 +6,8 @@ get-value-with-prob() { # @@ # {{{
     [[ $2 == 1 ]] && echo "Values Value-i:Prob-i[%]" || echo "Probability-For-Each-Value[%] Value-j:Prob-j[%] Value-k"
     return 0
   fi # }}}
-  local r=$((RANDOM%100)) dbg=$(echorm --module get-value-with-prob -f?var-) i= s=0 ii=0 v= end=false values= probs=
+  local r=$((RANDOM%100)) dbg=false i= s=0 ii=0 v= end=false values= probs=
+  $dbg && import-module echor
   if [[ $1 == *:* ]]; then
     for i in $@; do
       values+="${i%%:*} "

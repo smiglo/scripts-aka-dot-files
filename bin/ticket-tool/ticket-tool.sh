@@ -35,6 +35,8 @@ getPathFast() { # {{{
   return 1
 }
 export -f getPathFast # }}}
+import-module echor
+import-module time2s time-tools
 echorm --name tt
 [[ ! -z $verbose && $verbose -gt $(echorm -f??) ]] && echorm + $verbose
 case $1 in

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
 _find-short() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "-+tee=false +tee=true +-fzf +fzf +find --full -f -tf -td"
@@ -54,13 +55,14 @@ _find-short() { # @@ # {{{
       $ALIASES_SCRIPTS/grep-tools/output-to-file.sh $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err \
         eval "find $ddir \
           $(! $find_full && [[ ! -z "$F_FIND_EXCLUDE" ]] && echo "-path '$F_FIND_EXCLUDE' -prune -o") \
-          $params $([[ ! -z $1 ]] && echo "-name ${1@Q}")  -print | tail -n+2 | cut -c3-"
+          $params $([[ ! -z $1 ]] && echo "-name ${1@Q}")  -print"
     fi
   else
     params="-path '*/.git' -prune -o $params"
     echormf "find $ddir $params ${@@Q} -print"
+    echo "find $ddir $params ${@@Q} -print"
     $ALIASES_SCRIPTS/grep-tools/output-to-file.sh $use_tee +fzf=$use_fzf +fzf-p "--prompt 'find: $query> '" --no-err \
-      eval "find $ddir $params ${@@Q} -print | tail -n+2 | cut -c3-"
+      eval "find $ddir $params ${@@Q} -print"
   fi
   return $?
 } # }}}

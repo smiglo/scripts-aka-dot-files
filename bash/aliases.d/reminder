@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# vim: fdl=0
-
-reminder() { # @@ # {{{
-  $ALIASES_SCRIPTS/reminder.sh "$@"
-} # }}}
-export -f reminder
-export PHISTORY_IGNORED_COMMANDS+=":reminder:at"
-

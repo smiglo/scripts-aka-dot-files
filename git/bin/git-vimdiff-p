@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+rev="HEAD"
+[[ -n $1 && $1 != -* ]] && rev=$1 && shift
+git vimdiff $rev~..$rev "$@"

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+_capture() { # {{{
+  local captureFile=$CAPTURE_FILE
+  if [[ -z $CAPTURE_FILE ]]; then
+    captureFile="$TMP_MEM_PATH/capture.txt"
+    [[ -n $TMUX ]] && captureFile="$TMP_MEM_PATH/capture-$(tmux display-message -pF '#S-#W').txt"
+  fi
+  if [[ $1 == '@@' ]]; then # {{{
+    case $2 in
+    -m | --mode) echo "append override edit";;
+    -t | --title) echo "TITLE";;
+    -f | --file)
+      get-file-list --pwd "$(dirname "$captureFile")" '*.txt'
+      get-file-list --pwd "$(dirname "$captureFile")" '*.out';;
+    *) echo "-f --file -t --title -m --mode -e --edit -n --new -i --in-place -s --silent -v --verbose -r --raw -? -p --pane --pane-only -nh --clear --at-end --at-beginning"
+       echo ". .. ./cap.tmp~"
+    esac
+    return 0
+  fi # }}}
+  local tmp=$TMP_MEM_PATH/out.$PPID title= mode="append" out="/dev/stdout" addHeader=true raw=false inPlace=false capturePane= paneClear=false putAtBeginning=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -e | --edit) mode="edit";;
+    -f | --file) captureFile="$1"; shift;;
+    -i | --in-place) inPlace=true;;
+    -n | --new)  mode="override";;
+    -p | --pane) mode="pane";;
+    -r | --raw) raw=true;;
+    -s | --silent)  out="/dev/null";;
+    -t | --tile) title="$2"; shift;;
+    -v | --verbose) out="/dev/stdout";;
+    -nh) addHeader=false;;
+    --at-beginning) putAtBeginning=true;;
+    --at-end) putAtBeginning=false;;
+    --clear) paneClear=true;;
+    --pane-only) mode="pane"; captureFile=;;
+    -\?) echo "$captureFile"; return 0;;
+    . | ..)
+      [[ $1 == '..' ]] && captureFile="./cap.tmp~"
+      mode="override"; addHeader=false; inPlace=true;;
+    *) # {{{
+      captureFile="$1"
+      mode="override"; addHeader=false; inPlace=true
+      break;; # }}}
+    esac; shift
+  done # }}}
+  if $inPlace && [[ ! -z $captureFile ]]; then
+    tmp=$captureFile
+    captureFile=
+  fi
+  case $mode in # {{{
+  pane) # {{{
+    [[ -n $TMUX ]] || eval $(die "not in tmux")
+    capturePane="$(tmux show-options -wv @capture-pane 2>/dev/null)"
+    if [[ ! -z $capturePane ]] && ( [[ -t 0 ]] || ! tmux list-panes -F '#{pane_id}' | grep -q "^$capturePane$" ) ; then
+      tmux kill-pane -t $capturePane
+      tmux set-option -wu @capture-pane
+      [[ -t 0 ]] && return 0
+      capturePane=
+    fi
+    mode="append"
+    [[ -z $putAtBeginning ]] && putAtBeginning=false
+    if [[ -z $capturePane ]]; then
+      mode="override"
+      capturePane=$(tmux splitw -dhl50% -PF '#{pane_id}' '')
+      tmux set-option -w @capture-pane $capturePane
+      tmux select-pane -t $capturePane -T capture
+    elif $paneClear; then
+      mode="override"
+      local i=
+      for ((i=0; i <$(tmux display-message -t $capturePane -pF '#{pane_height}'); i++)); do echo; done | tmux display -It $capturePane
+      tmux clear-history -Ht $capturePane
+    fi;; # }}}
+  append | override) [[ ! -t 0 ]] || eval $(die "not in pipie");;
+  esac # }}}
+  case $mode in
+  edit) # {{{
+    vim $captureFile;; # }}}
+  append | override) # {{{
+    case $mode in
+    override) rm -f $captureFile $tmp;;
+    esac
+    local ts="$(date +$DATE_FMT)" msg=
+    [[ ! -z $title ]] && msg="$title #"
+    $addHeader && echo "# $msg$ts # {{{" >>$tmp
+    if [[ -z $capturePane ]]; then
+      cat - | tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >$out
+    else
+      $paneClear || ! $addHeader || echo -e "# $msg$ts # {{{" | tmux display -It $capturePane
+      cat - | tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >(tmux display -It $capturePane) >$out
+      $paneClear || ! $addHeader || echo "# }}}" | tmux display -It $capturePane
+    fi
+    $addHeader && sleep 0.1 && echo "# }}}" >>$tmp
+    if [[ ! -z $captureFile ]]; then
+      if [[ $captureFile != '-' ]]; then
+        if [[ -e $captureFile ]]; then
+          if ${putAtBeginning:-true}; then
+            cat $captureFile >>$tmp
+            mv $tmp $captureFile
+          else
+            cat $tmp >>$captureFile
+          fi
+        fi
+      else
+        cat $tmp
+      fi
+    fi
+    if ! $inPlace; then
+      rm -f $tmp
+    fi;; # }}}
+  esac
+} # }}}
+_capture "$@"
+

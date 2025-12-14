@@ -43,7 +43,8 @@ if ! $IS_MAC; then
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    echormf -M -?
+    # import-module echor
+    # echormf -M -?
     case $f in
     '') # {{{
       cmd="nautilus .";; # }}}
@@ -52,25 +53,24 @@ if ! $IS_MAC; then
       cmdParams="${cmdParams% &}" doDisown=false
       [[ ! -z $CHROME_MAIN_PROFILE ]] && cmd+=" --profile-directory='$CHROME_MAIN_PROFILE'";; # }}}
     *.pcap | *.cap) # {{{
-      is-installed wireshark || { echormf 0 "WireShark not installed"; return 1; }
+      is-installed wireshark || { echoe -f "WireShark not installed"; return 1; }
       cmd="wireshark $f";; # }}}
     *) # {{{
       if ! __open_common "$f"; then
         if [[ -d $f ]]; then
           cmd="nautilus $f"
         else
-          echormf 0 "Unknown action for $f"
+          echoe -f "Unknown action for $f"
           return 1
         fi
       fi;; # }}}
     esac
     (
-      echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
+      # echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     )
-  }
-  COMPLETION_GENERIC_FUNCTIONS+=" open" # }}}
+  } # }}}
 else
   open() { # @@ # {{{
     if [[ $1 == '@@' ]]; then # {{{
@@ -90,7 +90,8 @@ else
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    echormf -M -?
+    # import-module echor
+    # echormf -M -?
     case $f in
     '') # {{{
       f=$PWD;; # }}}
@@ -99,16 +100,16 @@ else
         if [[ -d $f ]]; then
           :
         else
-          echormf 0 "Unknown action for $f"
+          echoe -f "Unknown action for $f"
           return 1
         fi
       fi;; # }}}
     esac
     if [[ -z $cmd ]]; then
-      echormf "/usr/bin/open '$f'"
+      # echormf "/usr/bin/open '$f'"
       /usr/bin/open "$f"
     else
-      echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
+      # echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     fi

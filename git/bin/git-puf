@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+ups=
+if [[ -z $1 ]]; then
+  ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
+elif [[ $1 == */* ]]; then
+  ups="$1"
+else
+  ups="$1/$(git rev-parse --abbrev-ref HEAD)"
+fi
+[[ -n $ups ]] || exit 1
+git-cmds.sh tag_sync -r $ups
+git push -f ${ups/\// }

@@ -61,7 +61,7 @@ toggle-message-tray=['<Super>n']
 toggle-overview=['<Super>space']
 
 [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
-binding='<Super>v'
+binding='<Shift><Super>v'
 command='@HOME/.bin/vims/gvim --fast'
 name='Vim'
 

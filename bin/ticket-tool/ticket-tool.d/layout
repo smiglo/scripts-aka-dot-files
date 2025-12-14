@@ -53,7 +53,7 @@ restore) # {{{
   [[ -z "$layout" ]] && exit 1
   if [[ "$layout" != "$layout_old" ]]; then
     $quiet || echo "layout=\"$layout_old\""
-    echo "$layout" | tm --l-restore
+    echo "$layout" | $ALIASES_SCRIPTS/tmux/tm.sh --l-restore
     exit $?
   fi
   exit 0

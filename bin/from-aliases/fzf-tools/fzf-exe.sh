@@ -93,7 +93,7 @@ _fzf-exe() { # @@ # {{{
         highlight -O ansi $t $file 2>/dev/null || cat $file
       else
         cat $file
-      fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | hl +cY "^\s*$line\s"
+      fi | cat -n - | cut -c3- | tail -n+$first_line | head -n $prev_lines_cnt | $ALIASES_SCRIPTS/grep-tools/hl-bash.sh +cY "^\s*$line\s"
     elif [[ -d $file ]]; then
       ! which tree >/dev/null 2>&1 && echo "$file is a directory" && return 0
       tree -C $file 2>/dev/null | head -200

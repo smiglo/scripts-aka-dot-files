@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+progress-dot() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -s | --steps-per-dot)  echo 5 10 20 100;;
+    -p | --dots-in-packet) echo 10 20;;
+    -r | --packets-in-row) echo 3 5 10;;
+    -o | --out)            echo "/dev/stdout /dev/stderr";;
+    --dot | -d)            echo "dot-small dot-medium dot-big . icon-ok icon-err romb";;
+    -c)                    color-list;;
+    *)
+      case ${4:-$3} in
+      --init) echo "-s --steps-per-dot -p --dots-in-packet -r --packets-in-row --ts -o --out --dot --align";;
+      *) # {{{
+        echo "--init -c"
+        echo --{end,hold}{,=MSG}
+        echo "-d" --dot{,={{,COLOR:}{CHAR,ICON@UC},COLOR,ok,err,0,1}}
+        ;; # }}}
+      esac;;
+    esac
+    return 0
+  fi # }}}
+  eval $(color-cache-init)
+  local pre="__progress_dot" c= force=false d=
+  local -n i=${pre}_i step=${pre}_step inPacket=${pre}_packet inRow=${pre}_row ts=${pre}_ts out=${pre}_out dot=${pre}_dot countdown=${pre}_countdown
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -c) c=$2; shift;;
+    -f) force=true;;
+    -d | --dot) d=$2; shift; [[ ${#d} -gt 1 ]] && d="$(get-unicode-char $d)";;
+    --dot=*) # {{{
+      case $1 in
+      --dot=ok  | --dot=0)           d="$(get-unicode-char icon-ok)";  [[ -z $c ]] && c='ok';  force=true;;
+      --dot=err | --dot=[0-9][0-9]*) d="$(get-unicode-char icon-err)"; [[ -z $c ]] && c='err'; force=true;;
+      --dot=*)
+        local v=${1#--dot=}
+        if [[ $v == *:* ]]; then
+          c=${v%%:*}
+          v=${v#*:}
+        fi
+        if [[ ! -z $v ]]; then
+          d=$v
+          [[ $d == *@UC ]] && d="$(get-unicode-char ${d%@UC})"
+        fi
+        force=true;;
+      esac;; # }}}
+    --init) # {{{
+      shift; step=1 inPacket=10 inRow=3 out='/dev/stderr' i= ts=
+      local align=false
+      while [[ ! -z $1 ]]; do
+        case $1 in
+        --align)               align=true;;
+        [0-9]*) step=$1;;
+        -s | --steps-per-dot)  step=$2; shift;;
+        -p | --dots-in-packet) inPacket=$2; shift;;
+        -r | --packets-in-row) inRow=$2; shift;;
+        -o | --out)            out=$2; shift;;
+        --dot)                 dot=$2; shift; [[ ${#dot} -gt 1 ]] && dot="$(get-unicode-char $dot)";;
+        --ts)                  ts=$(time2s $2); shift;;
+        --end)
+          countdown=$2; shift
+          if time2s --is-hms $countdown; then
+            countdown=$(time2s $countdown -out abs-s)
+          elif time2s --is-HMS $countdown; then
+            countdown=$(date +%s -d $countdown)
+            countdown=$((EPOCHSECONDS + h*60*60 + m*60 + s))
+          fi;;
+        esac; shift
+      done
+      if $aling; then # {{{
+        local max=2
+        while true; do
+          [[ $max == 0 ]] && break
+          [[ $((10 + (inPacket + 1) * inRow)) -lt $COLUMNS ]] && break
+          case $inPacket-$inRow in
+          10-6) inRow=3;;
+          *)    inRow=$((inRow - 1));;
+          esac
+          [[ $inRow == 0 ]] && inRow=1
+          max=$((max - 1))
+        done
+      fi # }}}
+      return 0;; # }}}
+    --end | --end=* | --hold | --hold=*) # {{{
+      [[ -z $i || -z $out ]] && return 0
+      local isEnd=true msg='End'
+      [[ $1 == '--hold'* ]] && isEnd=false && msg='Hold'
+      [[ $1 == *=* ]] && msg="${1#*=}"
+      if [[ ! -z $i ]]; then
+        echo -e -n "\n$(cl 'ts' $(time2s --to-HMS $(time2s --diff $ts))): "
+        echo "$msg ($(time2s now))"
+      fi >$out
+      $isEnd && eval unset \${!${pre}*} || { i=; ts=; }
+      return 0;; # }}}
+    esac; shift
+  done # }}}
+  if [[ -z $i ]]; then # {{{
+    i=0
+    [[ -z $step     ]] && step=1
+    [[ -z $inPacket ]] && inPacket=10
+    [[ -z $inRow    ]] && inRow=3
+    [[ -z $out      ]] && out='/dev/stderr'
+    [[ -z $dot      ]] && dot="$(get-unicode-char dot-small)"
+    [[ -z $ts       ]] && ts="$(time2s now)"
+    # echorv -nl i step inPacket inRow
+    echo -n "$(cl 'ts' $ts): " >$out
+  fi # }}}
+  [[ -z $d ]] && d=$dot
+  $force && [[ $step != 1 ]] && i=$(((i/step+1)*step-0))
+  if [[ $i != 0 ]]; then
+    if [[ $((i % (step * inPacket * inRow))) == 0 ]]; then
+      # echor "i:[$i, $step, $inPacket, $inRow], mul:[$(((step * inPacket * inRow)))]"
+      if [[ ! -z $countdown ]]; then
+        local left=$(time2s --diff-HMS $countdown)
+        echo -e -n "\n$(cl 'ts' ${left#-}): ">$out
+      else
+        echo -e -n "\n$(cl 'ts' $(time2s --diff-HMS $ts)): ">$out
+      fi
+    elif [[ $((i % (step * inPacket))) == 0 ]]; then
+      echo -n " ">$out
+    fi
+  fi
+  if [[ $((i % step)) == 0 ]] || $force; then
+    [[ -z $c ]] && echo -n "$d" || echo -n "$(cl $c $d)"
+  fi >$out
+  i=$((i+1))
+} # }}}
+__export_progress() { # {{{
+  load-colors
+  [[ -e $UNICODE_EXTRA_CHARS_FILE ]] && source $UNICODE_EXTRA_CHARS_FILE
+  import-module echor
+  import-module time2s time-tools
+  export -f progress-dot
+  if type -f compl-add >/dev/null 2>&1; then
+    compl-add progress-dot
+  fi
+}
+export -f __export_progress # }}}
+if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+  __export_progress
+  "$@"
+fi

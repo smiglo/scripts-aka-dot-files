@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  -s | --section)
+    echo "$(date +$DATE_FMT) section";;
+  -n | --name)
+    echo "notes.txt 1.tmp";;
+  -p | --path)
+    echo "${TMP_PATH/$HOME/\~} ${TMP_MEM_PATH/$HOME/\~} ~/Desktop/mem ~/share ~/Desktop";;
+  *)
+    echo "get put copy edit vim info"
+    echo "+header +sep"
+    echo "-s --section -p --path -n --name --add-nl --new";;
+  esac
+  exit 0
+fi # }}}
+path="${SHARE_PATH:-$HOME/share}" name="notes.txt" mode= addHeader=false section= addNl=false new=false addSep=false
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  g | get) mode="get";;
+  p | put) mode="put";;
+  c | copy) mode="copy";;
+  e | edit | v | vim) mode="edit";;
+  i | info) mode="info";;
+  +header) addHeader=true;;
+  +sep) addSep=true;;
+  --add-nl) addNl=true;;
+  --new) new=true;;
+  -s | --section) section="$2"; shift;;
+  -p | --path) path="$2"; shift;;
+  -n | --name) name="$2"; shift;;
+  esac; shift
+done # }}}
+fn="$path/$name"
+if [[ -z $mode ]]; then # {{{
+  if [[ ! -t 0 ]]; then
+    mode="put"
+  elif [[ ! -t 1 ]]; then
+    mode="get"
+  else
+    mode="edit"
+  fi
+fi # }}}
+case $mode in
+info) # {{{
+  echo "$fn";; # }}}
+put) # {{{
+  in="$(cat -)"
+  $new && rm -f $fn
+  sS="{" sE="}"
+  if [[ ! -e $fn ]]; then # {{{
+    echo -e "# vim: fdm=marker fdl=0"
+    ! $addSep && echo
+  fi >$fn # }}}
+  if $addHeader; then # {{{
+    [[ -z $section ]] && section="$(date +$DATE_FMT)"
+    echo "$section: # $sS$sS$sS"
+    echo "$in"
+    echo "# $sE$sE$sE" # }}}
+  elif $addSep; then # {{{
+    [[ -z $section ]] && section="# ----------" || section="# --- $section ---"
+    echo
+    echo "$section"
+    echo
+    echo "$in" # }}}
+  else # {{{
+    $addNl && echo
+    echo "$in"
+  fi >>$fn # }}}
+  ;; # }}}
+get) # {{{
+  [[ -e $fn ]] || die "no file '$fn'"
+  cat "$fn";; # }}}
+edit) # {{{
+  vim "$fn";; # }}}
+copy) # {{{
+  [[ -e $fn ]] || die "no file '$fn'"
+  cat $fn | xclip --put;; # }}}
+esac
+

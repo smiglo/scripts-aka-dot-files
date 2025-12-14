@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# vim: fdl=0
-
-note() { # @@ # {{{
-  $ALIASES_SCRIPTS/note.sh "$@"
-} # }}}
-export PHISTORY_IGNORED_COMMANDS+=":note"
-export -f note
-

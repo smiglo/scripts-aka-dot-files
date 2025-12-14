@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module echor
+
+_tmux-popup() { # @@ # {{{
+  [[ -n $TMUX ]] || return 1
+  [[ $TMUX_VERSION -gt 30 ]] || eval $(die "tmux >= 3.0 is required (vs $(tmux -V))")
+  local popupPath="${TMUX_POPUP_PATH:-$APPS_CFG_PATH/tmux/popup}"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    --title) echo "TITLE";;
+    *) echo "-E -EE -e -t --title -c CMD --no-wait --no-show"
+      declare -A TMUX_POPUP_CMD
+      [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
+      echo "n r ${!TMUX_POPUP_CMD[*]}";;
+    esac
+    return 0
+  fi # }}}
+  [[ -e $popupPath ]] || mkdir -p $popupPath >/dev/null
+  local tp=$TMUX_PANE cmd= params= silent=false showCmd=true name= addWait= isInteractive=true
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -E | -EE | -e) params="$1";;
+    --no-i) isInteractive=false;;
+    -t) tp=$2; shift;;
+    -c) shift; cmd="${@:-help}"; shift $#;;
+    --title) name="$2"; shift;;
+    --no-wait) addWait=false;;
+    --no-show) showCmd=false;;
+    --cmd-show) showCmd="$2";;
+    *)  cmd="$@"; shift $#;;
+    esac; shift
+  done # }}}
+  if [[ ! -z $cmd ]]; then # {{{
+    declare -A TMUX_POPUP_CMD
+    TMUX_POPUP_CMD[gb]="git backup"
+    TMUX_POPUP_CMD[gst]="git-cmds.sh gitst --all -v; true # @W"
+    if which htop >/dev/null 2>&1; then
+      TMUX_POPUP_CMD[h]="htop # @NC @NW"
+    fi
+    TMUX_POPUP_CMD[n]="net -lle # @NW @NC"
+    TMUX_POPUP_CMD[N]="net # @W @NC"
+    TMUX_POPUP_CMD[r]="reminder.sh countdown -l 120 # @NC @W2"
+    TMUX_POPUP_CMD[pid]="tmux list-panes -F \"#P :: #{s| ||:pane_title} :: #{pane_pid} :: #{pane_current_command} :: #{pane_current_path}\" | column -t # @W- @NC"
+    [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
+    case $cmd in
+    help) # {{{
+      name=select
+      showCmd=false
+      params="-EE"
+      declare -p TMUX_POPUP_CMD >$TMP_MEM_PATH/tmux-popup.sh
+      cat >>$TMP_MEM_PATH/tmux-popup.sh<<-'EOF'
+				err=0
+				addWait=false
+				waitTimeout="-t5"
+				list=
+				for i in $(echo "${!TMUX_POPUP_CMD[*]}" | tr ' ' '\n' | sort); do
+				  list+="$(printf "%-5s : %s" "$i" "${TMUX_POPUP_CMD[$i]%% # *}")\n"
+				done
+				action="$(echo -e "${list%\\n}" | fzf | awk '{print $1}')"
+				[[ ! -z "$action" ]] || exit 255
+				c="${TMUX_POPUP_CMD[$action]}"
+				if false; then :
+				elif [[ $c =~ " # ".*@NW ]]; then addWait=false
+				elif [[ $c =~ " # ".*@W- ]]; then addWait=true; waitTimeout=""
+				elif [[ $c =~ " # ".*@W([0-9]+) ]]; then addWait=true; waitTimeout="-t${BASH_REMATCH[1]}"
+				elif [[ $c =~ " # ".*@W ]]; then addWait=true
+				fi
+				c="${c%% # *}"
+				eval "$c" || exit 1
+				waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s -n1 $waitTimeout; }"
+				$addWait && eval $waitCmd
+				exit 0
+				EOF
+      chmod +x $TMP_MEM_PATH/tmux-popup.sh
+      cmd="$TMP_MEM_PATH/tmux-popup.sh"
+      ;; # }}}
+    *) # {{{
+      if [[ -z $name ]]; then
+        name=${cmd%% *}
+        if [[ ! -z ${TMUX_POPUP_CMD[$name]} ]]; then
+          if [[ "$name" != "$cmd" ]]; then
+            cmd="${TMUX_POPUP_CMD[$name]} ${cmd#* }"
+          else
+            cmd=${TMUX_POPUP_CMD[$name]}
+          fi
+          name=${cmd%% *}
+        fi
+      fi
+      [[ $cmd == *sleep* ]] || addWait=${addWait:-true}
+      ;; # }}}
+    esac
+    local c="$cmd" shell=$SHELL
+    local waitTimeout="-t5"
+    [[ $IS_MAC ]] && shell=bash
+    [[ -z $addWait ]] && addWait=false
+    if false; then :
+    elif [[ $c =~ " # ".*@NW ]]; then addWait=false
+    elif [[ $c =~ " # ".*@W- ]]; then addWait=true; waitTimeout=""
+    elif [[ $c =~ " # ".*@W([0-9]+) ]]; then addWait=true; waitTimeout="-t${BASH_REMATCH[1]}"
+    elif [[ $c =~ " # ".*@W ]]; then addWait=true
+    fi
+    if false; then :
+    elif [[ $c =~ " # ".*@NC ]]; then showCmd=false
+    fi
+    local waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s -n1 $waitTimeout; }"
+    c="${c%% # *}"
+    cmd="$shell -i"
+    cmd+=" -c '"
+    case $showCmd in
+    true) cmd+="(echorm --name popup 0 \"${c//\"/\\\"}\"; echo; );";;
+    false) ;;
+    *) cmd+="(echorm --name popup 0 \"${showCmd//\"/\\\"}\"; echo; );";;
+    esac
+    cmd+=" $c; err=\$?;"
+    cmd+=" (( \$err == 0 || \$err == 255 )) || { ( echorm --name popup 0 \"\$(cl err fail)\" ); };"
+    $addWait && cmd+=" (( \$err == 0 )) && $waitCmd;"
+    cmd+=" (( \$err == 0 || \$err == 255 ));"
+    cmd+="'"
+    [[ -z $params ]] && params="-EE"
+    silent=true
+  else
+    [[ -z $params ]] && params="-E"
+  fi # }}}
+  [[ $params == '-e' ]] && params=
+  local p="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
+  local d="$popupPath/mem"
+  mkdir -p $TMP_MEM_PATH/${popupPath//\//-} >/dev/null
+  [[ -e $d ]] || ln -sf $TMP_MEM_PATH/${popupPath//\//-} $d
+  [[ -e $popupPath/notes.txt ]] || touch $popupPath/notes.txt
+  [[ -e $d/notes.txt ]] || ln -sf $popupPath/notes.txt $d/notes.txt
+  tmux display-popup -t $tp $params -d "$p" -w 75% -h 75% -T " ${name:-popup} " \
+    -e "TMUX_POPUP=true" \
+    -e "TMUX_POPUP_SILENT=$silent" \
+    -e "DISPLAY=$DISPLAY" \
+    -e "s=$p" \
+    -e "d=$d" \
+    -e "spane=$TMUX_PANE" \
+    "$cmd"
+  return 0
+} # }}}
+_tmux-popup "$@"
+

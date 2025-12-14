@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# Functions # {{{
 _epochSeconds() { # {{{
   date +%s
 } # }}}
@@ -47,7 +46,7 @@ _check_repo() { # {{{
     esac
     shift
   done # }}}
-  local msg="[${CGreen}${dir/$HOME/~}${COff}]$(_add_spaces $((${#dir}+2)))"
+  local msg="${CBlue}${dir/$HOME/\~}${COff}$(_add_spaces $((${#dir}+20)))"
   [[ ! -e $dir/.git ]] && echo -e "$msg[${CRed}.GIT${COff}]" && return
   pushd $dir > /dev/null
   local git=".git"
@@ -69,7 +68,7 @@ _check_repo() { # {{{
   $check_full_owr && gitBackupParams+=" --full"
   for r in $(git remote); do # {{{
     case $r in
-    origin | _backup*)
+    origin | _backup* | local)
       ! $do_all && [[ ! -z $GIT_ST_REMOTES_TO_IGNORE && $r =~ ^"$GIT_ST_REMOTES_TO_IGNORE"$ ]] && continue;;
     *) continue;;
     esac
@@ -143,11 +142,14 @@ tag_sync() { # {{{
     *)  break;
     esac; shift
   done
-  local ts=${1:-${EPOCHSECONDS:-$(_epochSeconds)}}
-  git tag | grep "^$pre/*" | sort -r | tail -n +$((n+1)) | xargs -r git tag -d >/dev/null 2>&1
-  git tag $pre/$ts $rev>/dev/null 2>&1
-  git tag -d $pre/last >/dev/null 2>&1
-  git tag $pre/last $pre/$ts >/dev/null 2>&1
+  local ts=${EPOCHSECONDS:-$(_epochSeconds)} last="/last"
+  [[ -z $1 ]] || { ts=$1; last=; }
+  (
+    git tag | grep "^$pre/*" | sort -r | tail -n +$((n+1)) | xargs -r git tag -d
+    git tag -d $pre/$ts
+    git tag $pre/$ts $rev
+    [[ ! -z $last ]] && { git tag -d $pre$last; git tag $pre$last $pre/$ts; }
+  ) >/dev/null 2>&1
 } # }}}
 gitst() { # @@ # {{{
   if [[ $1 == @@ ]]; then # {{{
@@ -177,7 +179,7 @@ gitst() { # @@ # {{{
   $clean || return 1
 } # }}}
 _getMainRemotes() { # {{{
-  echo "origin|_backup.*"
+  echo "origin|_backup.*|local"
   return 0
 } # }}}
 backup() { # @@ # {{{
@@ -205,7 +207,7 @@ backup() { # @@ # {{{
   local repo= orig_repo=
   for repo in $repos; do # {{{
     if [[ " $GIT_REPOS $BASH_UPDATE_REPOS " == *" $repo "* ]]; then
-      [[ -e $BIN_PATH/setup_updater.sh ]] && $BIN_PATH/setup_updater.sh --saveTime
+      setup_updater.sh --saveTime
       break
     fi
   done # }}}
@@ -264,7 +266,7 @@ backup() { # @@ # {{{
         IFS=
         while read b; do
           [[ $b == *HEAD* || $b == *detached* ]] && continue
-          [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b)" ]] && update_needed=true && break
+          [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b 2>/dev/null)" ]] && update_needed=true && break
         done < <(git branch | cut -c3-)
         IFS=$oldIFS
         if ! $update_needed; then
@@ -275,28 +277,30 @@ backup() { # @@ # {{{
       local ex_params=
       [[ "$(git branch | grep "^\*" | cut -c3-)" != 'master' ]] && ex_params="$param_force"
       case $r in
-      origin|_backup*|tom) # {{{
+      origin|_backup*|local|tom) # {{{
         if ! $verbose; then
-          ! $repo_printed && echo -e "R: ${CGreen}${repo/$HOME/\~}${COff}" && repo_printed=true
-          echo -e -n "   [$r]$(_add_spaces $((${#r}+4)) 20)"
+          ! $repo_printed && echo -e "${CBlue}${repo/$HOME/\~}${COff}" && repo_printed=true
         fi
-        ;;& # }}}
-      origin|_backup*) # {{{
-        local isRemote=false
-        if [[ $remoteUrl == *@* || $remoteUrl == *:*  ]]; then
-          isRemote=true
-        fi
-        ! $isRemote && [[ ! -d $remoteUrl ]] && echo "[${CRed}NOT EXIST${COff}]" && continue
-        $ALIASES progress --mark
-        st="$($git_cmd $ex_params $r 2>&1)"
-        $ALIASES progress --unmark --err=$?
+        progress --mark --left --msg "$r"
+        case $r in
+        origin|_backup*|local) # {{{
+          local isRemote=false
+          if [[ $remoteUrl == *@* || $remoteUrl == *:*  ]]; then
+            isRemote=true
+          fi
+          if $isRemote || [[ -d $remoteUrl ]]; then
+            st="$($git_cmd $ex_params $r 2>&1)"
+            err=$?
+          else
+            err=1
+          fi;; # }}}
+        tom) # {{{
+          st=$(mnt.sh --silent -D gh -r "$git_cmd $ex_params tom" 2>&1)
+          err=$? ;; # }}}
+        esac
+        progress --unmark --err=$err
         ;; # }}}
-      tom) # {{{
-        $ALIASES progress --mark
-        st=$(mnt.sh --silent -D gh -r "$git_cmd $ex_params tom" 2>&1)
-        $ALIASES progress --unmark --err=$?
-        ;; # }}}
-      *) $verbose && echo "[${CGold}SKIPPED${COff}]";;
+      *) $verbose && echo "     $r: ${CGold}skipped${COff}";;
       esac
     done # }}}
     if ! $skipSubmodules; then
@@ -313,36 +317,29 @@ backup() { # @@ # {{{
   done # }}}
   return 0
 } # }}}
-rbb() { # {{{
-  local dir=$(_gitdir)
-  [[ "$?" != "0" ]] && return 1
-
-  local dst=$1
-  local branch=$2
-
-  _dbg -n "Rebasing $branch on $dst... "
-  [[ $(git rev-list --max-count=1 $dst) == $(git merge-base $branch $dst) ]] && _dbg "Up to date" && return 0
-  _dbg ""
-
-  local simple=true
-  local cmd=
-  [[ $3 == 'full' ]] && simple=false
-
-  if $simple; then
-    cmd="git rebase -q $dst $branch"
-  else
-    local ahead=$(git log --pretty=oneline _backup/$dst..$branch | wc -l)
-    ahead=${ahead// }
-    cmd="git rebase -q --onto $dst $branch~$ahead $branch"
-  fi
-  _dbg $cmd
-  eval $cmd
-
-  return 0
+rbb() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == 1 ]] && echo "-v 1 2 3"
+    git branch | cut -c3-
+    return 0
+  fi # }}}
+  local cnt=1 dst= branch= verbose=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -v) verbose=true;;
+    *) break;;
+    esac; shift
+  done # }}}
+  [[ $# == 2 || $1 =~ ^[0-9]+$ ]] && cnt=$1 && shift
+  branch=$1
+  dst=$(git branch --show-current)
+  [[ $? == 0 && ! -z $dst ]] || { echor "not at any branch"; return 1; }
+  echor -c $verbose "git rebase --rebase-merges -q --onto $dst $branch~$cnt $branch"
+  git rebase --rebase-merges -q --onto $dst $branch~$cnt $branch
 } # }}}
 stash_toggle()  { # @@ stash-toggle s # {{{
   if [[ $1 == @@ ]]; then # {{{
-    echo "k --keep-index pop push list show drop"
+    echo "k --keep-index -m pop push list show drop"
     return 0
   fi # }}}
   if [[ ! -z $1 ]]; then # {{{
@@ -360,7 +357,7 @@ stash_toggle()  { # @@ stash-toggle s # {{{
       if [[ -z "$2" || "$2" == 'true' ]]; then
         git stash pop -q
       fi
-      return 0;; # }}}
+      return;; # }}}
     esac
     while [[ ! -z $1 ]]; do
       case $1 in
@@ -377,44 +374,8 @@ stash_toggle()  { # @@ stash-toggle s # {{{
   if $stash; then
     git stash -q
   elif $isOnStash; then
-    $isOnStash && git stash pop -q
+    git stash pop -q
   fi
-} # }}}
-svn_rb() { # {{{
-  local dir=$(_gitdir)
-  [[ "$?" != "0" ]] && return 1
-  local branch_map=".gitbranches"
-  [[ ! -e "$branch_map" ]] && _dbg "File with branches map ($branch_map) does not exist" && return 1
-  local stash=
-  local i=
-  local branch=
-  local line=
-  local key=
-
-  stash=$(git status --short)
-  [[ -z $stash ]] && stash=false || stash=true
-  $stash && git stash -q
-  branch=$(git branch | grep "*" | sed "s/* //")
-
-  while read line; do
-    [[ -z $line ]] && continue
-    [[ $line == \#* ]] && continue
-    rbb ${line/ *} ${line/* }
-    if [[ $? != 0 ]]; then
-      while true; do
-        read -u 1 -p "Rebase has failed. Terminate[t/q], git rebase --skip[s]?" key
-        case $key in
-          t|T|q|Q) return 1;;
-          s|S) git rebase -q --skip; break;;
-        esac
-      done
-    fi
-  done < $branch_map
-
-  git checkout $branch
-  $stash && git stash pop -q
-
-  return 0
 } # }}}
 _do_sync() { # {{{
   local params=$@ parRemote= parBranch= verbose=false quiet=false resetH=false interactive=true dots=true repoUpdateFile=$TMP_PATH/.repo-update skipSubmodules=false repo=
@@ -439,7 +400,7 @@ _do_sync() { # {{{
     parBranch="$(git rev-parse --abbrev-ref HEAD)"
     [[ $parBranch == 'HEAD' ]] && parBranch=
   fi # }}}
-  local remotes="$parRemote origin _backup-gl _backup-gw _backup-hdd _backup-usb tom _backup"
+  local remotes="$parRemote origin local _backup-gl _backup-gw _backup-hdd _backup-usb tom _backup"
   local done_remotes= remote
   local cmd="git-cmds.sh --test _do_sync $params --repo $repo --skip-submodules --skip-backup $(! $verbose && echo "--quiet")"
   export cmd
@@ -460,16 +421,16 @@ _do_sync() { # {{{
   local shaLocal="$(git log -1 --format="%H" $parBranch)" d=${dir/$HOME/\~}
   if ! $quiet; then # {{{
     if $dots; then
-      $ALIASES progress --mark --msg "R: ${CGreen}${d}${COff}$(_add_spaces ${#d} 30)"
+      progress --mark --left --msg "${CBlue}${d}${COff}"
     elif ! $verbose; then
-      echo -en "R: [${CGreen}${d}${COff}]$(_add_spaces ${#d} 30)"
+      echo -en "R: [${CBlue}${d}${COff}]$(_add_spaces ${#d} 30)"
     fi
   fi # }}}
   (
     unset -f $(declare -F | awk '{print $3}')
     git submodule --quiet foreach 'cd $PWD; $cmd || true'
   )
-  $verbose && echo -en "R: [${CGreen}${d}${COff}]$(_add_spaces ${#d} 30)"
+  $verbose && echo -en "R: [${CBlue}${d}${COff}]$(_add_spaces ${#d} 30)"
   for remote in $remotes; do
     local remoteUrl=$(git config --get remote.$remote.url 2>/dev/null)
     remoteUrl=${remoteUrl/\~/$HOME}
@@ -485,27 +446,27 @@ _do_sync() { # {{{
     [[ $(git remote) != *$remote* ]] && continue
     ! $quiet && ! $dots && echo "[${CCyan}Syncing from $remote...${COff}]"
     if git fetch --recurse-submodules=no $remote >/dev/null 2>&1; then
-      local shaRemote="$(git log -1 --format="%H" $remote/$parBranch 2>/dev/null)" shaBase="$(git merge-base $remote/$parBranch $parBranch)"
+      local shaRemote="$(git log -1 --format="%H" $remote/$parBranch 2>/dev/null)" shaBase="$(git merge-base $remote/$parBranch $parBranch 2>/dev/null)"
       local stash=$(git status --short)
       [[ -z $stash ]] && stash=false || stash=true
       $stash && git stash -q
       if [[ $shaBase != $shaRemote ]]; then
         tag_sync
-        if ! git rebase -q $remote/$parBranch $parBranch >/dev/null 2>&1; then # {{{
+        if ! git rebase --rebase-merges -q $remote/$parBranch $parBranch >/dev/null 2>&1; then # {{{
           if [[ $tLastSync -ge $tLocal ]] || $resetH; then # {{{
             git rebase --abort >/dev/null 2>&1
             git reset --hard $remote/$parBranch >/dev/null 2>&1
             # }}}
           elif $interactive; then # {{{
-            ! $quiet && $dots && { $ALIASES progress --unmark; dots=false; }
+            ! $quiet && $dots && { progress --unmark; dots=false; }
             git rebase --abort
             git reset --hard
             echo "Resolve confilicts and exit shell..." >/dev/stderr
             $SHELL </dev/tty >/dev/tty
-            $ALIASES progress --mark --msg "R: [${CGreen}${d}${COff}]$(_add_spaces ${#d} 30)"
+            progress --mark --left --msg "${CBlue}${d}${COff}"
             # }}}
           else # {{{
-            ! $quiet && $dots && { $ALIASES progress --unmark;  dots=false; }
+            ! $quiet && $dots && { progress --unmark;  dots=false; }
             echo "Rebase was aborted due to conflicts..." >/dev/stderr
             git rebase --abort >/dev/null 2>&1
             git reset --hard >/dev/null 2>&1
@@ -516,7 +477,7 @@ _do_sync() { # {{{
       break
     fi
   done
-  ! $quiet && $dots && $ALIASES progress --unmark
+  ! $quiet && $dots && progress --unmark
 } # }}}
 sync() { # @@ # {{{
   local remote= branch=
@@ -545,7 +506,7 @@ sync() { # @@ # {{{
   done # }}}
   for repo in $repos; do # {{{
     if [[ " $GIT_REPOS $BASH_UPDATE_REPOS " == *" $repo "* ]]; then
-      [[ -e $BIN_PATH/setup_updater.sh ]] && $BIN_PATH/setup_updater.sh --saveTime
+      setup_updater.sh --saveTime
       break
     fi
   done # }}}
@@ -570,7 +531,7 @@ commit_fast() { # @@ commit-fast # {{{
   case $1 in
   -m)  msg="$2";;
   -m*) msg="${1/-m}";;
-  *)   msg="[$($ALIASES date)] ${1:-"Fast commit"}";;
+  *)   msg="[$(date +$DATE_FMT)] ${1:-"Fast commit"}";;
   esac
   local template=$(git config --get utils.commit-fast)
   # e.g. git config --add user.commit-fast 'printf "%s%s" "$(date +"%Y%m%d")" "$( [[ ! -z $1 ]] && echo ": $@" || echo "")"'
@@ -635,7 +596,7 @@ remote-backup() { # @@ # {{{
     esac; shift
   done # }}}
   if [[ -z $remoteName ]]; then # {{{
-    local list="origin local _backup"
+    local list="local _backup origin"
     for remoteName in $list; do
       git remote | grep -q "$remoteName" || break
     done
@@ -655,7 +616,7 @@ clone-bare() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     -d | --dst) echo "DST-DIR ..";;
-    -n | --name) echo "origin _backup local";;
+    -n | --name) echo "local _backup origin";;
     *) echo "-d --dst -n --name";;
     esac; shift
     return 0
@@ -744,18 +705,19 @@ range_diff() { # @@ range-diff # {{{
   cmd+="$cmd_diff --name-only"
   ! $do_full   && cmd+=" | grep -v '/test/unit/'"
   $put_in_file && eval $cmd | sed "s/^/$cmd_diff -- /" > "$TMP_PATH/range-diff-files-$range.txt"
-  ! $list_only && cmd+=" | LESS=\"-dFiJRSwX -x4 -z-4 -+F -~ -c\" xargs -n1 $cmd_diff -- "
+  ! $list_only && cmd+=" | LESS=\"-diJRSwX -x4 -z-4 -+F -~ -c\" xargs -n1 $cmd_diff -- "
   eval $cmd
 } # }}}
 log() { # @@ l lf lgo # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case ${@: -1} in
     -b)
+      echo "-"
       for o in $(git remote); do
         git for-each-ref --sort=-committerdate refs/remotes/$o | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/remotes/||'
       done;;
     *)
-      echo "--fzf -l --this -b"
+      echo "--fzf -l --this -b -m -"
       git ls-files $GIT_PREFIX | sed -e 's/^.\///' -e '/.*\/.*\/.*/d'
       git for-each-ref refs/heads/ | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/heads/||'
       for o in $(git remote); do
@@ -768,15 +730,17 @@ log() { # @@ l lf lgo # {{{
     esac
     return 0
   fi # }}}
-  local logMethod='log --pretty=date-first --date=relative' params= range= files= c= max=15 br=HEAD fzfUse=false d=
+  local logMethod= params= range= files= c= max=30 br=HEAD fzfUse=false d=
   local fzfParams='--pretty=date-first --date=format:"%Y-%m-%d-%H%M%S"'
   local fzfThisDir=false
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --fzf)  fzfUse=true; logMethod=log; br=;;
+    --fzf)  fzfUse=true; [[ -z $logMethod ]] && logMethod=log; br=;;
     -l)     logMethod=$2; $fzfUse && fzfParams=; shift;;
     --this) fzfThisDir=true;;
-    -b)     shift;;
+    -b)     br=$2; [[ $br == '-' ]] && br=""; shift;;
+    -m)     max="$2"; shift;;
+    -)      max="-";;
     -*)     params+="$1 ";;
     *) # {{{
       if [[ $1 == /* || -e $1 || -e $GIT_PREFIX$1 ]]; then
@@ -798,108 +762,125 @@ log() { # @@ l lf lgo # {{{
     esac
     shift
   done # }}}
-  if $fzfUse; then # {{{
-    $fzfThisDir && [[ -z $files && ! -z $GIT_PREFIX ]] && files="${GIT_PREFIX%/}/"
-    if $FZF_INSTALLED; then
-      fzf_tools() { # {{{
-        show_change() { # {{{
-          local sha=$1
-          git log --pretty=fuller --date=local -1 "$sha"
-          echo; echo '    ----'
-          git diff $sha~..$sha --name-status | sed -e 's/^../    /'
-          echo '    ----'; echo
-          git diff -w $sha~..$sha | \
-            if [[ $2 == '--as-diff' ]] && which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi
-        } # }}}
-        local sha="$(echo "$2" | sed 's/.*: \([0-9a-z]\{5,\}\) - .*/\1/')"
-        [[ -z $sha ]] || ! git log --pretty='%h' --all | grep -q "\<$sha\>" && return 1
-        case $1 in
-        --preview) # {{{
-          show_change $sha --as-diff
-          ;; # }}}
-        --send | --view) # {{{
-          local list= l=
-          while read l; do
-            [[ -d "$l" ]] && continue
-            list+="$l "
-          done < <(git diff $sha~..$sha --name-status | awk '{print $2}')
-          case $1 in
-          --view) # {{{
-            vim --Fast <(show_change $sha) $list </dev/tty >/dev/tty 2>>$HOME/l.tmp;; # }}}
-          --send) # {{{
-            local i=
-            list="$(echo "$list" | sed 's|^|'$PWD'/|')"
-            for i in $list; do
-              [[ ! -d $i ]] && $ALIASES fzf-exe -c pane -f $i
-              sleep 1
-            done;; # }}}
-          esac;; # }}}
-        esac
-      } # }}}
-      export -f fzf_tools
-      local shas= prompt="Log"
-      if [[ ! -z "$files" ]]; then # {{{
-        local f="$(echo $files)" suffix=
-        [[ "$f" == *\ * ]] && suffix=" ... "
-        f="${f%% *}"
-        if [[ -e "$f" ]]; then
-          f="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
-          [[ -d "$f" ]] && suffix="/$suffix" && f="${f%/}"
-          f="${f#$PWD/}"
-          if [[ ${#f} -gt 15 ]]; then
-            local fTmp=".../$(basename "$(dirname "$f")")/$(basename "$f")"
-            [[ ${#fTmp} -lt ${#f} ]] && f="$fTmp"
-          fi
-          prompt+=": $f$suffix"
-        else
-          prompt+=": $f"
-        fi
-      fi # }}}
-      prompt+="> "
-      shas="$(eval git $logMethod $fzfParams --color $br $([[ ! -z $files ]] && echo "-- $files") \
-        | fzf -m +s --ansi  --height 90% \
-          --prompt  "$prompt" \
-          --preview 'fzf_tools --preview "{}"' \
-          --bind    'f2:execute(fzf_tools --view "{}")' \
-          --bind    'f3:execute(fzf_tools --send "{}")' \
-        | sed 's/.*: \([0-9a-z]\{5,\}\) - .*/\1/')"
-      if [[ $? == 0 && ! -z "$shas" ]]; then # {{{
-        if [[ -t 1 ]]; then
-          source $HOME/.bashrc --do-basic
-          echo -n "$shas" | tr '\n' ' ' | ccopy
-        else
-          echo "$shas"
-        fi
-      fi # }}}
-    else
-      eval git $logMethod $fzfParams --color $br $([[ ! -z $files ]] && echo "-- $files")
-    fi # }}}
-  else # {{{
+  [[ -z $logMethod ]] && logMethod='log --pretty=date-first'
+  if [[ ! -z $br ]]; then
     c=$(($(git rev-list --count $br)-1))
-    [[ $c -gt $max ]] && c=$max
-    [[ " $params " == *" --all "* ]] || range="$br~$c..$br"
-    git $logMethod $params $range $([[ ! -z $files ]] && echo "-- $files")
+    [[ $max == '-' || $max == 0 ]] || [[ $c -le $max ]] || c=$max
+    [[ " $params " == *" --all "* ]] || range="-n $c $br"
+  fi
+  if $fzfUse && $FZF_INSTALLED; then # {{{
+    $fzfThisDir && [[ -z $files && ! -z $GIT_PREFIX ]] && files="${GIT_PREFIX%/}/"
+    [[ ! -z $files ]] && files="-- $files"
+    fzf_tools() { # {{{
+      show_change() { # {{{
+        local sha=$1
+        git log --pretty=fuller --date=local -1 "$sha"
+        echo; echo '    ----'
+        git diff $sha~..$sha --name-status | sed -e 's/^../    /'
+        echo '    ----'; echo
+        git diff -w $sha~..$sha | \
+          if [[ $2 == '--as-diff' ]] && which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi
+      } # }}}
+      local line="$2"
+      line="${line#\'}" && line="${line%\'}"
+      [[ ! -z $line ]] || return 0
+      if [[ "$line" =~ ^[*\ \|/\\]+\ (.*) ]]; then
+        line="${BASH_REMATCH[1]}"
+      elif [[ "$line" =~ ^[0-9-]+:\ (.*) ]]; then
+        line="${BASH_REMATCH[1]}"
+      else
+        return 1
+      fi
+      local sha="$(echo "$line" | awk '{print $1}')"
+      [[ -z $sha ]] || ! git log --pretty='%h' --all | grep -q "\<$sha\>" && return 1
+      case $1 in
+      --preview) # {{{
+        show_change $sha --as-diff
+        ;; # }}}
+      --send | --view) # {{{
+        local list= l=
+        while read l; do
+          [[ -d "$l" ]] && continue
+          list+="$l "
+        done < <(git diff $sha~..$sha --name-status | awk '{print $2}')
+        case $1 in
+        --view) # {{{
+          vim --Fast <(show_change $sha) $list </dev/tty >/dev/tty 2>>$HOME/l.tmp;; # }}}
+        --send) # {{{
+          local i=
+          list="$(echo "$list" | sed 's|^|'$PWD'/|')"
+          for i in $list; do
+            [[ ! -d $i ]] && $ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f $i
+            sleep 1
+          done;; # }}}
+        esac;; # }}}
+      esac
+    } # }}}
+    export -f fzf_tools
+    local shas= prompt="Log"
+    if [[ ! -z "$files" ]]; then # {{{
+      local f="$(echo $files)" suffix=
+      [[ "$f" == *\ * ]] && suffix=" ... "
+      f="${f%% *}"
+      if [[ -e "$f" ]]; then
+        f="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
+        [[ -d "$f" ]] && suffix="/$suffix" && f="${f%/}"
+        f="${f#$PWD/}"
+        if [[ ${#f} -gt 15 ]]; then
+          local fTmp=".../$(basename "$(dirname "$f")")/$(basename "$f")"
+          [[ ${#fTmp} -lt ${#f} ]] && f="$fTmp"
+        fi
+        prompt+=": $f$suffix"
+      else
+        prompt+=": $f"
+      fi
+    fi # }}}
+    prompt+="> "
+    shas="$(eval git $logMethod --date=short $params $fzfParams --color $range $br -- $files \
+      | fzf -m +s --ansi  --height 90% \
+        --prompt  "$prompt" \
+        --preview 'fzf_tools --preview "{}"' \
+        --preview-window=right,nohidden \
+        --bind    'f2:execute(fzf_tools --view "{}")' \
+        --bind    'f3:execute(fzf_tools --send "{}")' \
+      | sed 's/.*: \([0-9a-z]\{5,\}\) - .*/\1/')"
+    if [[ $? == 0 && ! -z "$shas" ]]; then # {{{
+      if [[ -t 1 ]]; then
+        source $HOME/.bashrc --do-basic
+        echo -n "$shas" | tr '\n' ' ' | xclip --put
+      else
+        echo "$shas"
+      fi
+    fi # }}}
+    # }}}
+  else # {{{
+    [[ ! -z $files ]] && files="-- $files"
+    eval git $logMethod $params $range $files
   fi # }}}
   return 0
 } # }}}
-commit() { # @@ # {{{
+commit() { # @@ ci # {{{
   if [[ $1 == "@@" ]]; then # {{{
-    echo "-v -m --no-verify"
+    echo "-nv -ae -m --no-verify --allow-empty --amend -fu --fixup"
     return 0
   fi # }}}
-  ! git diff --quiet || ! git diff --cached --quiet || { echo "Nothing to commit" >/dev/stderr; return 1; }
-  ! git diff --cached --quiet || git add ${GIT_PREFIX:-.}
-  ! git diff --cached --quiet || { echo "Nothing within '${GIT_PREFIX:-.}' to commit" >/dev/stderr; return 1; }
-  local msg= params=
+  local msg= params= allowEmpty=false
   while [[ ! -z $1 ]]; do
     case $1 in
     -m)  shift; msg="$1";;
     -m*) msg="${1#-m}";;
-    -v)  params+=" --no-verify";;
+    -nv) params+=" --no-verify";;
+    -ae | --allow-empty) params+=" --allow-empty"; allowEmpty=true;;
+    -fu | --fixup) params+=" --fixup $2"; shift;;
     -*)  params+=" $1";;
-    *)   msg="$@"; shift $#;;
+    *)   msg="$@"; params+=" --no-verify"; shift $#;;
     esac; shift
   done
+  if ! $allowEmpty; then # {{{
+    ! git diff --quiet || ! git diff --cached --quiet || { echo "Nothing to commit" >/dev/stderr; return 1; }
+    ! git diff --cached --quiet || git add ${GIT_PREFIX:-.}
+    ! git diff --cached --quiet || { echo "Nothing within '${GIT_PREFIX:-.}' to commit" >/dev/stderr; return 1; }
+  fi # }}}
   if [[ ! -z $msg ]]; then
     git commit $params -m "$msg"
   else
@@ -955,7 +936,7 @@ cba() { # @@ # {{{
     esac
     shift
   done # }}}
-  [[ $(git rev-list --count HEAD) -lt $cnt ]] && cnt=$(($(git rev-list --count HEAD)-1))
+  [[ $(git rev-list --count HEAD) -lt $cnt ]] && cnt=$(($(git log --graph HEAD | command grep '^* [0-9a-f]' | wc -l) - 1))
   curHead="$(git log -1 --pretty=%h)"
   fzf_p="--height=80% --layout=reverse-list --no-sort +m --ansi -1 -0 \
       --prompt='Fix-Up> ' \
@@ -999,10 +980,10 @@ cba() { # @@ # {{{
       [[ ! -z $c ]] || break
       if [[ "$c" == "$pattern" ]]; then
         first="$(git merge-base $first HEAD~$cnt)"
-        git commit --no-verify
+        git commit --no-verify || return 1
       else
         first="$(git merge-base $first ${c}~)"
-        git commit --fixup=$c --no-verify
+        git commit --fixup=$c --no-verify || return 1
         $useFirst && echo -e "\n---\n"
       fi
       changed=true
@@ -1012,7 +993,7 @@ cba() { # @@ # {{{
   else # {{{
     first="${c}~"
     [[ $c == HEAD* ]] && first+='~'
-    git commit --fixup=$c --no-verify
+    git commit --fixup=$c --no-verify || return 1
   fi # }}}
   ! git diff --quiet && git stash >/dev/null 2>&1 && stashed=true
   if $autoQuit; then # {{{
@@ -1020,7 +1001,7 @@ cba() { # @@ # {{{
     if $askQuit || $autoMode; then # {{{
       echo
       local k=
-      k="$($ALIASES progress --wait 5s --msg "ok?" --no-err --keys "qn")"
+      k="$(progress --wait 5s --msg "ok?" --no-err --keys "qn")"
       if [[ $? == 0 ]]; then
         export VIM_ENV="+:quit"
       elif [[ ${k,,} == 'q' ]]; then
@@ -1030,9 +1011,9 @@ cba() { # @@ # {{{
       echo
     fi # }}}
   fi # }}}
-  git rebase -i --autosquash $first
+  git rebase -i --rebase-merges --autosquash $first
 # # could be use to open editor silently
-#   GIT_EDITOR=/bin/ed git rebase -i --autosquash $first <<-EOF
+#   GIT_EDITOR=/bin/ed git rebase -i --rebase-merges --autosquash $first <<-EOF
 # 			wq
 # 		EOF
   $stashed && git stash pop >/dev/null 2>&1
@@ -1100,10 +1081,10 @@ git_extra_completion() { # @@ dp info # {{{
     done;; # }}}
   esac
 } # }}}
-# }}}
 # MAIN # {{{
 GIT_REPOS=$(echo "$GIT_REPOS" | tr ' ' '\n' | awk '!($0 in a) {a[$0]; print}' | tr '\n' ' ')
 cmd="${1:-_usage}"
+cmd=${cmd%:}
 shift
 if [[ $cmd != "--test" && $cmd != @@* && $cmd != "--comply" ]]; then # {{{
   params=
@@ -1112,7 +1093,8 @@ if [[ $cmd != "--test" && $cmd != @@* && $cmd != "--comply" ]]; then # {{{
     shift
   done
 fi # }}}
-! declare -f echorm >/dev/null 2>&1 && [[ -e $ECHOR_PATH/echor ]] && source $ECHOR_PATH/echor
+source $ALIASES_D/0.essentials
+import-module echorm echor
 cmdList="$(sed -n '/^[a-zA-Z][^ ]*() *{ .*# {\{3\}$/ s/^\(.*\)() *{\( *# @@ \(.*\)\)\? *# *{\{3\}/\1 \3 /p' $0)" # } } } }
 case "$cmd" in # {{{
 --comply) # {{{
@@ -1124,12 +1106,12 @@ case "$cmd" in # {{{
     exit 0
   fi
   [[ $cmd == '@@' ]] && { cmd="$2"; shift 2; } || cmd="${cmd#@@}"
-  cmd="$(echo "$cmdList" | awk '/\<'"${cmd//\//\\/}"'\>/ {print $1}')"
+  cmd="$(echo "$cmdList" | awk '/(^| )\<'"${cmd//\//\\/}"'\>/ {print $1}')"
   shift 2
   case $cmd in
   '') exit 0;;
   git_extra_completion) params="${@@Q}";;
-  *) params="@@ ${@@Q}";;
+  *) shift; params="@@ ${@@Q}";;
   esac
   ;; # }}}
 --test) # {{{

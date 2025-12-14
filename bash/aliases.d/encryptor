@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# vim: fdl=0
-
-encryptor() {  # @@ # {{{
-  $ALIASES_SCRIPTS/encryptor.sh "$@"
-} # }}}
-export -f encryptor
-HISTIGNORE+=":encryptor"
-

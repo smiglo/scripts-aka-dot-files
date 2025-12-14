@@ -1,0 +1,73 @@
+# vim: filetype=sh fdl=0
+
+import-module echor
+
+color-cache-dump() { # {{{
+  if [[ $1 == @@ ]]; then # {{{
+    echo "-f --full"
+    return 0
+  fi # }}}
+  load-colors
+  local i= w1=12 w2=-15 colors_ci= colors_cb= colors_cbi= cOff="$(get-color off)" full=false
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -f | --full) full=true;;
+    esac; shift
+  done
+  echor -C "%yellow:{colorCache}:"
+  for i in $(echo "${!colorCache[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+    if ! $full; then
+      [[ $i =~ ^C[A-Z].+ && ! -z ${!i} ]] && continue
+      [[ ! -z ${COLORS[$i]} ]] && continue
+    fi
+    if [[ $i =~ ^CB[A-Z] ]]; then
+      colors_cb+="$i "
+      continue
+    elif [[ $i =~ ^CBI[A-Z] ]]; then
+      colors_cbi+="$i "
+      continue
+    elif [[ $i =~ ^CI[A-Z] ]]; then
+      colors_ci+="$i "
+      continue
+    fi
+    if [[ $i =~ ^C[A-Z] ]]; then
+      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+    else
+      if [[ ! -z $colors_cb ]]; then
+        local ii=
+        for ii in $colors_cb; do
+          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+        done
+        colors_cb=
+      fi
+      if [[ ! -z $colors_cbi ]]; then
+        local ii=
+        for ii in $colors_cbi; do
+          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+        done
+        colors_cbi=
+      fi
+      if [[ ! -z $colors_ci ]]; then
+        local ii=
+        for ii in $colors_ci; do
+          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+        done
+        colors_ci=
+      fi
+      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+    fi
+  done
+  echor -C "%yellow:{COLORS}:"
+  for i in $(echo "${!COLORS[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+  done
+  echor -C "%yellow:{colorMap} (user):"
+  for i in $(echo "${!colorMap[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+  done
+} # }}}
+
+if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+  color-cache-dump "$@"
+fi
+

@@ -1,0 +1,199 @@
+# vim: fdl=0 fdm=marker ft=gitconfig
+
+[include] # {{{
+  path = ~/.gitconfig-user # }}}
+[user] # {{{
+  useConfigOnly = true # }}}
+[core] # {{{
+  editor = vim --fast-save
+  pager = less -x4
+  excludesfile = ~/.gitignore
+  autocrlf = input
+  safecrlf = true
+  whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2 # }}}
+[color] # {{{
+  ui = auto # }}}
+[diff] # {{{
+  tool = vimdiff
+  guitool = kdiff3 # }}}
+[diff "zip"] # {{{
+  textconv = unzip -v # }}}
+[diff "pdf"] # {{{
+  textconv = pdfinfo # }}}
+[diff "asta"] # {{{
+  textconv = hexdump -v -C # }}}
+[diff "bin"] # {{{
+  textconv = hexdump -v -C # }}}
+[difftool "vimdiff"] # {{{
+  cmd = vimdiffgit $LOCAL $REMOTE
+  trustExitCode = true # }}}
+[difftool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[mergetool] # {{{
+  keepBackup = false # }}}
+[mergetool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[mergetool "vimdiff"] # {{{
+  layout = "LOCAL,BASE,REMOTE / MERGED + BASE,LOCAL + BASE,REMOTE + LOCAL,REMOTE"
+  trustExitCode = true # }}}
+[merge] # {{{
+  tool = vimdiff
+  conflictstyle = diff3
+  ff = false # }}}
+[alias] # {{{
+  adp = add -p
+  br = branch
+  c = commit
+  ci = commit
+  cia  = commit --all --no-verify
+  ciaa = commit --all --amend --reuse-message=HEAD --no-verify
+  ciam  = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify"
+  ciamb = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git backup"
+  ciamp = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
+  ciamm = commit --amend --no-verify
+  cim = commit -m
+  co = checkout
+  d = diff
+  dff = diff --relative
+  dffc = !"git diffc --relative"
+  dffp = !"git diffp --relative"
+  dffw = diff --relative --word-diff
+  diffc = diff --cached
+  diffp = !"bash -c 'f() { local rev=\"HEAD\"; [[ $1 == -b ]] && shift; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f \"$@\";'" -
+  db    = !"bash -c 'f() { local b=\"$(git rev-parse --abbrev-ref --symbolic-full-name @)\" rB=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u})\"; git diff $rB..$b; }; f \"$@\"'" -
+  dc    = !"git diffc"
+  dl    = diff tmp/sync/last
+  dp    = !"git diffp"
+  dr    = !"bash -c 'f() { local ups=\"\"; \
+              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
+              elif [[ $1 == */* ]]; then ups=\"$1\"; \
+              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
+              fi; \
+              [[ -z $ups ]] && return 1; \
+              git diff $ups..@; \
+            }; f \"$@\";'" -
+  f      = fetch
+  fr     = fetchr
+  fetchr = !"git fetch && git rreset"
+  i    = info -p
+  info = log --pretty=fuller     --date=local    -1
+  ll   = log --pretty=date-first --date=relative
+  l    = log --pretty=date-first --date=relative --this
+  l2   = log --pretty=l2         --date=local
+  lg   = log --pretty=date-first --date=short --graph --decorate-refs-exclude=refs/tags/tmp/sync/*
+  lga  = log --pretty=date-first --date=short --graph --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes
+  lgaa = log --pretty=date-first --date=short --graph --all
+  ld   = log --pretty=date-first --date=format:'%Y-%m-%d-%H%M%S'
+  lgo   = log --graph
+  lgf   = log --graph --all
+  lgfa  = log --graph --all
+  lgfaa = log --graph --all
+  melddiff = difftool -y -t meld
+  m  = merge
+  m-a = merge --abort
+  m-c = merge --continue
+  me = merge
+  mt = mergetool
+  ps = push --recurse-submodules=check
+  puf   = !"bash -c 'f() { local ups=\"\"; \
+              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
+              elif [[ $1 == */* ]]; then ups=\"$1\"; \
+              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
+              fi; \
+              [[ -z $ups ]] && return 1; \
+              git push -f ${ups/\\// }; \
+            }; f \"$@\";'" -
+  pul = push -f local
+  pulo = "!git push -f local && git push origin"
+  rb = rebase
+  rba = rebase -i --autosquash --rebase-merges
+  rb-a = rebase --abort
+  rb-c = rebase --continue
+  rb-s = rebase --skip
+  re = reset
+  rH = reset --hard
+  restash = !"git stash pop && git stash"
+  retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f \"$@\";'" -
+  rreset = reset --hard
+  s = stash-toggle
+  sh = show -w
+  shv = !"bash -c 'f() { git shst $@ | vim --Fast -; }; f \"$@\";'" -
+  shst = !"bash -c 'f() { git diffp $@ --name-status; }; f \"$@\";'" -
+  shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f \"$@\";'" -
+  sr = sync --reset
+  st = status --short -b
+  stv = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim --Fast -; }; f \"$@\";'" -
+  vimdiff = difftool -y -t vimdiff --trust-exit-code
+  vimdiff-p = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f \"$@\";'" -
+  vd = vimdiff
+  vdp = vimdiff-p
+  # }}}
+[bash] # {{{
+  showDirtyState = true
+  showUntrackedFiles = true
+  showStashState = true
+  showUpstream = auto
+  completeAdd = true # }}}
+[branch] # {{{
+  autosetuprebase = always
+  sort = -committerdate # }}}
+[format] # {{{
+  pretty = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%cd)%C(reset) %C(blue)<%an>%C(reset) # }}}
+[pretty] # {{{
+  tb = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%cd)%C(reset) %C(blue)<%an>%C(reset)
+  short2 = %h %s
+  l2 = %C(auto)%h,%C(reset)%C(auto)%d%C(reset) %C(green)%cs,%C(reset) %C(dim green)%cr%C(reset)%n  %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
+  date-first = %C(dim green)%cd:%C(reset) %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset) # }}}
+[giggle] # {{{
+  main-window-maximized = false
+  main-window-geometry = 974x734+468+116
+  history-view-vpane-position = 428
+  file-view-vpane-position = 592
+  main-window-view = HistoryView # }}}
+[push] # {{{
+  default = current # }}}
+[svn] # {{{
+  # push empty directory removals back to svn as directory deletes
+  rmdir = true
+  # set svn:mergeinfo when pushing merge commits
+  pushmergeinfo = true # }}}
+[fetch] # {{{
+  prune = true
+  recurseSubmodules = true # }}}
+[rerere] # {{{
+  enabled = true # }}}
+[help] # {{{
+  autocorrect = 10 # }}}
+[tag] # {{{
+  # sort = -version:refname # }}}
+[log] # {{{
+  date = relative
+  decorate = short
+  showRoot = true # }}}
+[status] # {{{
+  submodulesummary = true # }}}
+[receive] # {{{
+  denyCurrentBranch = false # }}}
+[rebase] # {{{
+  autosquash = true # }}}
+[advice] # {{{
+  detachedHead = false
+  ignoredHook = false
+  skippedCherryPicks = false # }}}
+[gitsh] # {{{
+  prompt = "[0;36m%D[0m[0;32m(%b)[0m%c%#%w"
+  noGreeting = true
+  defaultCommand = status --short -b
+# }}}
+[filter "lfs"] # {{{
+  clean = git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f
+  process = git-lfs filter-process
+  required = true # }}}
+[include] # {{{
+  path = ~/.runtime/gitconfig # }}}
+[url "https://github"] # {{{
+  insteadOf = git://github # }}}
+

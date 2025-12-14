@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
 _file-part() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in

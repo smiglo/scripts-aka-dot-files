@@ -90,7 +90,7 @@ _set-title() { # {{{
     fi
   } # }}}
   local title= convertPwd_out=
-  local pwdGetter=${SET_TITLE_PWD_GETTER:-"shorten2"}
+  local pwdGetter=${SET_TITLE_PWD_GETTER:-"last"}
   local pwdPaneGetter="set-title_getter_PROFILES set-title_getter_default last"
   local setTerminalTitle= setPaneTitle= setWindowTitle=
   local isTMUX=false

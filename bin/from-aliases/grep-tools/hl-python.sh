@@ -15,14 +15,15 @@ if [[ $1 == '@@' ]]; then # {{{
     echo "NAME"
     echo "\'"'[\ \"NAME1\"\ \"...\"\ ]'"\'";; # }}}
   *) # {{{
-    if echo "$list" | grep -q -e "^${3:---}$"; then
+    if echo " $list " | grep -q -e " ${3:---} "; then
       echo "REG-EXP"
     else
-      echo "-p --name --skip --no-embed"
+      echo "-p --skip"
       echo "-D --no-default -f --reg-file -m --only-matching"
       echo "-c --colors -C --no-colors"
       echo "-v -vv -h --help"
       echo "REG-EXP"
+      [[ $3 == -* || $3 == +i || -z $3 ]] || echo "--name +i --case-sensitive --no-embed"
     fi;; # }}}
   esac
   exit 0

@@ -21,10 +21,22 @@ fzfwr() { # {{{
   fi
   return 0
 } # }}}
-vimf() { # @@ # {{{
-  $ALIASES_SCRIPTS/fzf-tools/vimf.sh "$@"
-  set +f
-} # }}}
+__env_fzf_autocomplete__() {
+  compgen -v \
+  | grep "^[A-Z]" \
+  | fzf +m --sort \
+      --prompt 'env> ' \
+      --preview 'eval echo \${1}' \
+      --preview-window 'nohidden'
+}
+__env_fzf_autocomplete_inline__() {
+  local selected="$(__env_fzf_autocomplete__)"
+  [[ ! -z $selected ]] || return 1
+  selected="\$$selected"
+  READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+  READLINE_POINT=$((READLINE_POINT + ${#selected}))
+}
+
 export -f fzf-exe fzfwr
 
 export PHISTORY_IGNORED_COMMANDS+=":ff:fzfwr:vimf:vimg:vims"

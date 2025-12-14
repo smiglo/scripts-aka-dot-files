@@ -2,7 +2,7 @@
 # vim: fdl=0
 
 get-unicode-char() { # {{{
-  [[ -e "$UNICODE_EXTRA_CHARS_FILE" ]] || { echor "missing unicode file [$UNICODE_EXTRA_CHARS_FILE]"; return 1; }
+  [[ -e "$UNICODE_EXTRA_CHARS_FILE" ]] || { echoe -f "missing unicode file [$UNICODE_EXTRA_CHARS_FILE]"; return 1; }
   source "$UNICODE_EXTRA_CHARS_FILE"
   local i= v= len= width=
   if [[ $1 == '--check' ]]; then # {{{
@@ -16,8 +16,8 @@ get-unicode-char() { # {{{
     done # }}}
   elif [[ $1 == '--add' ]]; then # {{{
     shift
-    [[ -z $1 || -z $2 ]] && { echor "missing params"; return 1; }
-    [[ -z ${UNICODE_EXTRA_CHARS[$1]} ]] || { echor "already set"; return 1; }
+    [[ -z $1 || -z $2 ]] && { echoe -f "missing params"; return 1; }
+    [[ -z ${UNICODE_EXTRA_CHARS[$1]} ]] || { return 0; }
     UNICODE_EXTRA_CHARS[$1]="$2"
     echo "UNICODE_EXTRA_CHARS[$1]=\"${UNICODE_EXTRA_CHARS[$1]}\"" >>"$UNICODE_EXTRA_CHARS_FILE" # }}}
   elif [[ $1 == '--fill' ]]; then # {{{

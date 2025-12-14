@@ -3,6 +3,8 @@
 
 # | work-parallel.sh script.sh:function
 
+import-module echor
+
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
   --cpu)        echo "1 2 12 24";;

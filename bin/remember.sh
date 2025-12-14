@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+__rem-reset-conf() { # {{{
+  var= var_use_file= var_file=
+  rm -f $file
+  touch $file
+} # }}}
+__rem-get-item() { # {{{
+  local p= i="$1" path=
+  i="${i//	/ /}"
+  if $do_split && [[ $i == *\ * ]]; then
+    set -- $i
+    local added=false
+    for i; do
+      __rem-get-item "$i"
+      [[ $? == 0 ]] && ! $added && added=true
+    done
+    ! $added && return 1
+    return 0
+  fi
+  if $as_file; then # {{{
+    if [[ $i == '..' ]]; then
+      p="$PWD"
+    elif [[ -e $i || -h $i ]]; then
+      [[ $i == /* ]] && p="$i" || path="$PWD"
+    elif [[ ! -z $last_working_path && -e "$last_working_path/$i" ]]; then
+      path="$last_working_path"
+    else
+      local path="$PWD"
+      while [[ ! -e "$path/$i" ]]; do
+        path="$(command cd "$path/.."; pwd)"
+        [[ $path == '/' || $path == "$HOME" ]] && break
+      done
+      [[ -e "$path/$i" ]] && last_working_path="$d" || path=
+    fi
+    [[ ! -z $path ]] && p="$path/$i"
+    if ${add_not_exst:-true}; then
+      [[ -z $p ]] && p="$i"
+    elif [[ ! -e $p ]]; then
+      p=""
+    fi
+    p="${p//\/.\//\/}"
+    # }}}
+  else # {{{
+    p="$i"
+  fi # }}}
+  [[ -z $p ]] && return 1
+  var+="$p\n"
+  return 0
+} # }}}
+remember() { # {{{
+  # Setup # {{{
+  local var="${REMEMBER_CONF_VAR:-REMEMBER}" mask_file="${REMEMBER_CONF_MASK:-remember}" store_dir="${REMEMBER_CONF_DIR:-$TMUX_RUNTIME}" \
+    ls_mode="${REMEMBER_CONF_LS_MODE:-rec}" keep_n_bck_files="${REMEMBER_CONF_KEEP_N:-7}"
+  local var_use_file= var_file= file= i= p= fzf_prompt= cmd=
+  local do_reset=false do_use_file=true do_edit=false do_keep=true do_append=true do_fzf=false do_quiet=false do_set_store_env=false \
+    do_ls=false do_list=false show_abs=false do_restore=false do_browse=false do_cmd=false as_file=true add_not_exst= do_split=false \
+    do_smart= do_block_reset= line_no=
+  local aliases=
+  case ${1^^} in # {{{
+  R)    aliases="-r";;
+  S)    aliases="--split";;
+  I)    aliases="--ign";;
+  E)    aliases="--edit";;
+  F)    aliases="--fzf";;
+  EC)   aliases="--edit --cmd";;
+  FC)   aliases="--fzf --cmd";;
+  RS)   aliases="-r --split";;
+  RI)   aliases="-r --ing";;
+  RE)   aliases="-r --edit";;
+  RF)   aliases="-r --fzf";;
+  REC)  aliases="-r --edit --cmd";;
+  RFC)  aliases="-r --fzf --cmd";;
+  RIE)  aliases="-r --ign --edit";;
+  RIF)  aliases="-r --ign --fzf";;
+  RSI)  aliases="-r --split --ign";;
+  RSE)  aliases="-r --split --edit";;
+  RSF)  aliases="-r --split --fzf";;
+  RSIE) aliases="-r --split --ign --edit";;
+  RSIF) aliases="-r --split --ign --fzf";;
+  esac # }}}
+  [[ ! -z $aliases ]] && shift
+  set -- $REMEMBER_CONF_DEFAULTS $aliases "$@"
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    @@ | @@@) # {{{
+      case $3 in
+      --file | -f | -F) get-file-list --pwd "$store_dir" "${mask_file}*.txt";;
+      --restore)        get-file-list --pwd "$store_dir" "${mask_file}*.txt-*.bck";;
+      --ls-mode)        echo "rec rec-all 1";;
+      *) # {{{
+        local params=
+        if [[ $1 == '@@' ]]; then
+          params="$(remember ${@:4} '@@@') -F --quiet - -- .. --ls --ls-mode --restore --browse --help --help-all --block-reset --block-reset=false -R -1 -2 -3"
+          [[ $2 == 1 ]] && params+=" R S I E F EC FC RS RI RE RF REC RFC RIE RIF RSI RSE RSF RSIE RSIF"
+        else
+          $do_append   && params+=" --no-append"  || params+=" --append"
+          $do_browse   && params+=" --no-browse"  || params+=" --browse"
+          $do_cmd      && params+=" --no-cmd"     || params+=" --cmd"
+          $do_edit     && params+=" --no-edit"    || params+=" --edit -e"
+          $do_use_file && params+=" --no-file"    || params+=" --file"
+          $do_fzf      && params+=" --no-fzf"     || params+=" --fzf"
+          $do_keep     && params+=" --no-keep"    || params+=" --keep"
+          $do_list     && params+=" --no-list"    || params+=" --list -l"
+          $do_reset    && params+=" --no-reset"   || params+=" --reset -r"
+          $do_restore  && params+=" --no-restore" || params+=" --restore"
+          ${do_smart:-true} \
+                        && params+=" --no-smart"   || params+=" --smart"
+          $do_split    && params+=" --no-split"   || params+=" --split"
+          $show_abs    && params+=" --no-abs"     || params+=" --abs"
+          ! ${add_not_exst:-true} \
+                        && params+=" --no-ign"     || params+=" --ign"
+        fi
+        echo "$params";; # }}}
+      esac
+      return 0
+      ;; # }}}
+    -[0-9] | -[0-9][0-9]) line_no="${1#-}";;
+    --append | -a) do_append=true;;
+    --abs)         show_abs=true;;
+    --browse)      do_browse=true;;
+    --cmd)         do_cmd=true; shift; cmd="$@"; shift $#; [[ -z $cmd ]] && cmd="echo"; [[ $cmd != *{}* ]] && cmd="$cmd {}"; break;;
+    --edit | -e)   do_edit=true;;
+    --block-reset | -R)   do_block_reset=true;;
+    --block-reset=*)      do_block_reset=${1#*=};;
+    --file | -f | -F) # {{{
+        do_use_file=true; do_set_store_env=true; do_append=true;;& # }}}
+    --file | -f) # {{{
+        file=
+        [[ -z $file ]] && [[ $2 == '-' ]] && file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt")" && shift
+        [[ -z $file ]] && [[ $2 == ${mask_file}* ]] && file="$store_dir/$2" && shift
+        [[ -z $file ]] && [[ $2 == $store_dir/${mask_file}* ]] && file="$2" && shift
+        [[ -z $file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && file="$store_dir/$2" && shift
+        [[ -z $file ]] && file="$store_dir/${mask_file}.txt"
+        ;; # }}}
+    -F) # {{{
+        file=
+        case $2 in
+        $store_dir/*)    file="$2";;
+        /* | ./*)        file="$2"; store_dir="$(dirname $file)";;
+        ${mask_file}-*)  file="$store_dir/$2";;
+        '' | -)          file="$store_dir/${mask_file}-$(command date +"$DATE_FMT").txt";;
+        *)               file="$store_dir/${mask_file}-$2.txt";;
+        esac
+        shift ;; # }}}
+    --ign)        add_not_exst=true;;
+    --list | -l)  do_list=true;;&
+    --keep | -k | --list | -l) # {{{
+                  do_keep=true;; # }}}
+    --quiet | -q) do_quiet=true;;
+    --reset | -r) do_reset=true;;
+    --split)      do_split=true;;
+    --fzf)        do_fzf="$FZF_INSTALLED";;
+    --ls)         do_ls=true;;
+    --ls-mode)    do_ls=true; ls_mode="$2"; shift;;
+    --restore) # {{{
+        do_restore=true
+        local restore_file=
+        [[ -z $restore_file ]] && [[ $2 == '-' ]] && restore_file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt-*.bck")" && shift
+        [[ -z $restore_file ]] && [[ $2 == ${mask_file}* ]] && restore_file="$store_dir/$2" && shift
+        [[ -z $restore_file ]] && [[ $2 == $store_dir/${mask_file}* ]] && restore_file="$2" && shift
+        [[ -z $restore_file ]] && [[ ! -z $2 && -f $store_dir/$2 ]] && restore_file="$store_dir/$2" && shift
+        [[ -z $restore_file ]] && restore_file="$(get-file-list -1 -t "$store_dir/${mask_file}*.txt-*.bck")"
+        ;; # }}}
+    --smart)      do_smart=true;;
+    # NO* # {{{
+    --no-append)  do_append=false;;
+    --no-abs)     show_abs=false;;
+    --no-browse)  do_browse=false;;
+    --no-cmd)     do_cmd=false; cmd=;;
+    --no-edit)    do_edit=false;;
+    --no-file)    do_use_file=false;;
+    --no-fzf)     do_fzf=false;;
+    --no-ign)     add_not_exst=false;;
+    --no-keep)    do_keep=false;;
+    --no-list)    do_list=false;;
+    --no-reset)   do_reset=false;;
+    --no-restore) do_restore=false;;
+    --no-smart)   do_smart=false;;
+    --no-split)   do_split=false;;
+    # }}}
+    # Special # {{{
+    --fzf-prompt) fzf_prompt="$2"; shift;;
+    --mask)  mask_file="$2"; shift;;
+    --store) store_dir="$2"; shift;;
+    --var)   var="$2"; shift;;
+    # }}}
+    --) shift; p="$@"; shift $#; set -- "$p"; as_file=false; break;;
+    -)  shift; break;;
+    --help | --help-all) # {{{
+      command cat <<-EOF >/dev/stdout
+					Switches:
+					  -1 | -2 | ...      - shows particular entry
+					  --append | -a      - append to temporary file
+					  --abs              - show items with absolute paths
+					  --browse           - browse temporary files
+					  --cmd              - execute a command on stored items
+					  --edid | -e        - edit stored items
+					  --file | -f | -F   - set temporary file
+					  --ign              - ignore checking whether an item is an existing file
+					  --list | -l        - show stored items
+					  --keep             - do not clear items after usage
+					  --quiet | -q       - be quiet
+					  --reset -r         - clear items
+					  --block-reset      - block resetting (--block-reset=false unblocks)
+					  --split            - split lines and add each word as an item rather than whole line
+					  --fzf              - use fzf to filter stored items
+					  --ls               - remember files from "ls"
+					  --ls-mode arg      - set how "ls" should work
+					                       1        - no recursive a.k.a. depth 1
+					                       rec      - show files recursively from subfolders, skip hidden files
+					                       rec-all  - show files recursively from subfolders
+					  --restore          - restore previous temporary file
+					  -- | -             - separate inputs from arguments, "-" does not threat inputs as files
+				EOF
+      if [[ $1 == '--help-all' ]]; then # {{{
+        command cat <<-EOF >/dev/stdout
+						  --no-*
+						    --no-append
+						    --no-abs
+						    --no-browse
+						    --no-cmd
+						    --no-edit
+						    --no-file
+						    --no-fzf
+						    --no-ign
+						    --no-keep
+						    --no-list
+						    --no-reset
+						    --no-restore
+						    --no-split
+					EOF
+      fi # }}}
+      echo
+      command cat <<-EOF >/dev/stdout
+					Defaults are:
+					  --no-reset -f --no-edit --keep --append --no-fzf --no-quiet --no-list --no-abs --no-restore --no-browse --no-cmd --no-ign
+				EOF
+      echo
+      return 0
+      ;; # }}}
+    *)  break;;
+    esac
+    shift
+  done # }}}
+  # }}}
+  if [[ ! -z $do_block_reset ]]; then # {{{
+    local -n var="${var}_CONF_BLOCK_RESET"
+    var="$do_block_reset"
+    return 0
+  else
+    do_block_reset="${var}_CONF_BLOCK_RESET"
+    do_block_reset="${!do_block_reset}"
+    [[ -z $do_block_reset ]] && do_block_reset=false
+  fi # }}}
+  [[ ! -e $store_dir ]] && command mkdir -p $store_dir
+  [[ -z $file ]] && file="$store_dir/${mask_file}.txt"
+  if $do_browse; then # {{{
+    local files=
+    files+=" $(get-file-list "$store_dir/${mask_file}*.txt")"
+    files+=" $(get-file-list "$store_dir/${mask_file}*.txt-*.bck")"
+    local res=
+    res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | command cat -n")"
+    [[ $? != 0 || -z $res ]] && return 0
+    if [[ $res == *.bck ]]; then
+      do_restore=true
+      restore_file="$res"
+    else
+      do_use_file=true; do_set_store_env=true; do_append=true
+      file="$res"
+    fi
+  fi # }}}
+  if $do_restore; then # {{{
+    [[ ! -e $restore_file ]] && eval $(die "remember" "file to restore from [$restore_file] does not exist")
+    [[ -e $file ]] && mv "$file" "${file}-$(command date +"$DATE_FMT").bck"
+    mv "$restore_file" "$file"
+  fi # }}}
+  local -n var_use_file="${var}_USE_FILE"
+  local -n var_file="${var}_FILE"
+  local -n var="${var}_SRC"
+  if $do_set_store_env; then # {{{
+    if $do_use_file; then
+      var_use_file="true"
+      var_file="$file"
+    else
+      var_use_file="false"
+    fi # }}}
+  else # {{{
+    case $var_use_file in false|true)
+      do_use_file="$var_use_file"
+      $do_use_file && file="$var_file"
+    esac
+  fi # }}}
+  $do_append && do_use_file=true
+  $do_edit && do_use_file=true
+  if $do_reset; then # {{{
+    $do_block_reset && eval $(die "remenber" "reset blocked")
+    if $do_use_file && [[ -e $file ]]; then
+      mv "$file" "${file}-$(command date +"$DATE_FMT").bck"
+      local to_rem=
+      $IS_MAC \
+        && to_rem="$(ls ${file}-*.bck | /usr/bin/tail -r | sed "1,${keep_n_bck_files} d")" \
+        || to_rem="$(ls ${file}-*.bck | head -n -$keep_n_bck_files)" 
+      [[ ! -z "$to_rem" ]] && rm $to_rem
+      find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
+    fi
+    __rem-reset-conf
+  fi # }}}
+  $do_fzf && do_keep=true
+  # What to do # {{{
+  local mode=
+  [[ -z $mode ]] && [[ ! -t 0 ]] && mode='add'
+  [[ -z $mode ]] && $do_browse && mode='recall'
+  [[ -z $mode ]] && $do_restore && mode='recall'
+  [[ -z $mode ]] && [[ ! -z $1 && $1 != '.' ]] && mode='add'
+  [[ -z $mode ]] && $do_list && mode='recall'
+  [[ -z $mode ]] && $do_ls && mode='add'
+  [[ -z $mode ]] && mode='recall'
+  # }}}
+  if [[ "$mode" == 'add' ]]; then # Remember files # {{{
+    var=
+    [[ -z $fzf_prompt ]] && fzf_prompt="To store> "
+    local last_working_path=
+    if [[ -t 0 ]]; then # {{{
+      if [[ -z $1 ]] && $do_ls; then # {{{
+        local c=
+        case $ls_mode in \
+        rec)     c="$FZF_DEFAULT_COMMAND"
+                [[ -z $c ]] && c="command find . -mindepth 1 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
+                ;;
+        rec-all) c="command find . -mindepth 1 \( -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-";;
+        1)       c="ls -A";;
+        *)       eval $(die "remember" "ls mode [$ls_mode] not yet known");;
+        esac
+        c+=" | fzf --height 100% --prompt '$fzf_prompt'"
+        set -- $(eval "$c")
+      fi # }}}
+      for i; do # {{{
+        __rem-get-item "$i"
+      done # }}}
+      # }}}
+    else # {{{
+      local tmpFile="$TMP_MEM_PATH/rem/rem-$$.tmp"
+      [[ ! -e "${tmpFile%/*}" ]] && command mkdir -p "${tmpFile%/*}"
+      rm -f $tmpFile && touch $tmpFile
+      while read i; do
+        echo "$i" >> $tmpFile
+      done
+      local added=false iter=1
+      if [[ -z $add_not_exst ]]; then
+        add_not_exst=false
+        [[ -z $do_smart ]] && do_smart=true
+      fi
+      while true; do # {{{
+        while read i; do # {{{
+          i="\"${i//	/\" \"}\""
+          eval set -- $i
+          for j; do
+            __rem-get-item "$j"
+            [[ $? == 0 ]] && ! $added && added=true
+          done
+        done < $tmpFile # }}}
+        ! $do_smart && break
+        $added && break
+        case $iter in
+        1) do_split=true;;
+        2) do_split=false; add_not_exst=true;;
+        3) break;;
+        esac
+        iter="$(($iter+1))"
+      done # }}}
+      rm -f $tmpFile
+    fi # }}}
+    if $do_use_file; then # {{{
+      (
+        $do_append && [[ -e $file ]] && command cat $file
+        echo -e "$var"
+      ) \
+      | sed '/^\s*$/ d' \
+      | command cat -n - | sort -k2,2 -u | sort -k1,1 | cut -c8- \
+      >$file.tmp
+      mv $file.tmp $file
+      echo >>$file
+      var="$(<$file)"
+    fi # }}}
+  fi # }}}
+  if [[ ! -t 1 ]] || $do_cmd; then
+    mode='recall'
+  fi
+  if [[ "$mode" == 'recall' ]]; then # Show remembered files # {{{
+    if $do_edit; then # {{{
+      local err=
+      $EDITOR $file </dev/tty >/dev/tty
+      err=$?
+      [[ $err == 0 ]] || eval $(die -s=$do_quiet "remember" "error when editing")
+    fi # }}}
+    if $do_use_file; then # {{{
+      [[ -e $file ]] || eval $(die -s=$do_quiet "remember" "no file [$file]")
+      var="$(< $file)"
+    fi # }}}
+    if [[ -z $var ]]; then # {{{
+      ( $do_reset || $do_use_file ) && return 0
+      eval $(die -s=$do_quiet "remember" "no files remembered")
+    fi # }}}
+    [[ -z $fzf_prompt ]] && fzf_prompt="To recall> "
+    echo -e "$var" | while read -r p; do # {{{
+      $show_abs || p="${p/$PWD/.}"
+      echo "$p"
+    done | \
+    if $do_fzf; then
+      fzf --height 100% --prompt "$fzf_prompt"
+    else
+      command cat -
+    fi | \
+    if $do_cmd; then
+      xargs -rI{} $cmd
+    elif [[ ! -z $line_no ]]; then
+      sed -n -e "${line_no}p"
+    else
+      command cat -
+    fi
+    # }}}
+    if ! $do_keep; then # {{{
+      if $do_use_file && [[ -e $file ]]; then
+        mv "$file" "${file}-$(command date +"$DATE_FMT").bck"
+        local to_rem=
+        $IS_MAC \
+          && to_rem="$(ls ${file}-*.bck | /usr/bin/tail -r | sed "1,${keep_n_bck_files} d")" \
+          || to_rem="$(ls ${file}-*.bck | head -n -$keep_n_bck_files)" 
+        [[ ! -z "$to_rem" ]] && rm $to_rem
+        find $(dirname $file) -maxdepth 1 -name "${mask_file}\*.bck" -empty -delete
+      fi
+      __rem-reset-conf
+    fi # }}}
+  fi # }}}
+  return 0
+} # }}}
+
+remember "$@"
+

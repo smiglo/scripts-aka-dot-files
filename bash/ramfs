@@ -10,7 +10,7 @@ mkdir -p $mount_point
 mount -o noatime,nobrowse -t hfs $ramdisk_dev $mount_point
 touch $mount_point/mounted.txt
 mkdir -p $mount_point/.desktop
-ln -sf $mount_point/.desktop $HOME/Desktop/tmp/mem
+ln -sf $mount_point/.desktop $HOME/Desktop/mem
 
 # echo "remove with:"
 # echo "umount $mount_point"

@@ -3,10 +3,11 @@
 
 # Is installed # {{{
 ${RCSTUFF_CFG_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
-export RCSTUFF_CFG_INSTALLED=true
 [[ $1 == '--force' ]] && shift
+export RCSTUFF_CFG_INSTALLED=true
 # }}}
 # Exports # {{{
+export PATH=$SCRIPT_PATH/bin:$PATH
 # Term # {{{
 if ! ${TERM_ALREADY_SET:-false}; then
   [[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
@@ -31,6 +32,7 @@ export GIT_PS1_SHOWUPSTREAM="auto"
 export GIT_PS1_DESCRIBE_STYLE="branch"
 unset GIT_PS1_SHOWCOLORHINTS
 export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
+export GIT_USER_123="${PERS_USER_SHORT}:${PERS_EMAIL_123}"
 # }}}
 # Ack # {{{
 export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match=yellow"
@@ -41,36 +43,45 @@ export ACK_PAGER_COLOR="less"
 export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;214"
 # }}}
 # Bat # {{{
-export BAT_INSTALLED=false
-if which bat >/dev/null 2>&1; then
-  BAT_INSTALLED=true
-  export BAT_PRG="bat"
-elif which batcat >/dev/null 2>&1; then
-  BAT_INSTALLED=true
-  export BAT_PRG="batcat"
-fi
-if $BAT_INSTALLED; then
-  export BAT_THEM2="Solarized (dark)"
-  export BAT_THEME="TwoDark"
-  help() {
-    "$@" --help 2>&1 | $BAT_PRG -p -l help --theme "$BAT_THEM2"
-  }
-else
-  help() {
-    "$@" --help
-  }
+if [[ -z $BAT_INSTALLED ]]; then
+  export BAT_INSTALLED=false
+  if is-installed -w bat >/dev/null 2>&1; then
+    BAT_INSTALLED=true
+    export BAT_PRG="bat"
+  elif is-installed -w batcat >/dev/null 2>&1; then
+    BAT_INSTALLED=true
+    export BAT_PRG="batcat"
+  fi
+  if $BAT_INSTALLED; then
+    export BAT_THEM2="Solarized (dark)"
+    export BAT_THEME="TwoDark"
+    help() {
+      "$@" --help 2>&1 | $BAT_PRG -p -l help --theme "$BAT_THEM2"
+    }
+  else
+    help() {
+      "$@" --help
+    }
+  fi
 fi
 # }}}
 # FZF # {{{
-if $FZF_INSTALLED; then
+if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
   fdfindCmd="fdfind"
-  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
-  which $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
+  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
+  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
   if [[ ! -z $fdfindCmd ]]; then # {{{
-    export FZF_DEFAULT_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
+    ignored="-E 'build' -E 'node_modules' -E '.venv*'"
+    if [[ -v FZF_DEFAULT_IGNORE && -z $FZF_DEFAULT_IGNORE ]]; then
+      ignored=""
+    else
+      ignored+=" $FZF_DEFAULT_IGNORE"
+    fi
+    export FZF_DEFAULT_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs $ignored | sed 's|^\./||' | sort"
     export FZF_ALT_C_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type d --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
+    unset ignored
     # }}}
-  elif which ag >/dev/null 2>&1; then # {{{
+  elif is-installed -w ag >/dev/null 2>&1; then # {{{
     export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS --follow -g "" | sort' # }}}
   else # {{{
     if [[ -e $BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env ]]; then # {{{
@@ -91,12 +102,12 @@ if $FZF_INSTALLED; then
       echo "$FZF_ALT_C_COMMAND" >$BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env
     fi # }}}
   fi # }}}
-  fzf_exe="$ALIASES fzf-exe" # has to be in this form for vim fzf-plugin
+  fzf_exe="$ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
   if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
   else
     export FZF_DEFAULT_OPTS="$(cat <<-EOF
-				-m -x --algo=v2 -e +s --no-mouse --height 80% --border --tabstop=2 --exit-0
+				--multi --exact --no-sort --exit-0 --algo=v2 --no-mouse --height 80% --border --tabstop=2
 				--color=dark,fg:15,fg+:15,bg+:238,hl:214,hl+:208,marker:3,pointer:2
 				--layout=reverse-list
 				--preview '$fzf_exe -c prev --prev 10 -f {1}'
@@ -120,8 +131,8 @@ if $FZF_INSTALLED; then
   export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
   unset fzf_exe fdfindCmd
   export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
-else
-  [[ ! -z "$PS1" ]] && echor "FZF not found"
+elif ! $FZF_INSTALLED; then
+  [[ ! -z "$PS1" ]] && echoe -s "FZF not found"
 fi
 # }}}
 # Default values for functions and scripts # {{{
@@ -140,12 +151,10 @@ export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --
 export TMUX_INIT_SESSIONS+=" MAIN"
 export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
 export TMUX_PREFIX_2='C-q'
-export TMUX_SMART_BLACKLIST_SSH+="\\|gitlab\\.com\\|github\\.com"
-export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux_main]}\n"
-export TMUX_STATUS_RIGHT_EXTRA="001:tmux_info 002:cpu 003:net 005:ssh 008:reminder 010:weather 015:usb 025:time 035:progress_bar"
+export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux-main]}\n"
+export TMUX_STATUS_RIGHT_EXTRA+=" 001:tmux_info 002:cpu 003:net 005:ssh 008:reminder 010:weather 015:usb 025:time 035:progress_bar"
 export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
-export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
-[[ -n $TMUX ]] && TMUX_PREFIX_2="$(tmux show-options -gv prefix2)"
+[[ ! -z $TMUX_VERSION ]] || export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
 export DATE_FMT="%Y%m%d-%H%M%S"
 export TIME_FMT="%H:%M:%S"
@@ -157,10 +166,12 @@ export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
 export CD_LAST_DIRS_STORED+=":docs@--cd-spec"
 # }}}
 # Editor # {{{
-export EDITOR="vim -c 'set cursorline'"
-[[ $(which vim 2>/dev/null) == "$HOME/"* ]] && export EDITOR="vim --fast -cl"
-export VISUAL=$EDITOR
-export SVN_EDITOR=$EDITOR
+if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
+  export EDITOR="vim -c 'set cursorline'"
+  [[ $(which vim 2>/dev/null) == "$HOME/"* ]] && export EDITOR="vim --fast -cl"
+  export VISUAL=$EDITOR
+  export SVN_EDITOR=$EDITOR
+fi
 # }}}
 # }}}
 # Shell setup # {{{
@@ -171,19 +182,23 @@ export HISTFILE=$HOME/.bash_history
 export HISTFILE_ORIG=$HISTFILE
 unset HISTTIMEFORMAT
 [[ -z $BASH_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
-if [[ ! -n $TMUX && -e "$BASH_PHISTORY_FILE" ]] && ! pgrep tmux >/dev/null 2>&1; then
+if $BASHRC_FULL_START && [[ -e "$BASH_PHISTORY_FILE" ]]; then
   sed -i '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
   sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
 fi
 [[ -z $BASH_PHISTORY_SUM_CMD ]] && export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
+shopt -s autocd
 shopt -s cdspell
 shopt -s checkwinsize
+shopt -s cmdhist
 shopt -s dirspell
 shopt -s extglob
-# shopt -s globstar
+shopt -s globstar
 shopt -s histappend
+shopt -s histverify
 shopt -s progcomp
 shopt -s progcomp_alias
+set +f
 export GLOBIGNORE=.:..
 # }}}
 # InputRC: Bash shortcuts # {{{
@@ -204,43 +219,31 @@ if [[ ! -z $PS1 ]]; then
   fi
   for i in {emacs,vi-command,vi-insert}; do
     bind "set keymap $i"
-    bind -r '\C-k'    # u for utils
+    bind -r '\C-k'    # k for utils
     bind -x '"\C-kj":    READLINE_LINE="# $(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
     pre=
     case $i in
     emacs)
-      bind '"JJ":      vi-editing-mode'
-      bind '"\C-kV":   "JJJJ"' # workaround for vi-movement-mode
-      bind '"\e[1;5C": forward-word'
-      bind '"\e[1;5D": backward-word'
       ;;
     vi-command) # vi-movement-mode
-      bind '"\C-kE":  emacs-editing-mode'
-      bind '"\C-e":   end-of-line'
       pre='i'
       ;;
     vi-insert) # vi-editing-mode
-      bind '"\C-kE": emacs-editing-mode'
-      bind '"\C-k":  vi-movement-mode'
-      bind '"\C-i":  menu-complete'
-      bind '"\C-n":  menu-complete-backward'
-      bind '"\e[5~": history-search-forward'
-      bind '"\e[6~": history-search-backward'
-      bind -x '"\C-kk": "history -r && echorm -m bash 0 history reloaded"'
-      bind    '"\C-kl": "\C-g logout\C-m"'
-      bind    '"\C-k\C-b": "\C-g byebye\C-m"'
+      bind -x '"\C-kk": "history -r && echoe -c -m bash history reloaded"'
+      bind    '"\C-kil": "\C-g logout\C-m"'
+      bind    '"\C-kib": "\C-g byebye\C-m"'
       if $FZF_INSTALLED; then
         bind -x '"\C-f": "fzfwr iRC"'
         bind -x '"\C-p": "fzf-file-widget"'
+        bind -x '"\C-x": "__env_fzf_autocomplete_inline__"'
       fi
       ;;
     esac
     bind    '"\C-k\C-d":  "'${pre}'\C-g exit 1\C-m"'
     bind    '"\C-k\C-e":  "'${pre}'\C-g exec bash\C-m"'
-    bind -x '"\C-k\C-f":  "source ~/.bashrc --force && echorm -m bash 0 resourced"'
+    bind -x '"\C-k\C-f":  "source ~/.bashrc --force && echoe -c -m bash resourced"'
     bind    '"\C-k\C-h":  "'${pre}'\C-g pt ht && clear\C-m"'
-    bind -x '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
-    bind -x '"\C-k\C-s":  "src"'
+    bind    '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
     bind    '"\C-l":      "'${pre}'\C-g clr\C-m"'
     bind -x '"\C-k\C-l":  "clr --hist"'
   done
@@ -260,15 +263,15 @@ if [[ -e $GIT_PATH ]]; then
   done
 fi
 if ! declare -F __git_ps1 &>/dev/null; then
-  $BASHRC_DBG && echo "Using internal __git_ps1" >/dev/stderr
+  $BASHRC_DBG && echoe -s "Using internal __git_ps1"
   source $BASH_PATH/completion.d/git/git-prompt.sh
-else
-  (
-    type __git_ps1 | tail -n+2
-    type __git_eread | tail -n+2
-    type __git_is_repo_ignored | tail -n+2
-    type __git_ps1_show_upstream | tail -n+2
-  ) >$BASHRC_RUNTIME_PATH/tmux-git-ps1.sh 2>/dev/null
+elif [[ ! -z $TMUX_STATUS_RIGHT_GIT_INTERNAL_PS1 ]]; then
+  if [[ ! -e $TMUX_STATUS_RIGHT_GIT_INTERNAL_PS1 ]]; then
+    for _fi in $(declare -F | command grep "__git_ps1") __git_eread __git_sequencer_status; do
+      type $_fi 2>/dev/null | sed 1d >>$TMUX_STATUS_RIGHT_GIT_INTERNAL_PS1
+    done
+    unset _fi
+  fi
 fi
 # }}}
 # Less # {{{
@@ -277,14 +280,14 @@ if [[ -z $LESSOPEN ]]; then
   if [[ -x "$LESSPIPE_PATH" ]]; then
     eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
   fi
-  if which dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
+  if is-installed -w dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
     export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
   fi
 fi
 export PAGER=less
 export LESSCHARSET='utf-8'
 # Use this if lesspipe.sh exists
-export LESS="-dFiJRSwX -x4 -z-4 -+F -~"
+export LESS="-diJRSwX -x4 -z-4 -+F -~"
 # Less man page colors (makes Man pages more readable) # {{{
 export LESS_TERMCAP_mb="$CGreen"
 export LESS_TERMCAP_md="$CCyan"
@@ -301,39 +304,41 @@ if ${SET_TITLE_USE_SIMPLE_MODE:-true}; then
 else
   export PROMPT_COMMAND="set-title --set-terminal --tmux-session;"
 fi
-export PROMPT_COMMAND+=" bash_phistory; history -a"
+export PROMPT_COMMAND+=" bash_phistory; history -a;"
 export PROMPT_DIRTRIM=3
 
 ${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set-title; $PROMPT_COMMAND"
-${PS1_CHECK_ENV:-true} && export PROMPT_COMMAND="$PROMPT_COMMAND; PS1_envUpdater"
-PROMPT_COMMAND+="; set +f"
+${PS1_CHECK_ENV:-false} && export PROMPT_COMMAND+=" PS1_envUpdater;"
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 
-export PS1_SHORTEN_PATH=true
+if [[ ! -z $EPOCHREALTIME ]]; then
+  export PS0='\[${PWD:$((PS0_time=${EPOCHREALTIME/[,.]}, 0)):0}\]'
+fi
+if $IS_VSCODE; then # {{{
+  export PS1_CFG_ADD_GIT=true
+  export PS1_CFG_ADD_SEPARATOR=false
+  export PS1_CFG_ADD_SPLIT=false
+  export PS1_SSH_CHANGE=false
+fi # }}}
 if [[ -z $PS1_STATUS ]] || ( ! $IS_DOCKER && ! ${PS1_STATUS_KEEP_IT:-false} ); then
   export PS1_STATUS="short_git:default"
-  if $IS_VSCODE; then
-    export PS1_CFG_ADD_GIT=true
-    export PS1_CFG_ADD_SEPARATOR=false
-    export PS1_SSH_CHANGE=false
-  fi
   if $IS_DOCKER; then
     ! $IS_VSCODE && export PS1_STATUS="short_git_ssh:default"
     [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3}
-  elif [[ $PERS_USERS != *\ $USER\ * && $USER != 'root' ]]; then
+  elif [[ " $PERS_USERS " != *\ $USER\ * && $USER != 'root' ]]; then
     export PS1_STATUS="usuper_full:short_git"
   fi
-fi
-if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
-  ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"
+  if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
+    ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"
+  fi
 fi
 [[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
 # }}}
 # CapsLock <-> Ctrl # {{{
-if ! $IS_MAC && [[ -n $DISPLAY ]]; then
-  which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
-  if which xcape >/dev/null 2>&1; then
+if false && ! $IS_MAC && [[ -n $DISPLAY ]]; then
+  is-installed -w setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
+  if is-installed -w xcape >/dev/null 2>&1; then
     killall xcape >/dev/null 2>&1
     xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
   fi

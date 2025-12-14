@@ -1,0 +1,9 @@
+[general]
+import = [
+  "common.toml",
+  "common-bindings.toml",
+  "mac-specific.toml",
+  "mac-bindings.toml",
+  "local-conf.toml",
+]
+

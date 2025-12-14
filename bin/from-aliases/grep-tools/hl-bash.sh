@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_hl() { # @@ # {{{
+hl() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "+l --lines ++ +-"
     echo "+cCOLOR@PHRASE"
@@ -102,8 +102,8 @@ _hl() { # @@ # {{{
     [[ ! -z $cmd ]] && cmd+=" | "
     cmd+=" hl --lines \"${lines_colors[*]}\""
   fi
-  echorm -m hl -f? && echorv cmd
+  # echoe -w "cmd=[$cmd]"
   eval $cmd
 } # }}}
-_hl "$@"
+hl "$@"
 

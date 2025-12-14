@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module echor
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  -f | --from) echo "@@-d";;
+  -t)
+    tmux list-panes -a -F '#S:#I.#P'
+    tmux list-panes -s -F ':#I.#P'
+    tmux list-panes -F '.#P';;
+  *)
+    echo "-f --from -v -b --both -s --single -r --reverse -d --full -t -F --fzf --no-fzf -"
+    from=$FROM
+    set -- "${@: 3}"
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      -f | --from) from="$2";;
+      esac; shift
+    done
+    [[ ! -z $from && -e $from ]] || from="."
+    echo "@@-f:$from";;
+  esac
+  exit 0
+fi # }}}
+
+verbose=false
+both=false
+reverse=false
+from=
+fullPath=false
+fzfAll=
+dParams="-not -type d"
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -f | --from) from="$2"; shift;;
+  -F | --fzf) fzfAll=true;;
+  --no-fzf) fzfAll=false;;
+  --full) fullPath=true;;
+  -v) verbose=true;;
+  -b | --both) both=true;;
+  -s | --single) both=false;;
+  -r | --reverse) reverse=true;;
+  -d | --dirs) dParams=;;
+  -t) shift; from=$(tmux display-message -t $1 -p -F '#{pane_current_path}');;
+  -)
+    if [[ -t 1 ]]; then
+      echo "${from:-$PWD}" | tee >(xclip --put)
+    else
+      echo "${from:-$PWD}"
+    fi
+    exit 0;;
+  *) break;;
+  esac; shift
+done # }}}
+[[ -z $from ]] && from=$FROM
+[[ $from = *:*.* ]] && from=$(tmux display-message -t $from -p -F '#{pane_current_path}')
+what="$@"
+if [[ -z $fzfAll ]]; then # {{{
+  fzfAll=true
+  [[ ! -t 1 ]] && fzfAll=false
+fi # }}}
+if $fzfAll; then # {{{
+  [[ ! -z $from ]] || from="."
+  $fullPath && from="$(realpath "$from")" && cwd="$(realpath "$cwd")"
+  cd $from
+  fdfind --type f \
+  | { [[ -z $what ]] && cat - || grep -E "$what"; } \
+  | fzf -m --sort \
+  | sed "s:^:$from/:"
+  exit 0
+fi # }}}
+
+[[ ! -z $from ]] || die -s=!$verbose "no 'from'"
+[[ -e $from ]] || die -s=!$verbose "from [$from] not exists"
+[[ ! -z $what ]] || die -s=!$verbose "no entries"
+
+[[ -z $FROM ]] && echor -c $verbose "export FROM=\"$from\""
+
+cwd="."
+$fullPath && from="$(realpath "$from")" && cwd="$(realpath "$cwd")"
+
+(
+  cd $from
+  for f in $what; do # {{{
+    case $f in # {{{
+    *\?\?) # {{{
+      f="${f#./}"; f="${f%\?\?}"
+      v=$(find $dParams -name "${f##*/}*");; # }}}
+    *\?) # {{{
+      f="${f#./}"; f="${f%\?}"
+      v=$(find $dParams -name "${f##*/}*" | fzf -1);; # }}}
+    ./*) # {{{
+      v=$(find $dParams -path "$f");; # }}}
+    *) # {{{
+      f="${f#./}"
+      v=$(find $dParams -path "*/$f");; # }}}
+    esac # }}}
+    [[ ! -z $v ]] || eval $(die -s=!$verbose -c "not found: $f")
+    v="$(echo "$v" | cut -c3- | sed 's|^|'"${from%/}/"'|')"
+    if ! $both; then # {{{
+      echo "$v" # }}}
+    elif [[ ! -z $v ]]; then # {{{
+      f="$cwd/${f#./}"
+      if ! $reverse; then
+        echo "$(echo "$v" | sed -n 1p) $f"
+      else
+        echo "$f $(echo "$v" | sed -n 1p)"
+      fi
+    fi # }}}
+  done # }}}
+)
+

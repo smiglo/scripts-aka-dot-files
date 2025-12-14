@@ -97,6 +97,7 @@ dbg() { # {{{
 err() { # {{{
   echorm -F + "ERR: $@"
 } # }}}
+import-module echor
 echorm --name keep-pass
 LC_ALL=C
 dictFile="${KEEP_PASS_DICT:-$(dirname "$(readlink -f "$0")")/keep-pass.dict}"
@@ -555,7 +556,9 @@ genPass() { # {{{
       passV="KEEP_PASS_KEY_${passV^^}"
       pass="${!passV}"
       dbg 2 "Pass: $pass from var $passV"
-      ${save_pass:-true} && [[ -z $pass ]] && save_pass=true
+      if [[ -z $save_pass ]]; then
+        [[ -z $pass ]] && save_pass=true || save_pass='skip'
+      fi
     fi # }}}
     while [[ -z $pass ]]; do # {{{
       read -r -s -p "Enter pass: " pass >/dev/stderr && echor
@@ -586,7 +589,9 @@ genPass() { # {{{
       else
         env="$pass"
       fi
-      if ${save_pass:-false} \
+      if [[ $save_pass == 'skip' ]]; then
+        :
+      elif ${save_pass:-false} \
         && [[ ! -z "$KEEP_PASS_KEYS" ]] && [[ -e "$KEEP_PASS_KEYS" || ( "$KEEP_PASS_KEYS" == /* && "$KEEP_PASS_KEYS" != //* ) ]]; then # {{{
         echo "export $passV=\"$env\"" >>"$KEEP_PASS_KEYS"
       else
@@ -600,7 +605,7 @@ genPass() { # {{{
     dbg 1 "$(basename "$0") ${params:-\b} --seq $seq"
   else
     ! $save && echo "$seq"
-  fi
+  fi # }}}
   check="$(getPass $params --seq $seq)"
   dbg 1 "check: [$check]"
   check="$(echo "$check" | tail -n1)"

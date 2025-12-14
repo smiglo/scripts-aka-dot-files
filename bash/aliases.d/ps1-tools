@@ -2,12 +2,12 @@
 # vim: fdl=0
 
 PS1_envUpdater() { # {{{
-  local list="$(command cd $BASHRC_RUNTIME_PATH; set +f; find . -maxdepth 1 -type f -name 'aliases-*.dump' -not -name '*-local.dump')" i= t= ts=
+  local list="$(command cd $BASHRC_RUNTIME_PATH; find . -maxdepth 1 -type f -name 'aliases-*.dump' -not -name '*-local.dump')" i= t= ts=
   for i in $list; do
     local t=${i#./aliases-} && t=${t%.dump} && t=${t//-/_}
     local -n tsRef=ALIASES_TS_${t^^}
     local ts="$(command stat -c %Y "$BASHRC_RUNTIME_PATH/$i")"
-    ${PS1_DEBUG:-false} && echor "name: ALIASES_TS_${t^^}: ts:$ts ts-ref:$tsRef"
+    ${PS1_DEBUG:-false} && echoe -f "name: ALIASES_TS_${t^^}: ts:$ts ts-ref:$tsRef"
     if [[ $ts -gt ${tsRef:-0} ]]; then
       source "$BASHRC_RUNTIME_PATH/$i"
       tsRef=$ts
@@ -15,48 +15,52 @@ PS1_envUpdater() { # {{{
   done
 } # }}}
 __ps1_load_defaults() { # {{{
-  export PS1_CFG_LINES=${PS1_CFG_LINES:-12}
-  export PS1_CFG_LINES_FOR_SPLIT=${PS1_CFG_LINES_FOR_SPLIT:-8}
-  export PS1_CFG_WIDTH=${PS1_CFG_WIDTH:-45}
-  export PS1_COLUMNS_MARGIN=${PS1_COLUMNS_MARGIN:-40}
-  export PS1_COLOR_OFF="${PS1_COLOR_OFF:-$(echo "\[$COff\]")}"
-  export PS1_COLOR_ERR_0="${PS1_COLOR_ERR_0:-$(echo "\[$CIYellow\]")}"
-  export PS1_COLOR_ERR_ERR="${PS1_COLOR_ERR_ERR:-$(echo "\[$CIRed\]")}"
-  export PS1_COLOR_ERR_HL="${PS1_COLOR_ERR_HL:-$(echo "\[$CIBlue\]")}"
-  export PS1_COLOR_ERR_H_NO="${PS1_COLOR_ERR_H_NO:-$(echo "\[$CIPurple\]")}"
-  export PS1_COLOR_USER="${PS1_COLOR_USER:-$(echo "\[$CGray\]")}"
-  export PS1_COLOR_HOST="${PS1_COLOR_HOST:-$(echo "\[$CGold\]")}"
-  export PS1_COLOR_PWD="${PS1_COLOR_PWD:-$(echo "\[$CBlue\]")}"
-  export PS1_COLOR_GIT="${PS1_COLOR_GIT:-$(echo "\[$CGray\]")}"
-  export PS1_COLOR_JOBS="${PS1_COLOR_JOBS:-$(echo "\[$CIRed\]")}"
-  export PS1_COLOR_JOBS_R="${PS1_COLOR_JOBS_R:-$(echo "\[$CIGreen\]")}"
-  export PS1_COLOR_JOBS_S="${PS1_COLOR_JOBS_S:-$(echo "\[$CGold\]")}"
-  export PS1_COLOR_NL="${PS1_COLOR_NL:-$(echo "\[$CGray\]")}"
+  unset PS1_CONVERTER_ADD_SEPARATOR PS1_CONVERTER_ENV_VENV PS1_CONVERTER_NEW_LINE
+  PS1_CFG_LINES=${PS1_CFG_LINES:-12}
+  PS1_CFG_LINES_FOR_SPLIT=${PS1_CFG_LINES_FOR_SPLIT:-8}
+  PS1_CFG_WIDTH=${PS1_CFG_WIDTH:-45}
+  PS1_CFG_SEPARATOR=${PS1_CFG_SEPARATOR:-${UNICODE_EXTRA_CHARS[sep-x]}}
+  PS1_CFG_HIST=${PS1_CFG_HIST:-${UNICODE_EXTRA_CHARS[pause]}}
+  PS1_COLUMNS_MARGIN=${PS1_COLUMNS_MARGIN:-40}
+  PS1_COLOR_OFF="${PS1_COLOR_OFF:-$(echo "\[$COff\]")}"
+  PS1_COLOR_ERR_0="${PS1_COLOR_ERR_0:-$(echo "\[$CIYellow\]")}"
+  PS1_COLOR_ERR_ERR="${PS1_COLOR_ERR_ERR:-$(echo "\[$CIRed\]")}"
+  PS1_COLOR_HIST_LOCAL="${PS1_COLOR_HIST_LOCAL:-$(echo "\[$CIBlue\]")}"
+  PS1_COLOR_HIST_NO="${PS1_COLOR_HIST_NO:-$(echo "\[$CIPurple\]")}"
+  PS1_COLOR_TIME="${PS1_COLOR_TIME:-$(echo "\[$CGray\]")}"
+  PS1_COLOR_USER="${PS1_COLOR_USER:-$(echo "\[$CGray\]")}"
+  PS1_COLOR_HOST="${PS1_COLOR_HOST:-$(echo "\[$CGold\]")}"
+  PS1_COLOR_PWD="${PS1_COLOR_PWD:-$(echo "\[$CBlue\]")}"
+  PS1_COLOR_GIT="${PS1_COLOR_GIT:-$(echo "\[$CGray\]")}"
+  PS1_COLOR_JOBS="${PS1_COLOR_JOBS:-$(echo "\[$CIRed\]")}"
+  PS1_COLOR_JOBS_R="${PS1_COLOR_JOBS_R:-$(echo "\[$CIGreen\]")}"
+  PS1_COLOR_JOBS_S="${PS1_COLOR_JOBS_S:-$(echo "\[$CGold\]")}"
+  PS1_COLOR_NL="${PS1_COLOR_NL:-$(echo "\[$CGray\]")}"
   if [[ -z $PS1_COLOR_CURSOR ]] && ${PS1_CURSORS_CUSTOM:-true}; then
     if [[ $PS1_CURSOR_COLOR != 'false' ]]; then
-      export PS1_COLOR_CURSOR_C="${PS1_COLOR_CURSOR_C:-$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")}" # Set color to blue (#005e5d)
-      export PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR+:-$(echo "$PS1_COLOR_CURSOR_C")}
+      PS1_COLOR_CURSOR_C="${PS1_COLOR_CURSOR_C:-$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")}" # Set color to blue (#005e5d)
+      PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR:-$(echo "$PS1_COLOR_CURSOR_C")}
     fi
     if [[ $PS1_CURSORS_TYPE != 'false' ]]; then
-      export PS1_COLOR_CURSOR_T="${PS1_COLOR_CURSOR_T:-$(echo "\[\e[${PS1_CURSORS_TYPE:-2} q\]")}" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
-      export PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR:-$(echo "$PS1_COLOR_CURSOR_T")}
+      PS1_COLOR_CURSOR_T="${PS1_COLOR_CURSOR_T:-$(echo "\[\e[${PS1_CURSORS_TYPE:-2} q\]")}" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
+      PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR:-$(echo "$PS1_COLOR_CURSOR_T")}
     fi
   else
-    export PS1_COLOR_CURSOR=
+    PS1_COLOR_CURSOR=
   fi
 } # }}}
 PS1_getColor() { # {{{
   case $1 in
-  err-*)    if [[ ${1/err-} == '0' ]]; then
-              if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE != *'/.history' ) ]]; then
-                echo -en "$PS1_COLOR_ERR_0"
-              elif [[ ! -z $HISTFILE && $HISTFILE != $HISTFILE_ORIG && $HISTFILE == *'/.history' ]]; then
-                echo -en "$PS1_COLOR_ERR_HL"
-              else
-                echo -en "$PS1_COLOR_ERR_H_NO"
-              fi
+  err-*)    case ${1#err-} in
+            0 | 141) echo -en "$PS1_COLOR_ERR_0";; # hide sigpipe, e.g. git log
+            *)       echo -en "$PS1_COLOR_ERR_ERR";;
+            esac;;
+  hist)     if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE =~ .*/\.history(\.ign)?$ ) ]]; then
+              :
+            elif [[ ! -z $HISTFILE && $HISTFILE != $HISTFILE_ORIG && $HISTFILE =~ .*/\.history(\.ign)?$ ]] || ${TMUX_POPUP:-false}; then
+              echo -en "$PS1_COLOR_HIST_LOCAL"
             else
-              echo -en "$PS1_COLOR_ERR_ERR"
+              echo -en "$PS1_COLOR_HIST_NO"
             fi;;
   user)     echo -en "$PS1_COLOR_USER";;
   host)     echo -en "$PS1_COLOR_HOST";;
@@ -68,34 +72,43 @@ PS1_getColor() { # {{{
   j-s)      echo -en "$PS1_COLOR_JOBS_S";;
   new-line) echo -en "$PS1_COLOR_NL";;
   cursor)   echo -en "$PS1_COLOR_CURSOR";;
+  time)     echo -en "$PS1_COLOR_TIME";;
   *)        printf "%s" $(get-color $1);;
   esac
 } # }}}
+PS1_getPwdMode() { # {{{
+  local pwdMode="pwd-short"
+  case $1 in
+  *_full)   pwdMode="pwd";;
+  default*) pwdMode="pwd-tmux";;
+  esac
+  echo "$pwdMode"
+} # }}}
 PS1_covertMode() { # {{{
   local mode=
-  ${PS1_SHORTEN_PATH:-false} && mode='SHORTEN'
   case $1 in
-  usuper_full)   mode+=' user';&
-  super_full)    mode+=' env-switches host pwd jobs git';;
-  default_ussh)  mode+=' user';&
-  default_ssh)   mode+=' host';&
-  default)       mode+=' env-switches pwd_tmux jobs git';;
-  short)         mode+=' pwd_short jobs ';;
-  short_git_ssh) mode+=' host';&
-  short_git)     mode+=' env-switches pwd_short jobs git';;
-  very_short)    mode+=' ';;
-  *)             mode+=" $(eval printf "\$PS1_MODE_${1^^}")";;
+  usuper_full)   mode=' env-switches user host pwd jobs git';;
+  super_full)    mode=' env-switches      host pwd jobs git';;
+  default_ussh)  mode=' env-switches user host pwd jobs git';;
+  default_ssh)   mode=' env-switches      host pwd jobs git';;
+  default)       mode=' env-switches           pwd jobs git';;
+  short)         mode='                        pwd jobs';;
+  short_git_ssh) mode=' env-switches      host pwd jobs git';;
+  short_git)     mode=' env-switches           pwd jobs git';;
+  very_short)    mode='';;
   esac
-  [[ "$PS1_ENV_MODE" != 'false' ]] && mode+=" ${PS1_ENV_MODE:-env-no-rec}"
+  [[ "$PS1_ENV_MODE" != 'false' ]] && mode+=" env"
   mode+=' split-line'
+  mode+=' hist'
   mode+=' prompt'
   [[ $TERM_ORIG != 'linux' ]] && mode+=' cursor'
+  [[ ! -z $EPOCHREALTIME ]] && mode+=" time"
   echo "$mode"
 } # }}}
 PS1_adjustPath() { # {{{
   local p="$1"
-  [[ $p == $HOME* ]] && p=${p/#$HOME/~}
-  ! ${shorten_path:-false} && printf "$p" && return 0
+  [[ $p == $HOME* ]] && p=${p/#$HOME/\~}
+  ! ${PS1_CFG_SHORTEN_PATH:-true} && printf "$p" && return 0
   local tmp=${p%/*}
   local last=${p/$tmp\/}
   local res=
@@ -124,8 +137,8 @@ PS1_colorFormat() { # {{{
 } # }}}
 PS1_setter() { # {{{
   BASH_LAST_ERR=$?
-  declare BASH_LAST_CMD=$_
   set +xv
+  local cTime=${EPOCHREALTIME/[,.]}
   if [[ -e "$PWD" ]] && ${PS1_CONVERTER_CHECK_INODE:-true}; then # {{{
     local ino="$(command ls -id "$PWD" 2>/dev/null)"
     if [[ "$PWD" == "$PS1_LAST_PWD" ]]; then
@@ -133,43 +146,89 @@ PS1_setter() { # {{{
         local oPWD=$OLDPWD
         command cd "$PWD"
         OLDPWD="$oPWD"
-        export PS1_LAST_PWD_INO="$(command ls -id "$PWD" 2>/dev/null)"
-        echormf -f?- || echor "Directory has changed"
+        PS1_LAST_PWD_INO="$(command ls -id "$PWD" 2>/dev/null)"
+        echoe -f "Directory has changed"
       fi
     else
-      export PS1_LAST_PWD="$PWD"
-      export PS1_LAST_PWD_INO="$ino"
+      PS1_LAST_PWD="$PWD"
+      PS1_LAST_PWD_INO="$ino"
     fi
   else
     unset PS1_LAST_PWD PS1_LAST_PWD_INO
   fi # }}}
-  if ${PS1_RESET_ERROR:-false}; then # {{{
-    if [[ "$BASH_LAST_CMD" == "$BASH_LAST_LAST_CMD" ]]; then
-      if [[ "$BASH_LAST_ERR" == "$BASH_LAST_LAST_ERR" ]]; then
-        BASH_LAST_ERR=0 BASH_LAST_ERR_CLEARED=true
-      elif ${BASH_LAST_ERR_CLEARED:-false}; then
-        BASH_LAST_ERR=0
-      fi
-    else
-      BASH_LAST_ERR_CLEARED=false
-      BASH_LAST_LAST_CMD="$BASH_LAST_CMD"
-    fi
-    BASH_LAST_LAST_ERR="$BASH_LAST_ERR"
-  fi # }}}
   PS1=""
-  ${PS1_CONVERTER_ADD_SEPARATOR:-false} && [[ $LINES -ge $PS1_CFG_LINES ]] && PS1="\n"
+  local spaceForTime=false
+  if [[ $LINES -ge $PS1_CFG_LINES ]]; then # {{{
+    ${PS1_CONVERTER_ADD_SEPARATOR:-false} && [[ $PS0_time != 0 ]] && PS1="\n"
+    spaceForTime=true
+  fi # }}}
+  if [[ $PS0_time == 0 ]]; then # {{{
+    PS1_LAST_EMPTY_STRIKE=$((PS1_LAST_EMPTY_STRIKE + 1))
+    if [[ ! -z $PS1_LAST_EMPTY && $PS1_CFG_CLR_TIMEOUT != 0 ]]; then
+      [[ $((cTime - PS1_LAST_EMPTY)) -lt ${PS1_CFG_CLR_TIMEOUT:-750000} ]] && clr
+    fi
+    [[ $BASH_LAST_ERR == 0 || $PS1_LAST_EMPTY_STRIKE -ge 1 ]] && PS1_LAST_EMPTY=${EPOCHREALTIME/[,.]}
+    BASH_LAST_ERR=0
+    PS0_time=
+  else
+    PS1_LAST_EMPTY_STRIKE=0
+  fi # }}}
   [[ -z $PS1_COLOR_OFF ]] && __ps1_load_defaults
   [[ -z $PS1_CONVERTER_ADD_SEPARATOR ]] && PS1_CONVERTER_ADD_SEPARATOR=${PS1_CFG_ADD_SEPARATOR:-true}
-  # ps $PPID | command grep mc >/dev/null 2>&1 && PS1="mc|"
-  local shorten_path=false v= ps1_dummy= tt=
   local cOff="$(PS1_getColor 'off')"
-  # ${PS1_PROFILER:-false} && time-measure -v ps1
-  for v in $(PS1_covertMode "${PS1_STATUS/:*}"); do
-    # ${PS1_PROFILER:-false} && time-measure -v ps1 --reset
-    tt=${EPOCHREALTIME/[,.]}
+  local v= ps1_dummy=
+  local pwdMode="$(PS1_getPwdMode "${PS1_STATUS/:*}")"
+  ! $spaceForTime && [[ $pwdMode == 'pwd-short' && $COLUMNS -gt 90 ]] && spaceForTime=true
+  local modes="time env env-switches user host pwd git jobs split-line hist prompt cursor"
+  local modesCurrent="$(PS1_covertMode "${PS1_STATUS/:*}")"
+  for v in $modes; do
+    [[ " $modesCurrent " == *" $v "* ]] || { continue; }
+    ${PS1_PROFILER:-false} && local tt=${EPOCHREALTIME/[,.]}
     while true; do case $v in
-    SHORTEN) # {{{
-      shorten_path=true;; # }}}
+    time) # {{{
+      local timeV=
+      if ${PS1_CFG_ADD_TIME_START:-false} && [[ ! -z $PS0_time ]]; then # {{{
+        timeV+="$(command date +"$TIME_FMT" -d @${PS0_time%??????})"
+      fi # }}}
+      if ${PS1_CFG_ADD_TIME_DELTA:-false} && [[ ! -z $PS0_time ]]; then # {{{
+        local diff=$(($cTime - $PS0_time))
+        diff=${diff%???}
+        local ms=$((diff % 1000))
+        local s=$(( (diff - ms)/1000))
+        [[ ! -z $timeV ]] && timeV+="$PS1_CFG_SEPARATOR"
+        timeV+="$s.$(printf "%03d" "$ms")"
+      fi # }}}
+      if ${PS1_CFG_ADD_TIME_CURRENT:-false} || ( $spaceForTime && [[ -z $PS1_CFG_ADD_TIME_CURRENT ]] ); then # {{{
+        [[ ! -z $timeV ]] && timeV+="$PS1_CFG_SEPARATOR"
+        timeV+="\t"
+      fi # }}}
+      [[ ! -z $timeV ]] && PS1_colorFormat PS1 'time' "$timeV ";; # }}}
+    env) # {{{
+      local envRecursive=false
+      [[ $PS1_ENV_MODE == "env" ]] && envRecursive=true
+      local vv=${PS1_ENV_MODE:-env-no-rec}
+      if [[ -e "$PWD" && "$PS1_ENV_PWD" != "$PWD" ]]; then
+        cd_go_up() { # {{{
+          local p="$1"
+          [[ -z $p || ! -d $p ]] && return 0
+          [[ $p != "$PS1_ENV_PWD" && $p == $HOME/* ]] && $envRecursive && cd_go_up "${p%/*}"
+          [[ -e "$p/.env-setup.sh" ]] && source "$p/.env-setup.sh"
+          [[ -e "$p/.env" ]] && source "$p/.env"
+        } # }}}
+        cd_go_up "$PWD"
+        unset cd_go_up
+        if [[ ${PS1_HIST_CHANGE_TO_LOCAL:-true} && ! ${TMUX_POPUP:-false} && $HISTFILE == $HISTFILE_ORIG && ( -e $PWD/.history || -e $PWD/.history.ign ) ]]; then # {{{
+          [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"
+          export HISTFILE="$PWD/.history"
+          [[ -e $PWD/.history.ign && ! -e $PWD/.history ]] && export HISTFILE="$PWD/.history.ign"
+        fi # }}}
+        export PS1_ENV_PWD="$PWD"
+      fi;; # }}}
+    env-switches) # {{{
+      if [[ ! -z $VIRTUAL_ENV ]]; then
+        [[ -z $PS1_CONVERTER_ENV_VENV ]] && PS1_CONVERTER_ENV_VENV="${UNICODE_EXTRA_CHARS[snake]}"
+        PS1+="$PS1_CONVERTER_ENV_VENV "; ps1_dummy+=".."
+      fi;; # }}}
     user) # {{{
       PS1_colorFormat PS1 'user' "$USER" "@";; # }}}
     host) # {{{
@@ -181,8 +240,8 @@ PS1_setter() { # {{{
       for p in $TMUX_REMOTE_PREFIXES; do
         name="${name/$p}"
       done
-      export PS1_CACHE_HOST_D="${name^^}|"; export PS1_CACHE_HOST_V=
-      PS1_colorFormat PS1_CACHE_HOST_V - 'host' "$name" "|"
+      PS1_CACHE_HOST_D="${name^^}|"; PS1_CACHE_HOST_V=
+      PS1_colorFormat PS1_CACHE_HOST_V 'host' "$name" "|"
       PS1+="$PS1_CACHE_HOST_V";; # }}}
     pwd) # {{{
       if [[ ! -e $PWD ]]; then # {{{
@@ -191,35 +250,7 @@ PS1_setter() { # {{{
         else
           PS1+="${PWD##*/}"; ps1_dummy+="${PWD##*/}"
         fi
-        PS1+="|"; ps1_dummy+="|"
-        PS1_colorFormat PS1 err "ne"
-        break
-      fi # }}}
-      if [[ $PWD == $PS1_CACHE_PWD && ! -z $PS1_CACHE_PWD_V ]]; then # {{{
-        PS1+="$PS1_CACHE_PWD_V"; ps1_dummy+="$PS1_CACHE_PWD_D"
-        break
-      fi # }}}
-      export PS1_CACHE_PWD="$PWD"
-      local p=
-      case $PWD in
-      $HOME) p='~';;
-      /)     p='/';;
-      *)
-        p=$(echo "${PWD/$HOME/\~}");
-        local pp=${p%/*} pr=${p##*/}
-        p="$(echo "$pp" | sed -E 's|/([^/]{3})[^/]*|/\1|g')/$pr";;
-      esac
-      export PS1_CACHE_PWD_D="$p"; export PS1_CACHE_PWD_V=
-      PS1_colorFormat PS1_CACHE_PWD_V 'pwd' "$p"
-      PS1+="$PS1_CACHE_PWD_V";; # }}}
-    pwd_tmux) # {{{
-      if [[ ! -e $PWD ]]; then # {{{
-        if [[ $PWD == $PS1_CACHE_PWD ]]; then
-          PS1+="$PS1_CACHE_PWD_V"; ps1_dummy+="$PS1_CACHE_PWD_D"
-        else
-          PS1+="${PWD##*/}"; ps1_dummy+="${PWD##*/}"
-        fi
-        PS1+="|"; ps1_dummy+="|"
+        PS1+="${UNICODE_EXTRA_CHARS[exclamation]}"; ps1_dummy+="."
         PS1_colorFormat PS1 err "ne"
         break
       fi # }}}
@@ -227,75 +258,53 @@ PS1_setter() { # {{{
         PS1+="$PS1_CACHE_PWD_V"; ps1_dummy+="$PS1_CACHE_PWD_D"
         break
       fi # }}}
-      export PS1_CACHE_PWD="$PWD"
-      local p=
-      if [[ -n $TMUX ]]; then # {{{
+      case $pwdMode in
+      pwd) # {{{
+        PS1_CACHE_PWD="$PWD"
+        local p=
         case $PWD in
         $HOME) p='~';;
         /)     p='/';;
-        *)     local tmp="$PWD"
-               local ps1_ignored=$PS1_IGNORED
-               if [[ -z $ps1_ignored ]]; then
-                 ps1_ignored="$(tmux show-options -v @tmux_path 2>/dev/null)"
-                 [[ $ps1_ignored == $HOME || $ps1_ignored == '/' ]] && ps1_ignored=
-               fi
-               if [[ ! -z $ps1_ignored && $tmp == $ps1_ignored* ]]; then
-                 tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
-                 [[ $ps1_ignored == $HOME* ]] && tmp="~/$tmp"
-               fi
-               p="$(PS1_adjustPath "$tmp")";;
-        esac
-      else
-        p=$(PS1_adjustPath "$PWD")
-      fi # }}}
-      export PS1_CACHE_PWD_D="$p"; export PS1_CACHE_PWD_V=
-      PS1_colorFormat PS1_CACHE_PWD_V 'pwd' "$p"
-      PS1+="$PS1_CACHE_PWD_V";; # }}}
-    pwd_short) # {{{
-      if [[ ! -e $PWD ]]; then # {{{
-        if [[ $PWD == $PS1_CACHE_PWD ]]; then
-          PS1+="$PS1_CACHE_PWD_V"; ps1_dummy+="$PS1_CACHE_PWD_D"
+        *)
+          p=$(echo "${PWD/$HOME/\~}");
+          local pp=${p%/*} pr=${p##*/}
+          p="$(echo "$pp" | sed -E 's|/([^/]{3})[^/]*|/\1|g')/$pr";;
+        esac;; # }}}
+      pwd-tmux) # {{{
+        PS1_CACHE_PWD="$PWD"
+        local p=
+        if [[ -n $TMUX ]]; then
+          case $PWD in
+          $HOME) p='~';;
+          /)     p='/';;
+          *)
+            local tmp="$PWD"
+            local ps1_ignored=$PS1_IGNORED
+            if [[ -z $ps1_ignored ]]; then
+              ps1_ignored="$(tmux show-options -v @tmux_path 2>/dev/null)"
+              [[ $ps1_ignored == $HOME || $ps1_ignored == '/' ]] && ps1_ignored=
+            fi
+            if [[ ! -z $ps1_ignored && $tmp == $ps1_ignored* ]]; then
+              tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
+              [[ $ps1_ignored == $HOME* ]] && tmp="~/$tmp"
+            fi
+            p="$(PS1_adjustPath "$tmp")";;
+          esac
         else
-          PS1+="${PWD##*/}"; ps1_dummy+="${PWD##*/}"
-        fi
-        PS1+="|"; ps1_dummy+="|"
-        PS1_colorFormat PS1 err "ne"
-        break
-      fi # }}}
-      if [[ $PWD == $PS1_CACHE_PWD ]]; then # {{{
-        PS1+="$PS1_CACHE_PWD_V"; ps1_dummy+="$PS1_CACHE_PWD_D"
-        break
-      fi # }}}
-      export PS1_CACHE_PWD="$PWD"
-      local p=
-      case $PWD in
-      $HOME) p='~';;
-      /)     p='/';;
-      *)     p="${PWD/*\/}";;
+          p=$(PS1_adjustPath "$PWD")
+        fi;; # }}}
+      pwd-short) # {{{
+        PS1_CACHE_PWD="$PWD"
+        local p=
+        case $PWD in
+        $HOME) p='~';;
+        /)     p='/';;
+        *)     p="${PWD##*/}";;
+        esac;; # }}}
       esac
-      export PS1_CACHE_PWD_D="$p"; export PS1_CACHE_PWD_V=
+      PS1_CACHE_PWD_D="$p"; PS1_CACHE_PWD_V=
       PS1_colorFormat PS1_CACHE_PWD_V 'pwd' "$p"
       PS1+="$PS1_CACHE_PWD_V";; # }}}
-    jobs) # {{{
-      [[ -e $PWD ]] || break
-      ${PS1_CFG_ADD_JOBS:-true} || break
-      if [[ ! -z $(jobs -p) ]]; then
-        sleep 0.05
-        local jobs_r=$(jobs -rp) jobs_s=$(jobs -sp) cnt=
-        if [[ ! -z $jobs_r || ! -z $jobs_s ]]; then
-          PS1_colorFormat PS1 'jobs' "["
-          if [[ ! -z $jobs_r ]]; then
-            cnt="$(echo "$jobs_r" | wc -l | xargs)"
-            PS1_colorFormat PS1 'j-r' "$cnt"
-          fi
-          if [[ ! -z $jobs_s ]]; then
-            cnt="$(echo "$jobs_s" | wc -l | xargs)"
-            [[ ! -z $jobs_r ]] && PS1_colorFormat PS1 'jobs' "/"
-            PS1_colorFormat PS1 'j-s' "$cnt"
-          fi
-          PS1_colorFormat PS1 'jobs' "]"
-        fi
-      fi;; # }}}
     git) # {{{
       [[ -e $PWD ]] || break
       if [[ -z $PS1_CFG_ADD_GIT ]]; then
@@ -310,27 +319,54 @@ PS1_setter() { # {{{
         l="$(unset GIT_PS1_SHOWCOLORHINTS; __git_ps1 "%s")"
       fi
       [[ -z $l ]] && break
-      PS1_colorFormat PS1 'git' "($l)";; # }}}
+      l="${l/<>/${UNICODE_EXTRA_CHARS[exclamation]}}"
+      PS1_colorFormat PS1 'git' "${UNICODE_EXTRA_CHARS[bracket-open]}$l${UNICODE_EXTRA_CHARS[bracket-close]}";; # }}}
+    jobs) # {{{
+      [[ -e $PWD ]] || break
+      ${PS1_CFG_ADD_JOBS:-true} || break
+      if [[ ! -z $(jobs -p) ]]; then
+        sleep 0.05
+        local jobs_r=$(jobs -rp) jobs_s=$(jobs -sp) cnt= # _r: running, _s: suspended
+        if [[ ! -z $jobs_r || ! -z $jobs_s ]]; then
+          PS1_colorFormat PS1 'jobs' "${UNICODE_EXTRA_CHARS[bracket-open]}"
+          if [[ ! -z $jobs_r ]]; then
+            cnt="$(echo -e "$jobs_r" | wc -l | xargs)"
+            PS1_colorFormat PS1 'j-r' "$cnt"
+          fi
+          if [[ ! -z $jobs_s ]]; then
+            cnt="$(echo -e "$jobs_s" | wc -l | xargs)"
+            [[ ! -z $jobs_r ]] && PS1_colorFormat PS1 'jobs' ":"
+            PS1_colorFormat PS1 'j-s' "$cnt"
+          fi
+          PS1_colorFormat PS1 'jobs' "${UNICODE_EXTRA_CHARS[bracket-close]}"
+        fi
+      fi;; # }}}
     split-line) # {{{
       [[ ${#ps1_dummy} -ge 4 ]] || break
       if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || [[ ${#ps1_dummy} -gt $PS1_CFG_WIDTH || ${#ps1_dummy} -gt $((COLUMNS - PS1_COLUMNS_MARGIN)) ]] ); then
         if [[ -z $PS1_CONVERTER_NEW_LINE ]]; then
-          export PS1_CONVERTER_NEW_LINE=
-          PS1_colorFormat PS1_CONVERTER_NEW_LINE - 'new-line' "$(get-unicode-char "new-line")"
+          PS1_CONVERTER_NEW_LINE=
+          PS1_colorFormat PS1_CONVERTER_NEW_LINE - 'new-line' "${PS1_CFG_NEW_LINE:-${UNICODE_EXTRA_CHARS[new-line]} }"
         fi
-        PS1+="\n$PS1_CONVERTER_NEW_LINE "
+        PS1+="\n$PS1_CONVERTER_NEW_LINE"
+      fi;; # }}}
+    hist) # {{{
+      if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE =~ .*/\.history(\.ign)?$ ) ]] && ! ${TMUX_POPUP:-false}; then
+        :
+      else
+        PS1_colorFormat PS1 - 'hist' "$PS1_CFG_HIST" " "
       fi;; # }}}
     prompt) # {{{
       local sign='\$'
       # ${PS1_DEBUG:-false} && set -xv
       if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then
-        export PS1_PSTREE_INSTALLED=true
+        PS1_PSTREE_INSTALLED=true
         which pstree >/dev/null 2>&1 || PS1_PSTREE_INSTALLED=false
       fi
       if [[ ( ! -n $TMUX && $SHLVL -gt 1 ) || $SHLVL -gt 3 ]]; then
-        local vv="PS1_SIGN_${$}"
-        local v=${!vv}
-        if [[ -z $v ]]; then
+        local -n vSign="PS1_SIGN_$$"
+        if [[ -z $vSign ]]; then
+          vSign="$"
           local bashCnt=0
           if $PS1_PSTREE_INSTALLED; then
             local param="-a -s"
@@ -339,9 +375,9 @@ PS1_setter() { # {{{
             if $IS_MAC; then
               cmd+=" | sed -n '/= \([0-9]\+\) .*bash$/s/.*= \([0-9]\+\) .*bash/\1/p'"
             else
-              cmd+=" | sed -n '/bash,[0-9]\+$/s/.*,//p'"
+              cmd+=" | sed -n -e ' /bash,1$/d' -e '/bash,[0-9]\+$/s/.*,//p'"
             fi
-            cmd+=" | xargs ps -f -p | command grep -c -e 'bash'"
+            cmd+=" | xargs -r ps -f -p | command grep -c -e 'bash'"
             if ${PS1_DEBUG:-false} || ${PS1_DEBUG2:-false}; then
               echo "$cmd" >/dev/stderr
             fi
@@ -358,62 +394,32 @@ PS1_setter() { # {{{
               [[ $p == 1 || $p == 0 ]] && break
             done
           fi
-          local forDocker=0
-          $IS_DOCKER && forDocker=1
           bashCnt=$((bashCnt - forDocker - ${PS1_EXTRA_BASH:-0}))
           if [[ $bashCnt -gt 1 ]]; then
-            v='@'
+            vSign='@'
             if ${BASH_USE_UNICODE_FOR_NESTED_BASH:-true}; then
-              v="${UNICODE_EXTRA_CHARS[nested_bash]}" a=$((bashCnt - 1))
+              vSign="${UNICODE_EXTRA_CHARS[nested-bash]}" a=$((bashCnt - 1))
               [[ $a -gt 20 ]] && a=20
-              v="$(printf "%d" "'$v")"
-              v="$(printf "\U$(printf '%08x' "$((v+a-1))")")"
+              vSign="$(printf "%d" "'$vSign")"
+              vSign="$(printf "\U$(printf '%08x' "$((vSign+a-1))") ")"
             else
-              [[ $((bashCnt - 1)) -gt 1 ]] && v+=$((bashCnt - 1))
+              [[ $((bashCnt - 1)) -gt 1 ]] && vSign+=$((bashCnt - 1))
             fi
-            sign="$v"
           fi
-          eval export PS1_SIGN_${$}=$sign
-        else
-          sign=$v
         fi
+        sign="$vSign"
       fi
       # ${PS1_DEBUG:-false} && set +xv
       PS1_colorFormat PS1 - "err-$BASH_LAST_ERR" "$sign" " ";; # }}}
     cursor) # {{{
-      PS1+="$(PS1_getColor 'cursor')";; # }}}
-    env-switches) # {{{
-      if [[ ! -z $VIRTUAL_ENV ]]; then
-        [[ -z $PS1_CONVERTER_ENV_VENV ]] && export PS1_CONVERTER_ENV_VENV="$(get-unicode-char 'snake')"
-        PS1+="$PS1_CONVERTER_ENV_VENV "; ps1_dummy+=".."
+      if [[ ! -n $TMUX ]]; then
+        PS1+="$(PS1_getColor 'cursor')"
       fi;; # }}}
-    env | env-no-rec) # {{{
-      if [[ -e "$PWD" && "$PS1_ENV_PWD" != "$PWD" ]]; then
-        cd_go_up() { # {{{
-          local p="$1"
-          [[ -z $p || ! -d $p ]] && return 0
-          [[ $p != "$PS1_ENV_PWD" && $p == $HOME/* && $v == 'env' ]] && cd_go_up "${p%/*}"
-          [[ -e "$p/.env-setup.sh" ]] && source "$p/.env-setup.sh"
-          [[ -e "$p/.env" ]] && source "$p/.env"
-        } # }}}
-        cd_go_up "$PWD"
-        unset cd_go_up
-        if [[ ${PS1_HIST_CHANGE_TO_LOCAL:-true} && $HISTFILE == $HISTFILE_ORIG && -e $PWD/.history ]]; then # {{{
-          [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"
-          export HISTFILE="$PWD/.history"
-        fi # }}}
-        export PS1_ENV_PWD="$PWD"
-      fi;; # }}}
-    *) # {{{
-      PS1+="$(eval printf "\$$v")";; # }}}
     esac; break; done
-    tt=$((${EPOCHREALTIME/[,.]} - $tt))
-    ${PS1_PROFILER:-false} && echo "step: $v: $tt" >/dev/stderr
-    # ${PS1_PROFILER:-false} && time-measure -v ps1 --msg "step: $v"
+    PS0_time=0
+    ${PS1_PROFILER:-false} && tt=$((${EPOCHREALTIME/[,.]} - $tt)) && echo "step: $v: $tt" >/dev/stderr
   done
   PS1+="$cOff"
-  # ${PS1_PROFILER:-false} && time-measure -v ps1 --end
-  export PS1
 } # }}}
 ps1_toggle() { # @@ # {{{
   local i=
@@ -423,6 +429,7 @@ ps1_toggle() { # @@ # {{{
     local ret="next"
     ret+=" hl hn hr ht $(echo hist-{local,no,no-pers,restore,stat})"
     ret+=" split nl gt"
+    ret+=" time-delta time-start time-curr td ts tc t-on t-off time t"
     for i in ${PS1_MODES[*]}; do
       IFS=':' read fullName shortName <<<"$i"
       ret+=" $fullName"
@@ -432,22 +439,48 @@ ps1_toggle() { # @@ # {{{
     return 0
   fi # }}}
   # Toggles # {{{
+  __ps1_var_toggle() {
+    local -n v=$1
+    ${v:-${2:-false}} && v=false || v=true
+  }
   case $1 in
+  time-* | td | tc | ts | t-on | t-off | time | t) # {{{
+    case $1 in
+    time | t)
+      __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT' true
+      if ! $PS1_CFG_ADD_TIME_CURRENT; then
+        PS1_CFG_ORIG_ADD_TIME_DELTA=$PS1_CFG_ADD_TIME_DELTA
+        PS1_CFG_ORIG_ADD_TIME_START=$PS1_CFG_ADD_TIME_START
+        PS1_CFG_ADD_TIME_DELTA=false
+        PS1_CFG_ADD_TIME_START=false
+      else
+        PS1_CFG_ADD_TIME_DELTA=${PS1_CFG_ORIG_ADD_TIME_DELTA:-false}
+        PS1_CFG_ADD_TIME_START=${PS1_CFG_ORIG_ADD_TIME_START:-false}
+      fi;;
+    t-on | t-off)
+      local v=true
+      [[ $1 == "t-off" ]] && v=false
+      PS1_CFG_ADD_TIME_DELTA=$v PS1_CFG_ADD_TIME_START=$v PS1_CFG_ADD_TIME_CURRENT=$v;;
+    time-delta | td) __ps1_var_toggle 'PS1_CFG_ADD_TIME_DELTA';;
+    time-start | ts) __ps1_var_toggle 'PS1_CFG_ADD_TIME_START';;
+    time-curr  | tc) __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT';;
+    esac
+    return 0;; # }}}
   split) # {{{
-    ${PS1_CFG_ADD_SPLIT:-true} && export PS1_CFG_ADD_SPLIT=false || export PS1_CFG_ADD_SPLIT=true
+    __ps1_var_toggle 'PS1_CFG_ADD_SPLIT' true
     return 0;; # }}}
   nl) # {{{
-    $PS1_CONVERTER_ADD_SEPARATOR && export PS1_CONVERTER_ADD_SEPARATOR=false || export PS1_CONVERTER_ADD_SEPARATOR=true
+    __ps1_var_toggle 'PS1_CONVERTER_ADD_SEPARATOR' true
     return 0;; # }}}
   gt) # {{{
     if [[ -z $PS1_CFG_ADD_GIT ]]; then
       if ${TMUX_STATUS_RIGHT_GIT_STATUS:-true} && [[ -n $TMUX ]]; then
-        export PS1_CFG_ADD_GIT=false
+        PS1_CFG_ADD_GIT=true
       else
-        export PS1_CFG_ADD_GIT=true
+        PS1_CFG_ADD_GIT=false
       fi
     else
-      $PS1_CFG_ADD_GIT && export PS1_CFG_ADD_GIT=false || export PS1_CFG_ADD_GIT=true
+      __ps1_var_toggle 'PS1_CFG_ADD_GIT' true
     fi
     return 0;; # }}}
   hist-local | hist-no | hist-no-pers | hist-restore | hist-stat | hl | hn | ht | hr) # {{{
@@ -510,21 +543,21 @@ ps1_toggle() { # @@ # {{{
         break
       fi
     done
+    import-module echor
     echormf -C 0 "Changing PS1 to %yellow:{$next}"
   fi # }}}
   unset ${!PS1_CACHE_*}
-  export PS1_STATUS="$next:$current"
+  PS1_STATUS="$next:$current"
   IFS=$oldIFS
 } # }}}
 ps1_fix() { # {{{
   local current=$PROMPT_COMMAND
   PROMPT_COMMAND=$PROMPT_COMMAND_ORIG
   [[ $current != PS1_setter* ]] && PROMPT_COMMAND+="; $current"
-  export PROMPT_COMMAND
+  PROMPT_COMMAND
 } # }}}
 
 alias pt='ps1_toggle' # @@
 alias gt='ps1_toggle gt'
 alias pth='ps1_toggle ht'
-export HISTIGNORE+=":pt:pth:gt"
 

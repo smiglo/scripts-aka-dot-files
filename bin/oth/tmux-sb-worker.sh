@@ -11,17 +11,24 @@ err_dev="/dev/stderr"
 default_interval=120
 default_sleep=10
 
+markLU="_last_update"
+markIgn='--IGNORED--'
+
 battery_interval=${TMUX_SB_BATTERY_DELTA:-$((60))}
 cpu_interval=${TMUX_SB_CPU_DELTA:-$((30))}
+hdd_used_interval=${TMUX_SB_HDD_OVERLAY_DELTA:-$((1 * 60 * 60))}
 lockstatus_interval=${TMUX_SB_LOCKSTATUS_DELTA:-$((30))}
 mic_interval=${TMUX_SB_MIC_DELTA:-$((60))}
 net_interval=${TMUX_SB_NET_DELTA:-$((30))}
 notifications_interval=${TMUX_SB_NOTIFICATIONS_DELTA:-$((30))}
-reminder_interval=${TMUX_SB_REMINDER_DELTA:-$((60))}
+reminder_interval=${TMUX_SB_REMINDER_DELTA:-$((30))}
 ssh_interval=${TMUX_SB_MIC_DELTA:-$((15))}
 temp_interval=${TMUX_SB_TEMP_DELTA:-$((30))}
 usb_interval=${TMUX_SB_USB_DELTA:-$((15))}
 weather_interval=${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}
+
+[[ -e $APPS_CFG_PATH/tmux-sb-workers.sh ]] && source $APPS_CFG_PATH/tmux-sb-workers.sh
+
 # }}}
 battery_tmux_sb_worker() { # @@ # {{{
   is_ac() { # {{{
@@ -60,7 +67,7 @@ battery_tmux_sb_worker() { # @@ # {{{
     done # }}}
     value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[battery]}"
     if ! $ac_on; then
-      $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
+      $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra-bar]}"
     fi
     $showPerc && { value+="#[fg=colour$c]${perc}%"; $ac_on && value+=" "; }
     $ac_on && value+="#[fg=colour2]${UNICODE_EXTRA_CHARS[power]}"
@@ -75,9 +82,9 @@ cpu_tmux_sb_worker() { # @@ # {{{
   local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
   local value= cpu_1m= cpu_5m= c= i=
   if ! $IS_MAC; then # {{{
-    read cpu_1m cpu_5m <<<$(cat /proc/loadavg | awk '{print int($1), int($2)}')
+    read cpu_1m cpu_5m < <(cat /proc/loadavg | awk '{print int($1), int($2)}')
   else
-    read cpu_1m cpu_5m <<<$(uptime | awk '{print int($11), int($12)}')
+    read cpu_1m cpu_5m < <(uptime | awk '{print int($11), int($12)}')
   fi # }}}
   if [[ $cpu_1m -ge ${thresholds##* } ]]; then # {{{
     local first=true showPerc="${TMUX_SB_CPU_SHOW_PERC:-false}"
@@ -93,16 +100,33 @@ cpu_tmux_sb_worker() { # @@ # {{{
       colors="${colors#* }"
     done # }}}
     value="#[fg=colour$c,bold]"
-    value+="${UNICODE_EXTRA_CHARS[high_cpu]}"
+    value+="${UNICODE_EXTRA_CHARS[high-cpu]}"
     if $showPerc; then
       value+="${cpu_1m}/${cpu_5m}%"
     elif $IS_MAC; then
-      value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra_bar]}"
+      value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra-bar]}"
     fi
     value+="#[fg=default,none]"
   else
     cpu_interval=${TMUX_SB_CPU_DELTA:-$((30))} value=
   fi # }}}
+  printf "%b" "$value"
+} # }}}
+hdd_used_tmux_sb_worker() { # {{{
+  local used= color=
+  used=$(command df / | awk '/^'"${TMUX_SB_HDD_USED_DISK:-overlay}"' / {print $5}')
+  used=${used/%\%}
+  if (( used < 50 )); then
+    color="colour040"
+    ${TMUX_SB_HDD_OVERLAY_REPORT_ALWAYS:-false} || return 0
+  elif (( used < 75 )); then
+    color="colour220"
+  elif (( used < 90 )); then
+    color="colour208"
+  else
+    color="colour196"
+  fi
+  local value="$(printf "#[fg=%s]%s%%#[fg=default,none]" "$color" "$used")"
   printf "%b" "$value"
 } # }}}
 lockstatus_tmux_sb_worker() { # @@ # {{{
@@ -117,11 +141,12 @@ lockstatus_tmux_sb_worker() { # @@ # {{{
   printf "%b" "$value"
 } # }}}
 mic_tmux_sb_worker() { # {{{
-  local level=80 isInternal=false amixerP="-D pulse"
+  local level=${TMUX_SB_WORKER_MIC_LEVEL:-80} isInternal=false amixerP="-D pulse"
+  local dev=${TMUX_SB_WORKER_MIC_DEV:-Capture}
   case ${TMUX_SB_WORKER_MIC_INTERNAL_MIC_BOOST:-skip} in
   skip) ;;
   true)
-    local v="$(amixer $amixerP sget 'Internal Mic Boost' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    local v="$(amixer $amixerP sget 'Internal Mic Boost' | sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
     [[ $v -gt 0 ]] && isInternal=true;;
   false)
     if ! amixer $amixerP sget 'Headset Mic' 1>/dev/null 2>&1 || amixer $amixerP sget 'Headset Mic' | grep -q "Mono:.*\[off\]"; then
@@ -130,11 +155,11 @@ mic_tmux_sb_worker() { # {{{
   esac
   local mic="$(get-unicode-char 'mic')" mute="$(get-unicode-char 'mute')"
   local value=
-  if amixer $amixerP sget 'Capture' | grep -q "Front Left:.*\[off\]"; then
+  if amixer $amixerP sget "$dev" | grep -q "Front Left:.*\[off\]"; then
     value="#[fg=colour9]$mic$mute"
   else
     $isInternal && return
-    local v="$(amixer $amixerP sget 'Capture' |  sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
+    local v="$(amixer $amixerP sget "$dev" | sed -n 's/.*Front Left:.*\[\([0-9]\+\)%\].*/\1/p')"
     if [[ $v -le $level ]]; then
       value="#[fg=colour11]$mic$mute"
     elif ! $isInternal; then
@@ -172,16 +197,58 @@ notifications_tmux_sb_worker() { # @@ # {{{
   printf "%b" "$value"
 } # }}}
 reminder_tmux_sb_worker() { # {{{
-  local ts= what= rest=
-  read ts what rest <<<$(reminder -l)
-  ts=${ts%:}
-  [[ -z $ts ]] && return
+  local ts= value=
   local icon="${UNICODE_EXTRA_CHARS[bell]} "
-  case $what in
-  P)  icon="${UNICODE_EXTRA_CHARS[pause]}";;
-  GH) icon="${UNICODE_EXTRA_CHARS[home]}";;
+  case $1 in
+  -ts) ts=$2; shift 2;;
   esac
-  local value="$(printf "#[fg=colour12]%b %s#[fg=default,none]" "$icon" "$ts")"
+  case ${TMUX_SB_REMINDER_METHOD:-tmux} in
+  tmux) # {{{
+    local now=$EPOCHSECONDS diffClose=$((2 * 60 + 30)) closeEnough=false
+    [[ -z $ts ]] && read ts _ < <($SCRIPT_PATH/bin/reminder.sh next)
+    [[ -z $ts ]] && return 0
+    (( now > ts )) && return 0
+    local diff=$((ts - now))
+    (( diff < diffClose )) && closeEnough=true
+    if $closeEnough; then # {{{
+      value="$(printf "#[bg=colour124]#[fg=colour226,bold] ")" # }}}
+    else # {{{
+      value="$(printf "#[fg=colour03]")"
+    fi # }}}
+    method="${TMUX_SB_REMINDER_PRINT_METHOD:-auto}"
+    case $method in # {{{
+    auto)
+      method="absolute"
+      (( diff < ${TMUX_SB_REMINDER_REMAINING_THRESHOLD:-$((5 * 60))} )) && method="remaining";;
+    esac # }}}
+    case $method in
+    absolute) # {{{
+      value+="$(printf "%b %s" "$icon" "$(date +%H:%M -d@$ts)")";; # }}}
+    remaining) # {{{
+      local diff=$((ts - now)) remaining=
+      if (( diff < 60 )); then
+        remaining="${diff}s"
+      else
+        remaining=$(time2s --to-HMS $diff)
+        ${TMUX_SB_REMINDER_PRINT_ROUND:-true} && remaining="${remaining%:*}"
+      fi
+      value+="$(printf "%b %s" "$icon" "$remaining")";; # }}}
+    esac
+    if $closeEnough; then # {{{
+      value+=" "
+    fi # }}}
+    value+="$(printf "#[bg=default,none]#[fg=default,none]")";; # }}}
+  loglast) # {{{
+    local what=
+    read ts what _ < <($SCRIPT_PATH/bin/oth/reminder-loglast.sh -l)
+    ts=${ts%:*}
+    [[ -z $ts ]] && return
+    case $what in
+    P)  icon="${UNICODE_EXTRA_CHARS[pause]}";;
+    GH) icon="${UNICODE_EXTRA_CHARS[home]}";;
+    esac
+    value="$(printf "#[fg=colour12]%b%s#[fg=default,none]" "$icon" "$ts")";; # }}}
+  esac
   printf "%b" "$value"
 } # }}}
 ssh_tmux_sb_worker() { # {{{
@@ -189,19 +256,20 @@ ssh_tmux_sb_worker() { # {{{
   $IS_DOCKER && w="$(w -h -i | grep -v tmux)"
   local lines="$(echo "$w" | wc -l)"
   echo "$w" | grep -q "^root" && isRoot=true
-  w="$(echo "$w" | cut -c19- | grep -v "^$d")"
-  if ! $IS_MAC && [[ $lines -gt 1 ]]; then
+  local weAreOverSSH=false
+  $ALIASES_SCRIPTS/tmux/tm.sh --is-ssh && weAreOverSSH=true
+  if ! $IS_MAC && [[ $lines -gt 1 ]] && ! $weAreOverSSH; then
+    w="$(echo "$w" | cut -c19- | grep -v "^$d")"
     if [[ ! -z $w ]]; then
-      sshCnt=$(who | grep -v "(:" | sort -k5,5 -u | wc -l)
+      sshCnt=$(who | grep -v "(:\|tmux(.*%\|seat0" | sort -k5,5 -u | wc -l)
       moreThanOne=true
-      [[ $sshCnt -gt 0 ]] && isSsh=true
+      [[ $sshCnt -gt 1 ]] && isSsh=true
     fi
   fi
   local sign="$(get-unicode-char 'exclamation')" value=
   if $isSsh; then
     if [[ $sshCnt == 1 ]]; then
-      local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
-      pstree -A -s $cpid | grep -q -e '---sshd---' && isSsh=false
+      $weAreOverSSH && isSsh=false
     fi
     $isSsh && value="#[bg=colour124]#[fg=colour226,bold] $sign$sign$sign #[bg=default,none]"
   elif $isRoot; then
@@ -349,6 +417,18 @@ weather_tmux_sb_worker() { # @@ # {{{
   return 0
 } # }}}
 
+saveData() { # {{{
+  local fTmp=$info_file.tmp now=$1
+  (
+    echo "declare -A data"
+    echo "data[$markLU]=\"$now\" # $(date +$DATE_FMT -d @$now)"
+    for i in $(printf '%s\n' ${!data[*]} | sort); do
+      [[ ${data[$i]} == "$markIgn" || $i == "$markLU" ]] && continue
+      echo "data[$i]=\"${data[$i]}\""
+    done
+  ) >$fTmp
+  $lock mv $fTmp $info_file 2>/dev/null
+} # }}}
 isIgnored() { # {{{
   [[ $(vGet $1 ignored false) == 'true' ]]
 } # }}}
@@ -377,7 +457,7 @@ tryToDo() { # {{{
     vSet $var interval $default_interval
     interval=$default_interval
   fi
-  [[ $now -gt $(($last+$interval)) ]] || return 1
+  (( now > last + interval )) || return 1
   if $isFunction; then
     eval ${var}_tmux_sb_worker 2>$err_dev
   else
@@ -395,7 +475,7 @@ fromAliases() { # {{{
 worker() { # {{{
   source "$UNICODE_EXTRA_CHARS_FILE"
   # fromAliases --source get-unicode-char
-  local fTmpSingle=$info_file.single.tmp  fTmp=$info_file.tmp markIgn='--IGNORED--' markLU='_last_update'
+  local fTmpSingle=$info_file.single.tmp
   local i= now=
   declare -A data
   for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
@@ -404,7 +484,7 @@ worker() { # {{{
   INF - "list: $TMUX_STATUS_RIGHT_EXTRA_SORTED"
   while true; do
     now=${EPOCHSECONDS:-$(epochSeconds)}
-    data[$markLU]=$now
+    [[ -e $info_file ]] && source <($lock cat $info_file)
     for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
       [[ ${data[$i]} == "$markIgn" ]] && DBG "$i: ignored" && continue
       TRC "$i: checking"
@@ -418,15 +498,7 @@ worker() { # {{{
         DBG "$i: skipped"
       fi
     done
-    (
-      echo "declare -A data"
-      echo "data[$markLU]=${data[$markLU]} # $(date +$DATE_FMT -d @$now)"
-      for i in $(printf '%s\n' ${!data[*]} | sort); do
-        [[ ${data[$i]} == "$markIgn" || $i == "$markLU" ]] && continue
-        echo "data[$i]=\"${data[$i]}\""
-      done
-    ) >$fTmp
-    $lock mv $fTmp $info_file 2>/dev/null
+    saveData $now
     if $verbose; then
       echo "---"
       cat $info_file
@@ -436,6 +508,7 @@ worker() { # {{{
   done
 } # }}}
 
+import-module dbg
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   ---tmux) err_dev="/dev/null";;
@@ -457,17 +530,18 @@ case $1 in # {{{
     *)   break;;
     esac; shift
   done # }}}
-  [[ -z $1 ]] && echor "Worker is missing" && exit 1
+  [[ -z $1 ]] && echoe -w "Worker is missing" && exit 1
   i=$1
   f="${i}_tmux_sb_worker" && shift
-  ! declare -f $f &>/dev/null && echor "Function [$f] not defined" && exit 1
+  ! declare -f $f &>/dev/null && echoe -w "Function [$f] not defined" && exit 1
   now=${EPOCHSECONDS:-$(epochSeconds)}
   DBG --init --ts-add --prefix D
+  source "$UNICODE_EXTRA_CHARS_FILE"
   fromAliases --source get-unicode-char
   $xv && set -xv
   w="$($f $@)"; err=$?
   $xv && set +xv
-  [[ $err == 0 ]] || echor "Error when invoking $f"
+  [[ $err == 0 ]] || echoe -w "Error when invoking $f"
   echo "data[$i]=\"$w\""
   DBG --deinit;; # }}}
 --get-all-values) # {{{
@@ -485,11 +559,23 @@ case $1 in # {{{
 --tmux | --kill) # {{{
   ps a | awk '/tmux-sb-worker\.sh ---tmux/ {print $1}' | xargs -r kill -9 2>/dev/null
   if [[ $1 == '--tmux' ]]; then
-    $0 ---tmux -s --out "${info_file}.err" --prefix &
+    $0 ---tmux -s --out "${info_file}.log" --prefix &
     disown
   fi;; # }}}
+--update) # {{{
+  [[ -e $info_file ]] || exit 0
+  i=$2; shift 2
+  [[ ! -z $i ]] || exit 1
+  source "$UNICODE_EXTRA_CHARS_FILE"
+  now=${EPOCHSECONDS:-$(epochSeconds)}
+  f="${i}_tmux_sb_worker"
+  ! declare -f $f &>/dev/null && echoe -w "Function [$f] not defined" && exit 1
+  w="$($f $@)" || echoe -w "Error when invoking $f"
+  source <($lock cat $info_file)
+  data[$i]="$w"
+  saveData $now;; # }}}
 *) # {{{
-  DBG --init --ts=show $log_level $@
+  DBG --init --ts=show --ts-abs $log_level $@
   INF - "Start: $(date +"$DATE_FMT")"
   worker
   DBG --deinit;; # }}}

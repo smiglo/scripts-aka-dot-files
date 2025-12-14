@@ -3,356 +3,20 @@
 # Is installed # {{{
 [[ -z $1 && ! -z $BASHRC_PARAMS_COLORS ]] && set -- $BASHRC_PARAMS_COLORS
 if [[ $1 == '--list' ]]; then # {{{
-  awk -F'=' '/^ *export C[A-Z]/ && !/# IGN/ {print $1}' $0 | sed 's/.*export //' | sort -u
+  color-list
   exit 0
 fi # }}}
-${RCSTUFF_COLORS_INSTALLED:-false} && [[ $1 != '--force' ]] && ! ${RCSTUFF_FORCE:-false} && [[ ! -z ${COff} ]] && return 0
-export RCSTUFF_COLORS_INSTALLED=true
-# }}}
-# Env # {{{
-export COLORS_BASIC_LIST="" # IGN
-export COLORS_BASIC_LIST+=" black    red    green    yellow    blue    purple    magenta    cyan    white    gold  gray  off"   # IGN
-export COLORS_BASIC_LIST+=" CBlack   CRed   CGreen   CYellow   CBlue   CPurple   CMagenta   CCyan   CWhite   CGold CGray COff"  # IGN
-export COLORS_BASIC_LIST+=" CIBlack  CIRed  CIGreen  CIYellow  CIBlue  CIPurple  CIMagenta  CICyan  CIWhite"                  # IGN
-export COLORS_BASIC_LIST+=" CBBlack  CBRed  CBGreen  CBYellow  CBBlue  CBPurple  CBMagenta  CBCyan  CBWhite"                  # IGN
-export COLORS_BASIC_LIST+=" CBIBlack CBIRed CBIGreen CBIYellow CBIBlue CBIPurple CBIMagenta CBICyan CBIWhite"                  # IGN
-export COLORS_BASIC_LIST+=" HLSearch GoldOrig"                                                              # IGN
-export COLORS_FILE="$BASHRC_RUNTIME_PATH/colors" # IGN
+if ${RCSTUFF_COLORS_INSTALLED:-false}; then
+  [[ $1 == '--force' ]] || ${RCSTUFF_FORCE:-false} || [[ -z ${COff} ]] || return 0
+fi
+export COLORS_FILE="$BASHRC_RUNTIME_PATH/colors"
 if [[ $1 == '--force' ]] || ${RCSTUFF_FORCE:-false}; then # {{{
   [[ $1 == '--force' ]] && shift
   rm -f $COLORS_FILE $COLORS_FILE.json
-  unset colorCache
 fi # }}}
-if [[ -e $COLORS_FILE ]]; then
-  source $COLORS_FILE
-else
-  declare -A -x colorCache=([off]="$COff")
-  declare -A -x COLORS
-  COLORS+=([err]="red" [ok]="green" [wrn]="purple" [info]="yellow" [i2]="cyan"); COLORS[i1]=${COLORS[info]}
-  COLORS+=([imp]="HLSearch" [imp2]="Gold" [magenta]="purple")
-  COLORS+=([hls-search]="HLSearch" [gold-orig]="GoldOrig")
-  COLORS[ip]="yellow"
-  COLORS[ts]="blue"
-  COLORS[file]="cyan"
-  COLORS[ticket]="cyan"
-  COLORS[grey]="gray"
-fi
+export RCSTUFF_COLORS_INSTALLED=true
 # }}}
-color-list() { # {{{
-  local list=
-  if [[ $1 == '--full' ]]; then
-    list="$(awk -F'=' '/^ *export C[A-Z]/ && !/# IGN/ {print $1}'  $BASH_PATH/colors | sed 's/.*export //' | sort -u)"
-  fi
-  (
-    if [[ -e $COLORS_FILE ]]; then # {{{
-      source $COLORS_FILE
-    else
-      ! declare -p colorCache >/dev/null 2>&1 && declare -A -x colorCache=([off]="$COff")
-      ! declare -p colorsMap >/dev/null 2>&1 && declare -A -x colorsMap
-      ! declare -p COLORS >/dev/null 2>&1 && declare -A -x COLORS
-    fi # }}}
-    (
-      echo "$COLORS_BASIC_LIST"
-    ) | tr ' ' '\n' | sed '/^C[A-Z][a-z]/s/^C\(.*\)/\L\1/'
-    echo "${!COLORS[*]}"
-    echo "${!colorsMap[*]}"
-    echo "${!colorCache[*]}"
-    echo "$list"
-  ) | tr ' ' '\n' | sed '/^ *$/d' | LC_COLLATE=C sort -u
-} # }}}
-get-color() { # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -c | --color) # {{{
-      color-list --full;; # }}}
-    -f | -b) # {{{
-      seq 0 255;; # }}}
-    -r | --raw) # {{{
-      echo "-f -b -n --name FG-space-BG";; # }}}
-    *) # {{{
-      echo "-c --color -r --raw"
-      color-list;; # }}}
-    esac
-    return 0
-  fi # }}}
-  [[ $colorsOn == false || $COLORS_ON == false ]] && return 0
-  if [[ $1 == --cached ]]; then # {{{
-    shift
-  else
-    if [[ -e $COLORS_FILE ]]; then # {{{
-      source $COLORS_FILE
-    else
-      ! declare -p colorCache >/dev/null 2>&1 && declare -A -x colorCache=([off]="$COff")
-      ! declare -p colorsMap >/dev/null 2>&1 && declare -A -x colorsMap
-      ! declare -p COLORS >/dev/null 2>&1 && declare -A -x COLORS
-    fi # }}}
-  fi # }}}
-  local name="$1" c=
-  case $name in
-  -r | --raw) # {{{
-    shift
-    local cFg=15 cBg=0 name=
-    while [[ ! -z $1 ]]; do
-      case $1 in
-      -f) cFg=$2;;
-      -b) cBg=$2;;
-      -n | --name) name="$2"; shift;;
-      *) cFg=$1; cBg=$2; [[ -z $name ]] && name="$3"; shift $#;;
-      esac; shift
-    done
-    cFg="$(printf "%03d" "$cFg")"
-    cBg="$(printf "%03d" "$cBg")"
-    [[ -z $name ]] && name="rF${cFg}B${cBg}"
-    local c="${colorCache[$name]}"
-    [[ ! -z $c ]] && echo "$c" && return 0
-    c="$(printf "\x1b%s\x1b%s" "[38;5;${cFg}m" "[48;5;${cBg}m")"
-    colorCache[$name]="$c"
-    [[ -e $COLORS_FILE ]] && sed -i '/colorCache/d' $COLORS_FILE
-    declare -p colorCache >>$COLORS_FILE
-    echo "$c"
-    return 0;; # }}}
-  -c | --color) shift; name="$1";;
-  esac
-  if [[ ! -z ${colorsMap[$name]} ]]; then
-    c=${colorsMap[$name]}
-  elif [[ ! -z ${COLORS[$name]} ]]; then
-    c=${COLORS[$name]}
-  fi
-  local c="${colorCache[${c:-$name}]}"
-  [[ ! -z $c ]] && echo "$c" && return 0
-  c="$name"
-  if [[ $c =~ ^[A-Za-z].* ]]; then
-    if [[ ! $c =~ ^C[A-Z].*$ && -z ${!c} ]]; then
-      local cc=${c,,} && cc="C${cc^}"
-      [[ ! -z ${!cc} ]] && c="$cc" || c="C${c^}"
-    fi
-    c=${!c}
-  fi
-  [[ -z $c ]] && return 1
-  if [[ $name =~ ^[A-Za-z] ]]; then
-    colorCache[$name]="$c"
-    [[ -e $COLORS_FILE ]] && sed -i '/colorCache/d' $COLORS_FILE
-    declare -p colorCache >>$COLORS_FILE
-  fi
-  echo "$c"
-}
-complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic get-color # }}}
-color-cache-dump() { # {{{
-  [[ -e $COLORS_FILE ]] || color-cache-init -s
-  if [[ -e $COLORS_FILE ]]; then # {{{
-    source $COLORS_FILE
-  else
-    ! declare -p colorCache >/dev/null 2>&1 && declare -A -x colorCache=([off]="$COff")
-    ! declare -p colorsMap >/dev/null 2>&1 && declare -A -x colorsMap
-    ! declare -p COLORS >/dev/null 2>&1 && declare -A -x COLORS
-  fi # }}}
-  local i= w1=12 w2=-15 colors_ci= colors_cb= colors_cbi= cOff="$(get-color --cached off)"
-  echor -C "%yellow:{colorCache}:"
-  for i in $(echo "${!colorCache[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
-    if [[ $i =~ ^CB[A-Z] ]]; then
-      colors_cb+="$i "
-      continue
-    elif [[ $i =~ ^CBI[A-Z] ]]; then
-      colors_cbi+="$i "
-      continue
-    elif [[ $i =~ ^CI[A-Z] ]]; then
-      colors_ci+="$i "
-      continue
-    fi
-    if [[ $i =~ ^C[A-Z] ]]; then
-      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color --cached $i)%${w2}s$cOff" "$i") --"
-    else
-      if [[ ! -z $colors_cb ]]; then
-        local ii=
-        for ii in $colors_cb; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color --cached $ii)%${w2}s$cOff" "$ii") --"
-        done
-        colors_cb=
-      fi
-      if [[ ! -z $colors_cbi ]]; then
-        local ii=
-        for ii in $colors_cbi; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color --cached $ii)%${w2}s$cOff" "$ii") --"
-        done
-        colors_cbi=
-      fi
-      if [[ ! -z $colors_ci ]]; then
-        local ii=
-        for ii in $colors_ci; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color --cached $ii)%${w2}s$cOff" "$ii") --"
-        done
-        colors_ci=
-      fi
-      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color --cached $i)%${w2}s$cOff" "$i") --"
-    fi
-  done
-  echor -C "%yellow:{COLORS}:"
-  for i in $(echo "${!COLORS[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
-    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color --cached $i)%${w2}s$cOff" "${COLORS[$i]}") --"
-  done
-  echor -C "%yellow:{colorsMap} (user):"
-  for i in $(echo "${!colorsMap[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
-    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color --cached $i)%${w2}s$cOff" "${COLORS[$i]}") --"
-  done
-} # }}}
-color-cache-init() { # {{{
-  local i= k= verbose=false addSource=true
-  while [[ ! -z $1 ]]; do
-    case $1 in
-    -v) verbose=true;;
-    -s) addSource=false;;
-    esac; shift
-  done
-  for i in off $COLORS_BASIC_LIST ${!COLORS[*]} $@; do
-    [[ $i =~ ^[A-Za-z] ]] || continue
-    if $verbose; then
-      echo "$(get-color --cache $i)Storing1${COff}: $i"
-    else
-      get-color $i >/dev/null
-    fi
-  done
-  for i in ${!COLORS[*]}; do
-    i=${COLORS[$i]}
-    [[ $i =~ ^[A-Za-z] ]] || continue
-    if $verbose; then
-      echo "$(get-color --cache $i)Storing2${COff}: $i"
-    else
-      get-color $i >/dev/null
-    fi
-  done
-  if $addSource && [[ -e $COLORS_FILE ]]; then
-    source $COLORS_FILE
-  fi
-} # }}}
-cl() { # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    color-list
-    if [[ $3 != '-C' ]]; then
-      echo "- -- -C -f -F COLOR-space-STR COLOR:STR(space-added) COLOR::STR(no-space-added) --sep"
-    fi
-    return 0
-  fi # }}}
-  if [[ $colorsOn != false && $COLORS_ON != false ]]; then # {{{
-    if [[ -e $COLORS_FILE ]]; then # {{{
-      source $COLORS_FILE
-    else
-      ! declare -p colorCache >/dev/null 2>&1 && declare -A -x colorCache
-      ! declare -p colorsMap >/dev/null 2>&1 && declare -A -x colorsMap
-      ! declare -p COLORS >/dev/null 2>&1 && declare -A -x COLORS
-    fi # }}}
-  fi # }}}
-  local coff=${colorCache[off]} cCurrent= verbose=false format=false asArray=false sep=" "
-  [[ -z $coff ]] && coff=$(get-color --cached off)
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -v) verbose=true;;
-    -f) format=true;;
-    -F) format=true; asArray=true;;
-    --sep) sep="$2"; shift;;
-    -C) # {{{
-      shift
-      cCurrent=$(get-color --cached ${1%%:*}) || { $verbose && echo "Cannot find color for '${1%%:*}'" >/dev/stderr; }
-      ! $format && [[ $1 == *:* ]] && break;; # }}}
-    *) break;;
-    esac; shift
-  done # }}}
-  [[ -z $1 ]] && return 0
-  [[ $@ == '-' ]] && echo -n $coff && return 0
-  local out= cLast=
-  if $format; then # {{{
-    local str=
-    if $asArray; then # {{{
-      local c= cc=
-      mapfile -d' ' < <(echo -n "$1"); shift
-      for i in ${!MAPFILE[*]}; do # {{{
-        str="${MAPFILE[$i]}"
-        [[ $str == " " ]] && out+="$sep" && continue
-        if [[ $str != *%%* ]]; then
-          if [[ "$str" == *%*:* && "$str" =~ (.*)%([a-zA-Z][a-zA-Z0-9_-]*):(.*) ]]; then # Use pre-check based on wildcard for speed-up # {{{
-            local pre=${BASH_REMATCH[1]} substr="${BASH_REMATCH[3]}" rest=
-            if [[ "$substr" == '{'*'}'* ]]; then
-              rest="${substr#*\}}"
-              substr="${substr%%\}*}" && substr="${substr#\{}"
-            elif [[ "$substr" == '%s'* ]]; then
-              rest="${substr#\%s}"
-              substr="$1"; shift
-            fi
-            c="${BASH_REMATCH[2]}"
-            str="$pre$(cl $c "$substr")$cCurrent$rest"
-            # }}}
-          elif [[ "$str" == *:%s && "$str" =~ [^a-zA-Z]*([a-zA-Z][a-zA-Z0-9_-]*):%s ]]; then # Use pre-check based on wildcard for speed-up # {{{
-            c="${BASH_REMATCH[1]}"
-            cc="$(cl $c $1)"; shift
-            str="${str/$c:\%s/$cc}" # }}}
-          elif [[ $str == *"%s"* ]]; then # {{{
-            cc=$(cl $1 $2); shift; shift
-            str="${str/\%s/$cc}"
-          elif [[ ! -z $cCurrent ]]; then
-            str="$cCurrent$str"
-          fi # }}}
-        else
-          str="$(printf "${str/\%\%/\%}" "$1")"; shift
-        fi
-        out+="$str"
-      done # }}}
-      # }}}
-    else # {{{
-      out="$1"; shift
-      while [[ ! -z $1 ]]; do # {{{
-        str="$(cl $1 $2)"
-        out="${out/\%s/$str}"
-        shift; shift
-      done # }}}
-    fi # }}}
-    cLast= # }}}
-  else # {{{
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      --) # {{{
-        out+="$sep"; shift;; # }}}
-      *) # {{{
-        local c= n= str=
-        case $1 in
-        *::*) # {{{
-          n="${1%%::*}" str="${1#*::}"
-          shift;; # }}}
-        *:*) # {{{
-          n="${1%%:*}" str="${1#*:}"
-          [[ ! -z $out ]] && str=" $str"
-          shift;; # }}}
-        *) # {{{
-          n="$1" str="$2"
-          shift; shift;; # }}}
-        esac
-        [[ -z "$str" ]] && continue
-        [[ $colorsOn == false || $COLORS_ON == false ]] && out+="$str" && continue
-        if [[ ! -z $n && $n != '-' ]]; then # {{{
-          if [[ ! -z ${colorsMap[$n]} ]]; then
-            n=${colorsMap[$n]}
-          fi
-          c="${colorCache[$n]}"
-          if [[ -z $c ]]; then
-            c=$(get-color --cached $n) || { $verbose && echo "Cannot find color for '$n'" >/dev/stderr; }
-            colorCache[$n]="$c"
-          fi
-          cLast=$c # }}}
-        elif [[ ! -z $cCurrent || ! -z $cLast ]]; then # {{{
-          cLast=${cCurrent:-$coff}
-        fi # }}}
-        out+="$cLast$str"
-        ;; # }}}
-      esac
-    done # }}}
-  fi # }}}
-  [[ -z $out ]] && return
-  [[ ! -z $cLast && $cLast != $coff ]] && out+="$coff"
-  echo -e "$out"
-}
-complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic cl
-printfc() { cl -F "$@"; }
-clf()     { cl -F "$@"; }
-echoc()   { cl -F "$@"; }
-# }}}
+# Env # {{{
 # Reset # {{{
 export COff='[0m'
 export CBold='[1m'
@@ -489,12 +153,282 @@ export CUMagenta="$CUPurple"
 export CIMagenta="$CIPurple"
 export CBIMagenta="$CBIPurple"
 # }}}
+# }}}
+get-color() { # @@ # {{{
+  __get-color() { # {{{
+    local name=$1 v=$1 lvl=$2
+    [[ ! -z $name ]] || return 1
+    [[ $v == $'\e'* ]] && { echo -en "$v"; return 0; }
+    (( lvl <= 5 )) || return 1
+    if declare -p colorMap >/dev/null 2>&1 && [[ ! -z ${colorMap[$name]} ]]; then # {{{
+      v=${colorMap[$name]}
+      [[ $v == $'\e'* ]] && { echo -en "$v"; return 0; }
+      __get-color "$v" $lvl
+      return 0
+    fi # }}}
+    v=${colorCache[$name]}
+    [[ $v == $'\e'* ]] && { echo -en "$v"; return 0; }
+    v=${COLORS[$name]}
+    [[ $v == $'\e'* ]] && { echo -en "$v"; return 0; }
+    [[ ! -z $v ]] || { echoe $verbose "color not defined: $name"; return 1; }
+    __get-color "$v" $lvl
+  } # }}}
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -c)
+      color-list --full;;
+    -r | --raw)
+      echo "FG-then-BG -f -b";;
+    *)
+      echo "-c -r --raw"
+      color-list;;
+    esac
+    return 0
+  fi # }}}
+  local name= verbose=${COLORS_VERBOSE:-false}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -c) name="$2"; shift;;
+    -r | --raw) # {{{
+      shift
+      local cFg=15 cBg=0
+      while [[ ! -z $1 ]]; do
+        case $1 in
+        -f) cFg=$(get-color $2) || cFg=${2}m; shift;;
+        -b) cBg=$(get-color $2) || cBg=${2}m; shift;;
+        *)
+          cFg=$(get-color $1) || cFg=${1}m
+          cBg=$(get-color $2) || cBg=${2}m
+          shift $#;;
+        esac; shift
+      done
+      cFg="${cFg#*;}"
+      cBg="${cBg#*;}"
+      printf "\x1b%s\x1b%s" "[38;5;${cFg}" "[48;5;${cBg}"
+      return 0;; # }}}
+    *)  name="$1";;
+    esac; shift
+  done # }}}
+  [[ ! -z $name ]] || return 1
+  if ! declare -p COLORS >/dev/null 2>&1 || ! declare -p colorCache >/dev/null 2>&1; then # {{{
+    echoe $verbose "colors not generated"
+    return 0
+  fi # }}}
+  __get-color $name 1
+} # }}}
+color-cache-init() { # {{{
+  local colorsBasic="off black red green yellow blue purple magenta cyan white gold gray hl-search:CHLSearch gold-orig:CGoldOrig"
+  declare -Ag COLORS=()
+  declare -Ag colorCache=()
+  ! declare -p colorMap >/dev/null 2>&1 && declare -Ag colorMap
+  local verbose=${COLORS_VERBOSE:-false}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -v) verbose=true;;
+    *) break;;
+    esac; shift
+  done # }}}
+  local i= v=
+  for i in $colorsBasic; do # {{{
+    if [[ $i == *:* ]]; then
+      v=${i#*:}
+      i=${i%%:*}
+    else
+      v="C${i^}"
+    fi
+    [[ ! -z ${!v} ]] || { echoe "cannot find color for $i"; continue; }
+    COLORS[$i]=${!v}
+  done # }}}
+  COLORS[err]="red"
+  COLORS[ok]="green"
+  COLORS[wrn]="purple"
+  COLORS[info]="gold-orig"
+  COLORS[i1]="info"
+  COLORS[i2]="cyan"
+  COLORS[imp]="hl-search"
+  COLORS[imp2]="gold"
+  COLORS[ip]="yellow"
+  COLORS[ts]="blue"
+  COLORS[file]="cyan"
+  COLORS[ticket]="cyan"
+  COLORS[grey]="gray"
+  for i in $(echo ${!C*} | grep "C[A-Z].\+"); do # {{{
+    v=${!i}
+    [[ $v == $'\e'* ]] || continue
+    colorCache[$i]=$v
+  done # }}}
+  for i in ${!COLORS[*]}; do # {{{
+    if [[ ! $i =~ [-] ]]; then
+      v=${!i}
+      [[ $v == $'\e'* ]] && colorCache[$i]=$v && continue
+    fi
+    colorCache[$i]=$(get-color $i)
+    [[ ! -z ${colorCache[$i]} ]] || echoe $verbose "color not found: $i"
+  done # }}}
+  (
+    declare -p COLORS | sed 's/.*\(COLORS\)=/declare -Ag \1=/'
+    declare -p colorCache | sed 's/.*\(colorCache\)=/declare -Ag \1=/'
+    echo "! declare -p colorMap >/dev/null 2>&1 && declare -Ag colorMap"
+  ) >$COLORS_FILE
+} # }}}
+color-list() { # {{{
+  local full=false
+  [[ $1 == --full ]] && full=true
+  (
+    [[ -s $COLORS_FILE ]] && source $COLORS_FILE
+    declare -p COLORS >/dev/null 2>&1 && echo "${!COLORS[*]}"
+    if declare -p colorCache >/dev/null 2>&1; then
+      if $full; then
+        echo "${!colorCache[*]}"
+      else
+        for i in ${!colorCache[*]}; do
+          [[ $i =~ ^C[A-Z].+ ]] || { echo "$i"; continue; }
+          [[ -z ${!i} ]] && echo "$i"
+        done
+      fi
+    fi
+    declare -p colorMap >/dev/null 2>&1 && echo "${!colorMap[*]}"
+  ) | tr ' ' '\n' | sed '/^ *$/d' | LC_COLLATE=C sort -u
+} # }}}
+cl() { # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    color-list
+    if [[ $3 != '-C' ]]; then
+      echo "- -- -C -f -F COLOR-space-STR COLOR:STR(space-added) COLOR::STR(no-space-added) --sep --no-nl"
+    fi
+    return 0
+  fi # }}}
+  if [[ $colorsOn != false && $COLORS_ON != false ]]; then # {{{
+    if [[ -e $COLORS_FILE ]]; then # {{{
+      source $COLORS_FILE
+    else
+      ! declare -p colorCache >/dev/null 2>&1 && declare -A -x colorCache
+      ! declare -p colorMap >/dev/null 2>&1 && declare -A -x colorMap
+      ! declare -p COLORS >/dev/null 2>&1 && declare -A -x COLORS
+    fi # }}}
+  fi # }}}
+  local coff=${colorCache[off]} cCurrent= verbose=false format=false asArray=false sep=" " addNl=true
+  [[ -z $coff ]] && coff=$(get-color off)
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -v) verbose=true;;
+    -f) format=true;;
+    -F) format=true; asArray=true;;
+    --no-nl) addNl=false;;
+    --sep) sep="$2"; shift;;
+    -C) # {{{
+      shift
+      cCurrent=$(get-color ${1%%:*}) || { $verbose && echo "Cannot find color for '${1%%:*}'" >/dev/stderr; }
+      ! $format && [[ $1 == *:* ]] && break;; # }}}
+    *) break;;
+    esac; shift
+  done # }}}
+  [[ -z $1 ]] && return 0
+  [[ $@ == '-' ]] && echo -n $coff && return 0
+  local out= cLast=
+  if $format; then # {{{
+    local str=
+    if $asArray; then # {{{
+      local c= cc=
+      mapfile -d' ' < <(echo -n "$1"); shift
+      for i in ${!MAPFILE[*]}; do # {{{
+        str="${MAPFILE[$i]}"
+        [[ $str == " " ]] && out+="$sep" && continue
+        if [[ $str != *%%* ]]; then
+          if [[ "$str" == *%*:%s* && "$str" =~ .*%([a-zA-Z][a-zA-Z0-9_-]*):%s.* ]]; then # Use pre-check based on wildcard for speed-up # {{{
+            c="${BASH_REMATCH[1]}"
+            cc="$(cl $c $1)"; shift
+            str="${str/\%$c:\%s/$cc}"
+            # }}}
+          elif [[ "$str" == *%*:* && "$str" =~ (.*)%([a-zA-Z][a-zA-Z0-9_-]*):([^%].*) ]]; then # Use pre-check based on wildcard for speed-up # {{{
+            local pre=${BASH_REMATCH[1]} substr="${BASH_REMATCH[3]}" rest=
+            if [[ "$substr" == '{'*'}'* ]]; then
+              rest="${substr#*\}}"
+              substr="${substr%%\}*}" && substr="${substr#\{}"
+            elif [[ "$substr" == '%s'* ]]; then
+              rest="${substr#\%s}"
+              substr="$1"; shift
+            fi
+            c="${BASH_REMATCH[2]}"
+            str="$pre$(cl $c "$substr")$cCurrent$rest"
+            # }}}
+          elif [[ $str == *"%s"* ]]; then # {{{
+            cc=$(cl $1 $2); shift; shift
+            str="${str/\%s/$cc}"
+          elif [[ ! -z $cCurrent ]]; then
+            str="$cCurrent$str"
+          fi # }}}
+        else
+          str="$(printf "${str/\%\%/\%}" "$1")"; shift
+        fi
+        out+="$str"
+      done # }}}
+      # }}}
+    else # {{{
+      out="$1"; shift
+      while [[ ! -z $1 ]]; do # {{{
+        str="$(cl $1 $2)"
+        out="${out/\%s/$str}"
+        shift; shift
+      done # }}}
+    fi # }}}
+    cLast= # }}}
+  else # {{{
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --) # {{{
+        out+="$sep"; shift;; # }}}
+      *) # {{{
+        local c= n= str=
+        case $1 in
+        *::*) # {{{
+          n="${1%%::*}" str="${1#*::}"
+          shift;; # }}}
+        *:*) # {{{
+          n="${1%%:*}" str="${1#*:}"
+          [[ ! -z $out ]] && str=" $str"
+          shift;; # }}}
+        *) # {{{
+          n="$1" str="$2"
+          shift; shift;; # }}}
+        esac
+        [[ -z "$str" ]] && continue
+        [[ $colorsOn == false || $COLORS_ON == false ]] && out+="$str" && continue
+        if [[ ! -z $n && $n != '-' ]]; then # {{{
+          if [[ ! -z ${colorMap[$n]} ]]; then
+            n=${colorMap[$n]}
+          fi
+          c="${colorCache[$n]}"
+          if [[ -z $c ]]; then
+            c=$(get-color $n) || { $verbose && echo "Cannot find color for '$n'" >/dev/stderr; }
+            colorCache[$n]="$c"
+          fi
+          cLast=$c # }}}
+        elif [[ ! -z $cCurrent || ! -z $cLast ]]; then # {{{
+          cLast=${cCurrent:-$coff}
+        fi # }}}
+        out+="$cLast$str"
+        ;; # }}}
+      esac
+    done # }}}
+  fi # }}}
+  [[ -z $out ]] && return
+  [[ ! -z $cLast && $cLast != $coff ]] && out+="$coff"
+  if $addNl; then
+    echo -e "$out"
+  else
+    echo -e -n "$out"
+  fi
+}
+complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic cl # }}}
+# cl wrappers # {{{
+printfc() { cl -F "$@"; }
+clf()     { cl -F "$@"; }
+echoc()   { cl -F "$@"; }
+# }}}
 # Env, cont. # {{{
 if [[ ! -e $COLORS_FILE ]]; then
-  touch $COLORS_FILE
-  declare -p COLORS >>$COLORS_FILE
-  echo "! declare -p colorsMap >/dev/null 2>&1 && declare -A -x colorsMap" >>$COLORS_FILE
-  color-cache-init -s
+  color-cache-init
   if which jq >/dev/null 2>&1; then
     (
       source $COLORS_FILE
@@ -511,7 +445,7 @@ if [[ ! -e $COLORS_FILE ]]; then
     ) | jq -n 'reduce inputs as $i ({}; . + { ($i): input })' >$COLORS_FILE.json
   fi
 fi # }}}
-export -f color-cache-init get-color cl printfc echoc
+export -f get-color color-cache-init color-list cl printfc echoc
 source $COLORS_FILE
 true
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
+import-module compl-short
+
 if [[ $1 == '@@' ]]; then # {{{
   if [[ $2 == --shorts ]]; then # {{{
     echo "!d -D --diff-ign"
@@ -17,7 +20,7 @@ if [[ $1 == '@@' ]]; then # {{{
     *\ --commit*)   echo "-b --bash";;
     *)
       echo "--help"
-      echo "-r --repos -R -b --bash --exit-on-fail --no-colors -D --diff-ign --plain +br"
+      echo "-r --repos -R -b --bash --exit-on-fail --no-colors -D --diff-ign --plain +br --stat-add-untracked"
       echo -l --{,no-}list
       echo --commit{,-all}
       echo --dump-rev{,-all}
@@ -47,6 +50,8 @@ dumpRevMaxCommits=6
 dumpRevSkipMasters=false
 dumpRevPlain=false
 dumpRevDumpDiff=true
+checkSubmodules=false
+statAddUntracked=false
 err=0
 exitOnFail=false
 findCommitAllBranches=false
@@ -100,7 +105,7 @@ while [[ ! -z $1 ]]; do # {{{
     shift;; # }}}
   -R)              repos=;;
   -b | --bash)     [[ -z $whatToDo ]] && whatToDo='run-bash'; wtd="$SHELL </dev/tty >/dev/tty 2>/dev/stderr"; echorm -; exitOnFail=true;;
-  -l | --list)     list=true;;
+  -l | --list)     list=true; [[ -z $whatToDo ]] && whatToDo='list';;
   +br)             list=true; list_addBranch=true; whatToDo='dump-rev';;
   --no-list)       list=false;;
   --no-colors)     colors=false;;
@@ -122,6 +127,7 @@ while [[ ! -z $1 ]]; do # {{{
   --base)          dumpRevBaseBranch=$2; shift;;
   --max-commits)   dumpRevMaxCommits=$2; shift;;
   --diff-ign)      dumpRevDumpDiff=false;;
+  --stat-add-untracked) statAddUntracked=true;;
   --commit-all)    findCommitAllBranches=true;&
   --commit)        whatToDo='find-commit'; findCommitRegEx="$2"; shift; [[ ! -z $2 ]] && findCommitDo=true;;
   -s)              echorm -;;
@@ -139,19 +145,21 @@ if [[ -z $repos ]]; then # {{{
   cmd=
   cmd+="find . "
   if ! $all; then
-    for i in $REPO_EXCLUDE_SEARCH_PATH; do
+    for i in $REPO_EXCLUDE_SEARCH_PATH './build-*' './.repo'; do
       cmd+="-path '$i' -prune -o "
     done
     [[ ! -z $REPO_BROWSE_PATH_EXTRA ]] && cmd+="-path '*/$REPO_BROWSE_PATH_EXTRA/*' -prune -o "
   fi
   cmd+="-type d -name .git -exec dirname {} \;"
   repos="$(eval $cmd | sort)"
-  smod=
-  for i in $repos; do # {{{
-    pushd $i &>/dev/null
-    smod+="$(git submodule status | awk '!/^-/ { print $2}' | sed 's|^|'$i/'|')"
-    popd &>/dev/null
-  done # }}}
+  if $checkSubmodules; then
+    smod=
+    for i in $repos; do # {{{
+      pushd $i &>/dev/null
+      smod+="$(git submodule status | awk '!/^-/ { print $2}' | sed 's|^|'$i/'|')"
+      popd &>/dev/null
+    done # }}}
+  fi
   repos="$( ( echo "$repos"; echo "$smod" ) | sort)"
 fi # }}}
 if $list; then # {{{
@@ -191,7 +199,12 @@ for repo in $repos; do # {{{
       fi # }}}
     fi;; # }}}
   dump-rev | '') # {{{
-    isClean=false stat="$(git status --short)"
+    isClean=false
+    if $statAddUntracked; then
+      stat="$(git status --short)"
+    else
+      stat="$(git status --short | grep -v "^??")"
+    fi
     br="$(git rev-parse --abbrev-ref HEAD)"
     sha="$(git log -1 --pretty=%h)"
     if [[ $br == 'HEAD'* ]]; then # {{{
@@ -250,9 +263,9 @@ for repo in $repos; do # {{{
             cat -
           fi
           i=
-          branchesMaster="m/master master"
-          branchesMasterOth=$({ git br; git tag; } | sed 's/^[ *]*//' | grep "^b/master/" | sort -r | head -n5)
-          branchesSprint=$(git br -a | sed 's|^ *remotes/||' | grep "sprint_[0-9]\{2,4\}$" | sort -t '_' -k2,2rn | head -n10)
+          branchesMaster="master $REPO_BRANCHES_MASTER"
+          branchesMasterOth= # $({ git branch; git tag; } | sed 's/^[ *]*//' | grep "^b/master/" | sort -r | head -n5)
+          branchesSprint=$(git branch -a | sed -n -e 's|^ *remotes/||' -e '/[0-9]\{2\}Q[0-9]_sprint/p' | head -n10)
           tags=$(git tag | grep "tmp/b-*")
           for ii in $branchesMaster $branchesMasterOth $branchesSprint $tags; do
             ! git merge-base --is-ancestor $ii $br 2>/dev/null && continue
@@ -261,8 +274,9 @@ for repo in $repos; do # {{{
             fi
           done
           found=false
-          for i in $i $dumpRevBaseBranch m/master master; do # {{{
+          for i in $i $dumpRevBaseBranch $branchesMaster; do # {{{
             if git merge-base --is-ancestor $i $br 2>/dev/null; then
+              found=true
               oneLess=
               ! $dumpRevPlain && oneLess='~'
               if [[ $i != $br || ! -z $oneLess ]]; then
@@ -285,7 +299,6 @@ for repo in $repos; do # {{{
                   echo "# Diff # $mE"
                 fi # }}}
               fi
-              found=true
               break
             fi
           done # }}}

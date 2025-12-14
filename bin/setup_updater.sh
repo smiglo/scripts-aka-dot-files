@@ -9,8 +9,9 @@ forced=false
 ask=true
 do_install=false
 currentTime=0
+import-module mutex-init mutex-locking
+import-module echor
 # }}}
-! declare -f echorm >/dev/null 2>&1 && [[ -e $ECHOR_PATH/echor ]] && source $ECHOR_PATH/echor
 # Functions # {{{
 if ! declare -f epochSeconds >/dev/null 2>&1; then # {{{
   epochSeconds() {
@@ -46,7 +47,7 @@ checkTime() { # {{{
     [[ "$(date +%Y%m%d)" == "$lastMod" ]] && return 1
     if $ask; then
       local msg="$(echor --colors=force -1 "Update repos [Yn]")"
-      $ALIASES progress --wait 5s --key --no-err --msg "$msg" --out /dev/stderr || return 1
+      progress --wait 5s --key --no-err --msg "$msg" --out /dev/stderr || return 1
     fi
   else
     source $DATE_FILE

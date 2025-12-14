@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-tm() { # @@ # {{{
-  $ALIASES_SCRIPTS/tmux/tm.sh "$@"
-}
-export -f tm # }}}
 tmux-progress() { # @@ # {{{
   [[ ! -n $TMUX ]] && return
   $HOME/.tmux.bash progress_bar "$@"
@@ -13,10 +9,7 @@ tmux-lock-toggle() { # {{{
   [[ ! -n $TMUX ]] && return
   $HOME/.tmux.bash lock_toggle --ssh $@
 } # }}}
-tmux-popup() { # @@ # {{{
-  $ALIASES_SCRIPTS/tmux/tmux-popup.sh "$@"
-} # }}}
-export -f tm tmux-progress tmux-lock-toggle tmux-popup
+export -f tmux-progress tmux-lock-toggle
 
-export PHISTORY_IGNORED_COMMANDS+=":tm:tmux-progress:tmux-lock-toggle:tmux-popup"
+export PHISTORY_IGNORED_COMMANDS+=":tm:tmux-progress:tmux-lock-toggle"
 

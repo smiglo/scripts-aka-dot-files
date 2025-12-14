@@ -1,15 +1,18 @@
 $include /etc/inputrc
 
 set bell-style none
+set blink-matching-paren on
+set colored-completion-prefix on
 set colored-stats on
 set completion-ignore-case on
 set completion-map-case on
 set completion-prefix-display-length 10
 set expand-tilde off
+set keyseq-timeout 200
 set mark-directories on
-set mark-symlinked-directories on
+set mark-symlinked-directories off
+set match-hidden-files off
 set menu-complete-display-prefix on
-
 set show-all-if-ambiguous on
 set show-all-if-unmodified on
 set skip-completed-text on
@@ -19,81 +22,74 @@ set show-mode-in-prompt on
 set vi-ins-mode-string "\1\e[0;33m\2☯ \1\e[0m\2"
 set vi-cmd-mode-string "\1\e[0;34m\2☯ \1\e[0m\2"
 set emacs-mode-string  "\1\e[0;31m\2☯ \1\e[0m\2"
-set colored-completion-prefix on
 # ---
 
-set keyseq-timeout 200
+set keymap emacs
+"JJ":       vi-editing-mode
+"\C-kV":    "JJJJ"
+"\e[1;5C":  forward-word
+"\e[1;5D":  backward-word
 
 set keymap vi-command
-"\e[5~":    history-search-backward
-"\M-k":     history-search-backward
-"\e[6~":    history-search-forward
-"\M-j":     history-search-forward
-"\e[Z":     complete
-"\C-k":     complete
-"\C-i":     menu-complete
-"\C-n":     menu-complete-backward
-"\C-h":     dynamic-complete-history
-"\M-.":     yank-last-arg
-"\C-s":     forward-search-history
-"\C-r":     reverse-search-history
-"\M-#":     insert-comment
-"\C-g":     kill-whole-line
-"\M-\M-":   kill-whole-line
-"\C-kk":    kill-whole-line
-"\C-ks":    clear-screen
-"\C-a":     beginning-of-line
-"\C-e":     end-of-line
-"\C-w":     backward-kill-word
-"\C-T":     transpose-chars
-"\C-t":     transpose-words
-"\C-km(":   start-kbd-macro
-"\C-km)":   end-kbd-macro
-"\C-km-":   print-last-kbd-macro
-"\C-kme":   call-last-kbd-macro
-"\C-k/":    edit-and-execute-command
-"\C-kE":    emacs-editing-mode
-"/":        reverse-search-history
-"K":        history-search-backward
-"J":        history-search-forward
+"#":        insert-comment
 ".":        yank-last-arg
+"/":        reverse-search-history
+"J":        history-search-forward
+"K":        history-search-backward
 "yl":       yank-last-arg
 "yn":       yank-nth-arg
-"\e-":      yank-nth-arg
-
-set keymap vi-insert
-"\e[5~":    history-search-backward
-"\M-k":     history-search-backward
-"\e[6~":    history-search-forward
-"\M-j":     history-search-forward
-"\e[Z":     complete
-"\C-k":     complete
-"	":        menu-complete
-"\C-b":     menu-complete-backward
-"\C-h":     dynamic-complete-history
-"\M-.":     yank-last-arg
-"\C-s":     forward-search-history
-"\C-r":     reverse-search-history
-"\M-#":     insert-comment
-"\C-g":     kill-whole-line
-"\M-\M-":   kill-whole-line
-"\C-kk":    kill-whole-line
-"\C-ks":    clear-screen
 "\C-a":     beginning-of-line
 "\C-e":     end-of-line
-"\C-w":     backward-kill-word
-"\C-T":     transpose-chars
-"\C-t":     transpose-words
-"\C-km(":   start-kbd-macro
-"\C-km)":   end-kbd-macro
-"\C-km-":   print-last-kbd-macro
-"\C-kme":   call-last-kbd-macro
-"\C-k/":    edit-and-execute-command
+"\C-g":     kill-whole-line
+"\C-h":     dynamic-complete-history
+# \C-i is TAB
+"\C-i":     menu-complete
 "\C-kE":    emacs-editing-mode
+"\C-k\C-k": edit-and-execute-command
+"\C-k\C-l": kill-whole-line
+"\C-ks":    clear-screen
+"\C-o":     menu-complete-backward
+"\C-s":     forward-search-history
+"\C-w":     backward-kill-word
+"\M-#":     insert-comment
+"\M-.":     yank-last-arg
+"\M-\M-":   kill-whole-line
+"\M-j":     history-search-forward
+"\M-k":     history-search-backward
+"\e3":      insert-comment
+"\e[5~":    history-search-backward
+"\e[6~":    history-search-forward
+"\e[":      vi-prev-word
+"\e]":      vi-next-word
+
+set keymap vi-insert
 "JJ":       vi-movement-mode
 "KK":       vi-movement-mode
-"\e[1;5C":  vi-next-word
-"\e[1;5D":  vi-prev-word
+# \C-i is TAB
+"\C-i":      menu-complete
+"\C-a":     beginning-of-line
+"\C-e":     end-of-line
+"\C-g":     kill-whole-line
+"\C-h":     dynamic-complete-history
+"\C-k":     vi-movement-mode
+"\C-kE":    emacs-editing-mode
+"\C-k\C-k": edit-and-execute-command
+"\C-k\C-l": kill-whole-line
+"\C-ks":    clear-screen
+"\C-o":     menu-complete-backward
+"\C-s":     forward-search-history
+"\C-w":     backward-kill-word
+"\M-#":     insert-comment
+"\M-.":     yank-last-arg
+"\M-j":     history-search-forward
+"\M-k":     history-search-backward
+"\e3":      insert-comment
+"\e[":      vi-prev-word
+"\e[5~":    history-search-backward
+"\e[6~":    history-search-forward
+# shift-tab
+"\e[Z":     menu-complete-backward
+"\e]":      vi-next-word
 
 set editing-mode vi
 set keymap vi-insert

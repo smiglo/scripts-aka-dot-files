@@ -69,10 +69,6 @@ parseFile() { # {{{
   done < <(cat "$in") >"$out"
 } # }}}
 
-! declare -F encryptor >/dev/null && source $HOME/.bashrc --do-basic
-[[ -z $VIM_ENC_DEFAULT_GUI_FILE ]] && source $BASH_PATH/runtime --force
-! declare -F encryptor >/dev/null && echo "The encryptor function not found" >/dev/stderr && exit 1
-
 in= out= removeOut=true edit= otherFiles= addHeader= plain= pattern= batchMode=false copy=false fromNote=false gui=false vimGuiCmd="gvim" isGui=
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -136,7 +132,7 @@ fi # }}}
 if $copy; then # {{{
   [[ -z $pattern ]] && exit 1
   v="$(cat "$in" | $0 | sed -n '/^'$pattern': */s/'$pattern': *//p')"
-  [[ ! -z "$v" ]] && echo "$v" | { [[ -t 1 ]] && ccopy || cat -; }
+  [[ ! -z "$v" ]] && echo "$v" | { if [[ -t 1 ]]; then xclip --put; else cat -; fi; }
   exit 0
   # }}}
 elif $gui; then # {{{

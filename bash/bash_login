@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 
-[ -f $HOME/.bashrc ] && source $HOME/.bashrc --do-min
+[[ -f $HOME/.bashrc ]] || return
+if [[ -e $HOME/.runtime/bashrc/bashrc.initialized && ( -z $SSH_CONNECTION || -n $TMUX ) ]]; then
+  source $HOME/.bashrc --do-basic
+else
+  source $HOME/.bashrc --do-full
+fi
 

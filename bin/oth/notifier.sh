@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+at=
+description=
+bell_cmd=
 bell_cnt=
 bell_sleep=
 margin='A'
 loop=
 log_file="$BASHRC_RUNTIME_PATH/at.log"
 data_file="$BASHRC_RUNTIME_PATH/at.dat"
+delegate=${NOTIFIER_DELEGATE:-false}
+delegate_cmd="${NOTIFIER_DELEGATE_CMD:-$SCRIPT_PATH/bin/reminder.sh}"
 dbg_level="D"
-bell_cmd=
+sleep_time_1=$((60 * 60))
+sleep_time_2=$(( 5 * 60))
+sleep_time_3=$(( 1 * 60))
+delta=30
 days=
 declare -a days_active=( # {{{
   [0]=false
@@ -35,13 +43,14 @@ if [[ $1 == '@@' ]]; then # {{{
   -d) echo "1 10 15";;
   -m) echo "10 15 30 A";;
   --cmd) echo "CMD";;
+  --descr) echo "DESCRIPTION";;
   --days) # {{{
     echo "mon tue wed thu fri sat sun mon-fri wed,fri"
     echo "1 2 3 4 5 6 7 1-5 3,5"
     echo "every work"
     ;; # }}}
   *)
-    echo "-c -d -m --cmd --popup --days --list -k --kill --load --log-tail --log-cat --loop -l --no-loop --list"
+    echo "-c -d -m --cmd --popup --silent --days --list -k --kill --load --log-tail --log-cat --repeat -r --single --list --descr"
     echo "12:00 15m";;
   esac
   exit 0
@@ -54,39 +63,51 @@ timeToWakeUp() { # {{{
   local at=$1
   local day=$(date +%w)
   local at_s=$(date +%s -d "$at") now_s=$(getNow)
-  if [[ $at_s -le $now_s ]] || ! ${days_active[day]}; then
+  if (( $at_s <= $now_s )) || ! ${days_active[day]}; then
     day=$(((day + 1) % 7))
     while ! ${days_active[day]}; do day=$(( (day + 1) % 7)); done
     at_s=$(date +%s -d "$at ${days_name[day]}")
-    [[ $at_s -gt $now_s ]] || at_s=$(date +%s -d "$at next week")
+    (( $at_s > $now_s )) || at_s=$(date +%s -d "$at next week")
   fi
   local m=$margin
   [[ $m == 'A' ]] && m=$((bell_cnt * bell_sleep))
-  echo "$((at_s - now_s - m)) $((at_s - m))"
+  echo "$((at_s - now_s - m)) $((at_s - m)) $at_s"
 } # }}}
 wakeUpThread() { # {{{
-  local at=$1 wake_in= wake_at= now_s= delta=30 sleep_time_1=$((60 * 60)) sleep_time_2=$((5 * 60))
+  local at=$1 wake_in= wake_at= wake_at_exact= now_s=
   dbg --init -v=$dbg_level --ts-abs --out=$log_file --name="at[$at/$BASHPID]" --id=show
-  dbg I "cfg: ($bell_cnt,$bell_sleep,$margin,$loop,$days)"
+  dbg I "cfg: ($bell_cnt,$bell_sleep,$margin,$loop,$days), cmd=$bell_cmd"
   while true; do
-    read wake_in wake_at <<<$(timeToWakeUp $at)
+    read wake_in wake_at wake_at_exact < <(timeToWakeUp $at)
+    if $delegate; then
+      dbg I "delegating: ${wake_at_exact}s"
+      $delegate_cmd -s add $wake_at_exact "${description:-@notifier}"
+    fi
     dbg I "next bell in ${wake_in}s (${wake_at}s), sleep at $(getNow)s"
-    for sleep_time in $sleep_time_1 $sleep_time_2; do
+    for sleep_time in $sleep_time_1 $sleep_time_2 $sleep_time_3; do
       while true; do
-        [[ $(getNow) -lt $((wake_at - sleep_time - 60)) ]] || break
+        (( $(getNow) < $((wake_at - sleep_time - 60)) )) || break
         sleep $sleep_time
-        dbg D "hearbeat (every ${sleep_time}s)..."
+        dbg D "heartbeat (every ${sleep_time}s)..."
       done
     done
-    if [[ $(getNow) -lt $((wake_at - 5)) ]]; then
-      read wake_in wake_at <<<$(timeToWakeUp $at)
-      dbg D "reaching to bell: ${wake_in}s (${wake_at}s)"
-      sleep $wake_in
-    fi
     now_s=$(getNow)
+    if (( now_s < wake_at - 1 )); then
+      dbg D "reaching to bell: $((wake_at - now_s))s (${wake_at}s), now: ${now_s}s"
+      sleep_s=10
+      while (( now_s < wake_at - 1 )); do
+        if false; then :
+        elif (( wake_at - now_s < 20 )); then sleep_s=1
+        elif (( wake_at - now_s < 40 )); then sleep_s=2
+        elif (( wake_at - now_s < 60 )); then sleep_s=5
+        fi
+        sleep $sleep_s
+        now_s=$(getNow)
+      done
+    fi
     dbg I "woken up at ${now_s}s : ${wake_at}s"
-    if [[ $now_s -lt $((wake_at + delta)) ]]; then
-      [[ $now_s -lt $((wake_at + 10)) ]] || dbg W "a little to late"
+    if (( now_s < wake_at + delta )); then
+      (( now_s < wake_at + 10 )) || dbg W "a little to late"
       for ((i=0; i<bell_cnt; i++)); do
         sleep-precise -s
         dbg I "bell"
@@ -103,21 +124,29 @@ wakeUpThread() { # {{{
   sed -i -e '/'"^$BASHPID"' /d' $data_file
 } # }}}
 
+import-module time2s time-tools
+import-module dbgF dbg
+
 [[ -z $1 ]] && set -- --list
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   -c) bell_cnt=$2; shift;;
   -d) bell_sleep=$2; shift;;
   -m) margin=$2; shift;;
-  -l | --loop) loop=true;;
-  --no-loop) loop=false;;
+  -r | --repeat) loop=true;;
+  --single) loop=false;;
+  --descr) description=$2; shift;;
   --popup) # {{{
     bell_cmd="tmux-popup --title notifier eval echo \"\$(date +$TIME_FMT): $2\" # @C @-W"; shift
-    [[ -z $bell_cnt ]] && bell_cnt=1
+    bell_cnt=1
     [[ -z $bell_sleep ]] && bell_sleep=0;; # }}}
   --cmd) # {{{
     bell_cmd="$2"; shift
     [[ -z $bell_cnt ]] && bell_cnt=1
+    [[ -z $bell_sleep ]] && bell_sleep=0;; # }}}
+  --silent) # {{{
+    bell_cmd=true
+    bell_cnt=1
     [[ -z $bell_sleep ]] && bell_sleep=0;; # }}}
   --days) # {{{
     days="${2,,}"; shift
@@ -173,10 +202,10 @@ while [[ ! -z $1 ]]; do # {{{
       cat $data_file \
       | while read -r pid at loop bell_cnt bell_sleep margin days; do
         map_days
-        read wake_in wake_at <<<$(timeToWakeUp $at)
-        line="$at / $wake_in $wake_at / $pid : ($bell_cnt,$bell_sleep,$([[ $margin != 'A' ]] && echo "$margin,")$($loop && echo "L,")$days)"
+        read wake_in wake_at wake_at_exact < <(timeToWakeUp $at)
+        line="$(printf "%-8s" $at) / $(printf "%6d" $wake_in) $(printf "%10d" $wake_at_exact) / $(printf "%5d" $pid)$($loop && echo " / $days")"
         if ! echo "$pids" | grep -q "^\s*$pid\s*$"; then
-          echor "GONE: $line"
+          echoe -w "GONE: $line"
           sed -i -e '/'"^$pid"' /d' $data_file
           continue
         fi
@@ -190,9 +219,13 @@ while [[ ! -z $1 ]]; do # {{{
       echo "$list" \
       | fzf --prompt 'to stop> ' \
       | while read -r p; do
-        pid=$(echo $p | awk '{print $6}')
-        echor "killing: $(echo $p | awk '{print $1}') pid:$pid"
+        pid=$(echo "$p" | awk '{print $6}')
+        echoe -w "killing: $(echo $p | awk '{print $1}') pid:$pid"
         kill-rec -9 $pid
+        if $delegate; then
+          wake_at_exact=$(echo "$p" | awk '{print $4}')
+          $delegate_cmd -s clean $wake_at_exact
+        fi
         sed -i -e '/'"^$pid"' /d' $data_file
       done;; # }}}
     esac

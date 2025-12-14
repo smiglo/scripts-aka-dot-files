@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-installInfoDir=$HOME/.config/docker-post
+export installInfoDir=$HOME/.config/docker-post
 scriptsPath="$(realpath "$(dirname "$(readlink -f "$0")")/../../..")"
 source /etc/docker-ubu.conf
 export PATH="$HOME/.local/bin:$PATH"
@@ -18,9 +18,8 @@ done # }}}
 [[ -e $installInfoDir/all-installed ]] && exit 0
 doInstall() { # {{{
   local ret=0 file=$installInfoDir/$1
-  [[ -e $file ]] && ret=1
+  [[ ! -e $file ]] || return 1
   touch $file
-  return $ret
 } # }}}
 export -f doInstall
 if doInstall 'pwd'; then # {{{
@@ -31,7 +30,6 @@ fi # }}}
 if doInstall 'basic'; then # {{{
   echo "Installing: basic" >/dev/stderr
   $scriptsPath/bin/mk_install_scripts.sh -p - --all-yes --no-exec || { rm -f $installInfoDir/basic; echo "basic: installation failed" >/dev/stderr; exit 1; }
-  ln -sf $scriptsPath/bash/inits/ubu-docker/runtime-docker.bash $HOME/.runtime/
 fi # }}}
 if doInstall 'tmux-fingers'; then # {{{
   mkdir -p $HOME/.tmux/plugins

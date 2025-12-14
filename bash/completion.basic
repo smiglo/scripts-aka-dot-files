@@ -3,39 +3,63 @@
 
 export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
 compl-add() { # {{{
-  local i=
-  for i; do
-    complete -r $i >/dev/null 2>&1
-    complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $i
+  local i= f=
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -f)         f="$2"; shift;;
+    -n | --new) f="compl-gen";;
+    -o | --old) f="_completion_generic";;
+    -s | --smart) f="compl-smart";;
+    *) break;;
+    esac; shift
   done
-}
-# }}}
+  for i; do
+    local ff=$f
+    if [[ -z $ff ]]; then
+      ff="_completion_generic"
+      if [[ " $COMPLETION_USE_NEW " == *" $i "* ]]; then
+        ff="compl-gen"
+      elif declare -F $i >/dev/null 2>&1  && type $i | grep -qE "# (@-@|@@:new)"; then
+        ff="compl-gen"
+      elif which $i >/dev/null 2>&1 && grep -qE "# (@-@|@@:new)" "$(which $i)"; then
+        ff="compl-gen"
+      fi
+    fi
+    complete -r $i >/dev/null 2>&1
+    complete $COMPLETE_DEFAULT_PARAMS -F $ff $i
+  done
+} # }}}
 _completion_generic() { # {{{
-  local cur= prev= opts= cmd= _alias= param= i=
+  local cur= prev= opts= cmd= param= i= dbgOn=${COMPLETION_DBG:-false}
+  echoe $dbgOn
+  echoe $dbgOn -m compl-gen "$(declare -p COMP_WORDS)"
   cur=${COMP_WORDS[COMP_CWORD]}
   _get_comp_words_by_ref -n : cur
-  prev=${COMP_WORDS[COMP_CWORD-1]}
+  [[ $COMP_CWORD -gt 1 ]] && prev=${COMP_WORDS[COMP_CWORD - 1]}
   if [[ $1 == '--cmd' ]]; then
     shift
     cmd="$@"
   else
     cmd=${COMP_WORDS[0]}
-  fi
-  param="@@"
-  if [[ $cmd == 'git' || ( $cmd == 'g' && $(alias g 2>/dev/null) =~ 'git' ) ]]; then
-    cmd="git-cmds.sh"
-    param+="${COMP_WORDS[1]}"
-  else
-    _alias=$(alias | command grep "alias $cmd=")
-    if [[ $? == 0 ]]; then
-      _alias=$(echo $_alias | sed "s/alias $cmd=//")
-      cmd=${_alias//\'} #' //Vim formatting fixing}
-      cmd=${cmd/*;}
-      cmd=${cmd/ *}
+    local this_alias="${BASH_ALIASES[$cmd]}"
+    if [[ $cmd == 'git' || ( $cmd == 'g' && ${BASH_ALIASES[g]} == 'git' ) ]]; then
+      cmd="git-cmds.sh"
+      param="${COMP_WORDS[1]}"
+    elif [[ ! -z $this_alias ]]; then
+      if [[ $this_alias == $ALIASES_D/modules/* ]]; then
+        local module="${this_alias%% *}" cmd="${this_alias#* }"
+        import-module $cmd ${module##*/}
+      else
+        cmd="$this_alias"
+        [[ $cmd =~ ^set\ -[a-z]+\ *\;\ *(.*) ]] && cmd="${BASH_REMATCH[1]}"
+        cmd=${cmd%% *}
+      fi
     fi
   fi
-  ${COMPLETION_DBG:-false} && echor "c=[$cmd $param]"
-  opts="$($cmd $param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})"
+  export cur
+  echoe $dbgOn -m compl-gen "c=[$cmd @@$param], cur[$cur], prev[$prev], cnt[$COMP_CWORD]"
+  opts="$($cmd @@$param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})"
+  echoe $dbgOn -m compl-gen "opts=[$opts]"
   local flags=${-//[is]}
   set -f; set -- $(echo -e "$opts"); set +f -$flags
   opts=''
@@ -68,10 +92,228 @@ _completion_generic() { # {{{
   else
     COMPREPLY[0]=""
   fi
+  echoe $dbgOn -m compl-gen "$(declare -p COMPREPLY)"
   __ltrim_colon_completions "$cur"
-}
-# }}}
-export -f compl-add _completion_generic
+} # }}}
+_completion_git_cmds() { # {{{
+  local cur opts
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+  opts=
 
-source $SCRIPT_PATH/bash/completion.alias
+  if [ "$COMP_CWORD" == '1' ]; then
+    opts="backup remote-rm rbb"
+  else
+    local dir=$PWD
+    while [ ! -d "$dir/.git" ]; do
+      [ "$dir" == '/' ] && break
+      dir=$(cd $dir/.. && pwd)
+    done
+
+    case "${COMP_WORDS[1]}" in
+    "backup") ;;
+    "remote-rm") [ -d $dir/.git/refs/heads ] && opts=$(ls $dir/.git/refs/heads);;
+    "rbb") [ -d $dir/.git/refs/heads ] && opts=$(ls $dir/.git/refs/heads);;
+    esac
+  fi
+  COMPREPLY=( $(compgen -W "$opts" -- $cur) )
+} # }}}
+_completion_vim() { # {{{
+  COMPREPLY=()
+  local cmd=${COMP_WORDS[0]}
+  [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
+  _completion_generic
+} # }}}
+_completion_npm() { # {{{
+  COMPREPLY=()
+  local opts= cur=${COMP_WORDS[COMP_CWORD]}
+  [[ -e package.json ]] || return
+  if [[ $COMP_CWORD == 1 ]]; then
+    opts="${COMPLETION_STATIC[npm]}run test install i"
+  else
+    case ${COMP_WORDS[COMP_CWORD - 1]} in
+    run) opts="$(jq -r '.scripts | keys[]' package.json)";;
+    esac
+  fi
+  readarray -t COMPREPLY < <(compgen -W "$opts" -- $cur)
+} # }}}
+_completion_npx() { # {{{
+  COMPREPLY=()
+  local opts= cur=${COMP_WORDS[COMP_CWORD]}
+  [[ -e package.json ]] || return
+  if [[ $COMP_CWORD == 1 ]]; then
+    opts=( $(jq -r '.devDependencies | keys[] | select(startswith("@") | not)' package.json) )
+  else
+    opts=( ${COMPLETION_STATIC[npx_${COMP_WORDS[COMP_CWORD - 1]}]} )
+  fi
+  readarray -t COMPREPLY < <(compgen -W "$opts" -- $cur)
+} # }}}
+_completion_filenames() { # {{{
+    local cur="$1"
+    command grep -v -F -f <(compgen -d -P ^ -S '$' -- "$cur") <(compgen -f -P ^ -S '$' -- "$cur") | sed -e 's/^\^//' -e 's/\$$/ /'
+    compgen -d -S / -- "$cur"
+} # }}}
+compl-gen() { # {{{
+  local cur=${COMP_WORDS[COMP_CWORD]} cmd=${COMP_WORDS[0]} prev= param= dbgOn=${COMPLETION_DBG:-false}
+  echoe $dbgOn
+  echoe $dbgOn -m compl-new "$(declare -p COMP_WORDS)"
+  [[ $COMP_CWORD -gt 1 ]] && prev="${COMP_WORDS[COMP_CWORD - 1]}"
+  _get_comp_words_by_ref -n : cur
+  local this_alias="${BASH_ALIASES[$cmd]}"
+  if [[ $cmd == 'git' || ( $cmd == 'g' && ${BASH_ALIASES[g]} == 'git' ) ]]; then
+    cmd="git-cmds.sh"
+    param="${COMP_WORDS[1]}"
+  elif [[ ! -z $this_alias ]]; then
+    if [[ $this_alias == $ALIASES_D/modules/* ]]; then
+      local module="${this_alias%% *}" cmd="${this_alias#* }"
+      import-module $cmd ${module##*/}
+    else
+      cmd="${this_alias%% *}"
+    fi
+  fi
+  export cur
+  echoe $dbgOn -m compl-new "c=[$cmd @@$param], cur[$cur], prev[$prev], cnt[$COMP_CWORD]"
+  declare -a ret=( $($cmd @@$param "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) )
+  # eval $($cmd @@$param "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})
+  echoe $dbgOn -m compl-new "$(declare -p ret)"
+  COMPREPLY=()
+  case $ret in
+  @@-? | @@-?:*)
+    local dir="."
+    [[ $ret == *:* ]] && dir="${ret#*:}" && ret="${ret%%:*}"
+    case $ret in
+    @@-f) COMPREPLY=( $(builtin cd "$dir"; _completion_filenames "$cur") );;
+    @@-d) COMPREPLY=( $(builtin cd "$dir"; compgen -d -S '/' -- "$cur") );;
+    @@-*) COMPREPLY=( $(builtin cd "$dir"; compgen ${ret#@@-} -- "$cur") );;
+    esac;;
+  '---') COMPREPLY=( "" );;
+  *)
+    declare -a extra
+    local i=
+    for i in ${!ret[*]}; do
+      local v=${ret[$i]}
+      case $v in
+      @@-? | @@-?:*)
+        unset ret[$i]
+        local dir="."
+        [[ $v == *:* ]] && dir="${v#*:}" && v="${v%%:*}"
+        case $v in
+        @@-f) extra=( $(builtin cd "$dir"; _completion_filenames "$cur") );;
+        @@-d) extra=( $(builtin cd "$dir"; compgen -d -S '/' -- "$cur") );;
+        @@-*) extra=( $(builtin cd "$dir"; compgen ${v#@@-} -- "$cur") );;
+        esac;;
+      *)
+        ret[$i]="${v// /\\ }";;
+    esac
+    done
+    readarray -t COMPREPLY < <(compgen -W "${ret[*]}" -- $cur)
+    COMPREPLY=( "${COMPREPLY[@]}" "${extra[@]}" );;
+  esac
+  echoe $dbgOn -m compl-new "$(declare -p COMPREPLY)"
+  __ltrim_colon_completions "$cur"
+} # }}}
+compl-smart() { # {{{
+  local cur=${COMP_WORDS[COMP_CWORD]} cmd=${COMP_WORDS[0]} prev= param= dbgOn=${COMPLETION_DBG:-false}
+  echoe $dbgOn
+  echoe $dbgOn -m compl-smart "$(declare -p COMP_WORDS)"
+  [[ $COMP_CWORD -gt 1 ]] && prev=${COMP_WORDS[COMP_CWORD - 1]}
+  _get_comp_words_by_ref -n : cur
+  local this_alias="${BASH_ALIASES[$cmd]}"
+  [[ -z $this_alias ]] || cmd="${this_alias%% *}"
+  echoe $dbgOn -m compl-smart "c=[$cmd], cur[$cur], prev[$prev], cnt[$COMP_CWORD]"
+  local body=
+  if declare -F $cmd >/dev/null 2>&1; then
+    body=$(declare -f $cmd)
+  elif which $cmd >/dev/null 2>&1; then
+    body=$(cat $(which $cmd))
+  else
+    return 0
+  fi
+  # get the first 'while [[ ! -z $1 ]]; do ...; done' block, extract the most outer 'case ... esac' block and get all the cases from that block
+  body="$(echo "$body" \
+    | awk '
+      /^[[:space:]]*while \[\[ ! -z \$1 \]\]; do/ {
+          if (!in_block) {
+              in_block=1
+              level=1
+              print
+              next
+          }
+      }
+      in_block {
+          print
+          if (match($0, /[[:space:]]*while .* do/)) {
+              level++
+          }
+          if (match($0, /[[:space:]]*done/)) {
+              level--
+          }
+          if (level == 0) {
+              exit
+          }
+        }' \
+    | awk '
+      /case .* in/ {
+          level++
+          next
+      }
+      /esac/ {
+          level--
+          next
+      }
+      level == 1 && /\)/ {
+          sub(/^[[:space:]]+/, "")
+          sub(/\).*/, "")
+          gsub(/\|/, " ")
+          buffer = buffer " " $0
+      }
+      END {
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", buffer)
+          gsub(/[[:space:]]+/, " ", buffer)
+          print buffer
+      }')"
+  declare -a ret=( ${body//\*} )
+  COMPREPLY=()
+  echoe $dbgOn -m compl-smart "$(declare -p ret)"
+  local i=0 cg=
+  for i in ${!ret[*]}; do
+    cg="$(compgen -W "'${ret[i]//@_@/\\ }'" -- "$cur")"
+    [[ ! -z $cg ]] || continue
+    COMPREPLY+=( "$cg" )
+  done
+  echoe $dbgOn -m compl-smart "$(declare -p COMPREPLY)"
+  __ltrim_colon_completions "$cur"
+} # }}}
+compl-canonicalize() { # {{{
+  local short= long= args= argsOrig= keepDoubleDash=false verbose=0
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -l) # {{{
+      if [[ -z $long ]]; then
+        long="$2"; shift
+      else
+        argsOrig="$@"; break
+      fi;; # }}}
+    -s) # {{{
+      if [[ -z $short ]]; then
+        short="$2"; shift
+      else
+        argsOrig="$@"; break
+      fi;; # }}}
+    -v) ((++verbose));;
+    -vv) verbose=2;;
+    -k | --keep) keepDoubleDash=true;;
+    --) shift; argsOrig="$@"; break;;
+    *) argsOrig="$@"; break;;
+    esac; shift
+  done # }}}
+  is-installed --which getopt || { (( verbose >= 1 )) && echoe -f -c "err: not getopt"; echo "$argsOrig"; return 0; }
+  args="$( (( verbose >= 2 )) && set -xv; getopt -s bash -q -l "$long" -o "$short" -- $argsOrig)"
+  (( $? == 0 )) || { (( verbose >= 1 )) && echoe -f -c "err: args:[$argsOrig]"; echo "$argsOrig"; return 0; }
+  [[ $argsOrig == *' -- '* ]] && keepDoubleDash=true
+  $keepDoubleDash || { args=${args// -- / }; args=${args%--}; }
+  (( verbose >= 1 )) && echoe -f -c "parsed: [$args]"
+  echo "$args"
+} # }}}
+export -f compl-add _completion_generic compl-gen compl-canonicalize
 

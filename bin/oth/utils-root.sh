@@ -4,7 +4,9 @@
 ret= c=$1
 shift
 ask() { # {{{
-  [[ $1 == '-y' ]] && return 0
+  case ${1,,} in
+  y | -y) return 0
+  esac
   local k=
   if ! read -t5 -p "$1 [NY] ? " k; then
     echo; return 2
@@ -23,7 +25,9 @@ resolv) # {{{
   vim /etc/resolv.conf </dev/tty >/dev/tty;; # }}}
 reboot) # @@: -y # {{{
   if ask $1 'Reboot'; then
-    if [[ -e /usr/sbin/reboot.ask ]]; then
+    if $IS_WSL; then
+      shutdown.exe /r /t 0 /f
+    elif [[ -e /usr/sbin/reboot.ask ]]; then
       /usr/sbin/reboot.ask
     elif [[ -e /usr/sbin/reboot ]]; then 
       /usr/sbin/reboot
@@ -34,10 +38,16 @@ reboot) # @@: -y # {{{
     fi
   fi;; # }}}
 suspend) # {{{
-  systemctl suspend;; # }}}
+  if $IS_WSL; then
+    shutdown.exe /h /f
+  else
+    systemctl suspend
+  fi ;; # }}}
 shutdown) # @@: -y # {{{
   if ask $1 'Shutdown'; then
-    if [[ -e /usr/sbin/shutdown.ask ]]; then
+    if $IS_WSL; then
+      shutdown.exe /s /hybrid /t 0 /f
+    elif [[ -e /usr/sbin/shutdown.ask ]]; then
       /usr/sbin/shutdown.ask now
     elif [[ -e /usr/sbin/shutdown ]]; then
       /usr/sbin/shutdown now

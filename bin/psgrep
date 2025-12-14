@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+psgrep() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -K | -k)
+      echo "-9 -2 -6";;
+    -o)
+      echo "pid,cmd pid,user,start,cmd cmd";;
+    -P)
+      ps x -o pid=,command= \
+      | sed -e '/ -bash/d' -e '/ bash /s/ bash / /' | awk '{print $1}' \
+      | xargs ps -o comm= -p | sed 's|.*/||' | sort -u \
+      | while read l; do printf "%q\n" "$l"; done;;
+    q)
+      echo "query"; tty | sed 's|/dev/||';;
+    *)
+      echo "-a -o -K -k -P -s -k9 -K9 -f -1 -p -F -l --loop --list --fzf -q ."
+      ! $IS_MAC && echo "-t --tree"
+      local params="xh -o pid,ppid,cmd"
+      $IS_MAC && params="x -o pid=,ppid=,command="
+      local thisPid="$$"
+      local list="$(COLUMNS=999; ps $params)"
+      list="$(echo "$list" | command grep -v "$thisPid")"
+      list="$(echo "$list" | awk '{print $3,$4}' | sed -e '/^-bash/d' -e 's,^\(/.*/\)\?\(bash\|sh\)\s\+,,' | awk '{print $1}' | sed 's|^/.*/||' | sort -u)"
+      list="$(echo "$list" | sed 's/[^a-zA-Z0-9_.-]//g')"
+      $IS_MAC && list="$(echo "$list" | command grep -v "^[A-Z]\|com\.")"
+      [[ ! -z $PSGREP_EXCLUDE ]] && list="$(echo "$list" | grep -v -E "$PSGREP_EXCLUDE")"
+      echo "$list" | grep -v "psgrep\.sh"
+      echo "PHRASE";;
+    esac
+    return 0
+  fi # }}}
+  local phrase= i= mode='all' process= psParams="xh" psColumns="-o pid,ppid,start,tty,cmd" sigkill="-3" useFzf= listAfterKill=${PSGREP_LIST_AFTER_K:-true} fullPath=false isStdout=true printPidOnly=false loop=
+  local query=
+  $IS_MAC && psParams="x" && psColumns="-o pid=,ppid=,start=,tty=,command="
+  [[ -z $1 ]] && loop=true || loop=false
+  [[ -t 1 ]] || isStdout=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    .)      query="$(tty)"; query="${query#/dev/}"; loop=true;;
+    -f)     printPidOnly=false;;
+    -p |-1) printPidOnly=true;;
+    -a)     psParams="a$psParams";;
+    -o)     psColumns="-o $2"; shift;;
+    -F)     fullPath=true;;
+    --list) useFzf=false;;
+    --fzf)  useFzf=true;;
+    -l | --loop) loop=true;;
+    -k | -K | -k9 | -K9) # {{{
+      case $1 in
+      -k | -k9) mode='kill-fzf';;
+      -K | -K9) mode='kill';;
+      esac
+      case $1 in
+      -k9 | -K9) sigkill="-9";;
+      *) [[ $2 =~ ^-[0-9]+$ ]] && sigkill=$2 && shift;;
+      esac;; # }}}
+    -t | --tree) # {{{
+      $IS_MAC && eval $(die "tree not supported on OS/X")
+      ps $psParams --forest | { if is-installed grcat; then grcat conf.ps; else /bin/cat -; fi; }
+      return;; # }}}
+    -s)   listAfterKill=false;;
+    -P)   process+=" $2"; shift;;
+    -q)   query="$2"; shift;;
+    *)    process+=" $1";;
+    esac; shift
+  done # }}}
+  if [[ -z $useFzf ]]; then # {{{
+    [[ -t 1 ]] && useFzf=true || useFzf=false
+  fi # }}}
+  getProccesses() { # {{{
+    local list=
+    list="$(COLUMNS=999; command ps $psParams $psColumns)"
+    list="$(echo "$list" | command grep -v "$thisPid\|$((thisPid + 1))\|psgrep\.sh")"
+    echo "$list"
+  } # }}}
+  export psColumns
+  export fzf_key_kill='ctrl-t' fzf_key_kill_9='ctrl-f' fzf_key_pid='ctrl-p' fzf_key_refresh='ctrl-r' empty_loop=
+  fzf_preview() { # {{{
+    printf "%s: %s\n" "$fzf_key_kill"     "kill"
+    printf "%s: %s\n" "$fzf_key_kill_9"   "kill -9"
+    printf "%s: %s\n" "$fzf_key_pid"      "print pid only"
+    printf "%s: %s\n" "$fzf_key_refresh"  "refresh list"
+    printf "\n"
+    command ps $psColumns -p "$1" | if is-installed -w grcat; then grcat conf.ps; else /bin/cat -; fi
+  } # }}}
+  export -f fzf_preview
+  local thisPid="$$" key=
+  while true; do
+    local list="$(getProccesses)"
+    empty_loop=true
+    for i in ${process:-^}; do
+      local matches=$(echo "$list" | command grep -iE "$i") res=
+      matches="$(echo "$matches" | command grep -v -e "\s-\?\(bash\|sh\)$")" # ignore login shells
+      matches="$(echo "$matches" | sed -e 's,\(bash\|sh\)\s\+/,/,')" # simplify calling convention: bash /script
+      [[ ! -z $matches ]] || continue
+      matches="$(echo "$matches" \
+        | { if ! $fullPath; then sed -e 's,'"$HOME"'/[^ ]*/\([^ ]*\.sh\),~/.../\1,g'; else /bin/cat -; fi; } \
+        | sed -e 's,'"$HOME"',~,g' \
+        | { if ( $isStdout || $useFzf ) && is-installed -w grcat; then grcat conf.ps; else /bin/cat -; fi; })"
+      empty_loop=false
+      case $mode in
+      all) # {{{
+        if $useFzf; then
+          declare -a resA
+          readarray -t resA < <(\
+            echo "$matches" \
+            | fzf \
+                --ansi --multi --prompt "> " \
+                --preview "fzf_preview {1}" \
+                $([[ ! -z $query ]] && echo "--query=$query") \
+                --print-query \
+                --expect $fzf_key_kill \
+                --expect $fzf_key_kill_9 \
+                --expect $fzf_key_pid \
+                --expect $fzf_key_refresh)
+          [[ $? == 0 ]] || break 2
+          query=${resA[0]}
+          key="${resA[1]}"
+          res="$(printf "%s\n" "${resA[@]:2}")"
+          [[ ! -z $res ]] || break 2
+          case $key in
+          $fzf_key_kill | \
+          $fzf_key_kill_9)
+            case $key in
+            $fzf_key_kill_9) sigkill="-9";;
+            esac
+            echo "$res" | awk '{print $1}' | xargs -r kill $sigkill;;
+          $fzf_key_pid)     echo "$res" | awk '{print $1}';;
+          $fzf_key_refresh) continue 2;;
+          '')
+            command ps $psColumns -p "$(echo "$res" | awk '{print $1}' | xargs)"
+            break 2;;
+          esac
+        else
+          echo "$matches" | { if $printPidOnly; then awk '{print $1}'; else /bin/cat -; fi; }
+        fi;; # }}}
+      kill | kill-fzf) # {{{
+        case $mode in
+        kill-fzf) matches=$(echo "$matches" | fzf --ansi -0 --prompt "kill $sigkill > ");;
+        esac
+        [[ ! -z $matches ]] || break
+        echo "$matches" | awk '{print $1}' | xargs -r kill $sigkill
+        if $listAfterKill; then
+          echoe -w "after kill:"
+          psgrep -l $i | sed 's/^/  /'
+        fi;; # }}}
+      esac
+    done
+    $loop || break
+    $empty_loop && break
+  done
+  return 0
+}
+# }}}
+psgrep "$@"
+
+

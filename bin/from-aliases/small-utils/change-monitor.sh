@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
+import-module progress-dot progress
+
 _change-monitor() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in

@@ -7,16 +7,20 @@ __xclip() { # {{{
   if [[ -z $mode ]] || $doSet; then # {{{
     export CLIP_CMD_PUT=
     export CLIP_CMD_GET=
-    if $IS_DOCKER; then # {{{
-      mode='docker' # }}}
-    elif which xclip >/dev/null 2>&1;then # {{{
+    if $IS_VIRTUAL_OS; then # {{{
+      mode='virtos'
+      if $IS_WSL; then
+        CLIP_CMD_PUT="clip.exe"
+        CLIP_CMD_GET="powershell.exe -noprofile Get-Clipboar | sed 's/\s*$//d | sed -z 's/\s*\r\?\n$/\n/''"
+      fi # }}}
+    elif is-installed -w xclip >/dev/null 2>&1;then # {{{
       mode='xclip'
       CLIP_CMD_PUT="command xclip -in -selection clipboard"
       CLIP_CMD_GET="command xclip -out -selection clipboard" # }}}
-    elif $IS_MAC && which pbcopy >/dev/null 2>&1; then # {{{
+    elif $IS_MAC && is-installed -w pbcopy >/dev/null 2>&1; then # {{{
       mode='pbcopy'
       export CLIP_REATTACH=
-      which reattach-to-user-namespace >/dev/null 2>&1 && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
+      is-installed -w reattach-to-user-namespace >/dev/null 2>&1 && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
       CLIP_CMD_PUT="$CLIP_REATTACH pbcopy"
       CLIP_CMD_GET="$CLIP_REATTACH pbpaste" # }}}
     elif [[ -n $TMUX ]]; then # {{{
@@ -39,7 +43,7 @@ __xclip() { # {{{
     $doSet && return
   fi # }}}
   if [[ -z $DISPLAY && $mode == "xclip" ]]; then
-    export DISPLAY="$(w | awk '/'"$USER"'/ {print $3}' | command grep "^:" | head -n1)"
+    export DISPLAY="$(who | awk '/'"$USER"'/ {print $2}' | command grep "^:" | head -n1)"
   fi
   local tmuxP=
   [[ -n $TMUX ]] || tmuxP="-S ${TMUX_TMPDIR:-$HOME/.tmux/socket}/tmux-$UID/default"
@@ -53,7 +57,7 @@ __xclip() { # {{{
       *) f=$1;;
       esac; shift
     done
-    command cat $f | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    command cat $f | sed 's/\s*$//' | sed -z 's/\n$//' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
     tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
     $updateClipFileOnPut && command cat $CLIP_FILE.put >$CLIP_FILE
     if $checkSsh && [[ -p $CLIP_FILE.ssh ]]; then
@@ -62,7 +66,7 @@ __xclip() { # {{{
   --get) # {{{
     eval $CLIP_CMD_GET | tee >(tmux $tmuxP load-buffer -b clip /dev/stdin 2>/dev/null)
     ;; # }}}
-  *)
+  *) # {{{
     [[ $mode == 'plain' ]] && return 1
     case $1 in
     --tmux | -t) tmux $tmuxP save-buffer $CLIP_FILE 2>/dev/null;;
@@ -79,7 +83,7 @@ __xclip() { # {{{
       pbcopy) $CLIP_REATTACH pbcopy "$@";;
       *) return 1;;
       esac;; # }}}
-    esac
+    esac;; # }}}
   esac
 } # }}}
 xclip() { # @@ # {{{
@@ -101,10 +105,8 @@ xclip() { # @@ # {{{
   fi # }}}
   __xclip "$@"
 } # }}}
-__xclip --set
+[[ -z $CLIP_MODE ]] && __xclip --set
 xc()     { xclip "$@"; }
-ccopy()  { cat - | xclip --put; }
-cpaste() { xclip --get | cat -; }
 xs()     { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "BUFFER"

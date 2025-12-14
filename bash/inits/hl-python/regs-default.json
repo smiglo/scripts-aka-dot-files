@@ -1,34 +1,39 @@
 {
-    "(^|[ :])TB\\] .*": "CIBlue",
-    "(AA|BB|TT)( |$)" : "gray",
-    "(EE|FF)( |$)": "err",
-    "II( |$)": "ok",
-    "IMP( |$)": "imp",
-    "# {{{|# }}}": "gray",
-    "[a-z0-9]{32,}": {
+    "\\bTB\\] ": "CIBlue",
+    "\\b(AA|BB|TT)\\b" : "gray",
+    "\\b(EE|FF)\\b": "err",
+    "\\bII\\b": "ok",
+    "\\bIMP\\b": "imp",
+    "# {{{$|# }}}$": "gray",
+    "\\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\\b": {
       "name": "hash",
       "color": "green",
-      "embedded": false
+      "embedded": false,
+      "case-match": true
     },
-    "([0-9]{6,}-)?[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{3,})?": {
+    "\\b(([0-9]{6,}-)?[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{3,})?)\\b": {
       "name": "time1",
       "color": "ts",
-      "embedded": false
+      "embedded": false,
+      "case-match": true
     },
-    "[0-9]{8}-[0-9]{6}(\\.[0-9]{3,})?": {
+    "\\b([0-9]{8}-[0-9]{6}(\\.[0-9]{3,})?)\\b": {
       "name": "time2",
       "color": "ts",
-      "embedded": false
+      "embedded": false,
+      "case-match": true
     },
-    "[0-9A-Z]{6,}-[A-Z0-9]{5,}-[0-9]{8,}\\]?": {
+    "\\b([0-9A-Z]{6,}-[A-Z0-9]{5,}-[0-9]{8,}\\]?\\b)": {
       "name": "id",
       "color": "gray",
-      "embedded": false
+      "embedded": false,
+      "case-match": true
     },
-    "\\[?[A-Z]{2,}-[0-9]{3,}\\]?": {
+    "\\b\\[?[A-Z]{2,}-[0-9]{3,}\\]?\\b": {
       "name": "ticket-id",
       "color": "ticket",
-      "embedded": false
+      "embedded": false,
+      "case-match": true
     }
 }
 

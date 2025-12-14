@@ -7,33 +7,42 @@ Session*.vim
 *.bck
 *.dmp
 *.hist
+*.log
 .layout
+*.no-git
+*.no-git.*
+*.orig
 *.out
 *.o
+*.patch
 *.pyc
 *.swo
 *.swp
 *.tmp
-*.no-git
 *~
+.shr.cfg
+
 temp
 tmp
+
+.venv*
+node_modules
+.aider*
 
 .rr
 rr-*
 
-.shr.cfg
-
-/build/
+build/
+build-*/
 tmp-tb
 
 cscope.*
 tags
 
-core
-core.*
-core-*
+core.*.dmp
+core-*.dmp
 *.core
+core
 
 .gitbranches
 
@@ -45,3 +54,13 @@ core-*
 /.*-data.txt
 # ------------------------------------------------------------------------
 
+.pc
+patches
+
+Makefile.in
+m4/
+aclocal.m4
+autom4te.cache
+.ycm_extra_conf.py
+.cache/
+compile_commands.json

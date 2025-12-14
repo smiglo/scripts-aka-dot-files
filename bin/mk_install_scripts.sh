@@ -37,12 +37,18 @@ get_app_name() { # {{{
   return 0
 } # }}}
 install() { # {{{
-  if [[ $1 == 'tools-'* ]]; then
+  case $1 in
+  tools-*) # {{{
     mkdir -p $TOOLS_PATH/.stat >/dev/null 2>&1
     local tool=${1#tools-}
     [[ " $MK_INSTALL_TOOLS " == *" -$tool "* ]] && return 1
-    [[ -e $TOOLS_PATH/.stat/$tool ]] && return 1
-  fi
+    [[ -e $TOOLS_PATH/.stat/$tool ]] && return 1;; # }}}
+  go-*) # {{{
+    local tool=${1#go-}
+    tool=${tool##*/} && tools=${tool%@*}
+    [[ " $MK_INSTALL_GO_TOOLS " == *" -$tool "* ]] && return 1
+    return 0;; # }}}
+  esac
   echo "$TO_INSTALL" | grep -q " $1\(:[^ ]*\)\{0,1\} " && return 0
   [[ $1 == *-'*' ]] && echo "$TO_INSTALL" | grep -q " ${1%-\*}-.[^ ]* " && return 0
   if [[ ! -z $INSTALL_FROM_ARGS ]]; then
@@ -85,6 +91,12 @@ do_install() { # {{{
   fi
   if $IS_MAC; then
     brew install $inst || INSTALL_FAILED+="$inst "
+    local dName=$(dirname $(which brew))
+    case $inst in
+    gawk)       ( cd $dName; ln -sf ../Cellar/$inst/*/bin/gawk awk );;
+    gnu-sed)    ( cd $dName; ln -sf ../Cellar/$inst/*/bin/gsed sed );;
+    gnu-getopt) ( cd $dName; ln -sf ../Cellar/$inst/*/bin/getopt getopt );;
+    esac
   elif type apt-get >/dev/null 2>&1; then
     if $INSTALL_SUDO_ALLOWED; then
       if [[ ! -z $ppa ]] && which add-apt-repository >dev/null 2>&1 && ! sudo add-apt-repository -y ppa:$ppa; then
@@ -146,23 +158,30 @@ APPS_CFG_PATH=${APPS_CFG_PATH:-$RUNTIME_PATH/apps}
 SETUP_PROFILES=$MK_INSTALL_SETUP_PROFILES
 AUTO_INSTALL_TOOLS=${MK_INSTALL_AUTO_INSTALL_TOOLS}
 IS_DOCKER=false
-[[ -e /.dockerenv ]] && IS_DOCKER=true
-[[ -z $AUTO_INSTALL_TOOLS ]] && $IS_DOCKER && AUTO_INSTALL_TOOLS=true
+IS_WSL=false
+if [[ -e /.dockerenv ]]; then
+  IS_DOCKER=true
+elif [[ -e /mnt/wsl ]]; then
+  IS_WSL=true
+fi
+IS_VIRTUAL_OS=false
+( $IS_DOCKER || $IS_WSL ) && IS_VIRTUAL_OS=true
+[[ -z $AUTO_INSTALL_TOOLS ]] && $IS_VIRTUAL_OS && AUTO_INSTALL_TOOLS=true
 INSTALL_FAILED=
 IS_SILENT=false
 DO_EXEC=true
 INSTALL_FEATURES_BASIC='bashrc runtime bin-path bash-path bin-misc vim git tmux mc htop agignore alacritty fzf rlwrap quilt my-proj-path-as-kb tcpdump-permissions'
-INSTALL_FEATURES_EXT='dconf-colors dconf-keys grc ap-calc tig install-tools ack ssh-config gitsh gdb gdb-multiarch'
+INSTALL_FEATURES_EXT='dconf-colors dconf-keys grc ap-calc tig install-tools ack ssh-config gitsh gdb gdb-multiarch golang-bin'
 INSTALL_FEATURES_EXT_UBU=''
 INSTALL_FEATURES_EXT_MAC='mac-tools mac-grep'
 TO_INSTALL_TOOLS_BASIC='git tig quilt pv at tmux cmatrix mc cscope grc vlock jq expect colordiff column htop curl batcat:bat entr file highlight tree'
-TO_INSTALL_TOOLS_UBU="calc:apcalc vim.gtk3:vim-gtk xclip ack-grep:ack ctags:exuberant-ctags clang valgrind strace netcat:netcat-openbsd tcpdump \
-    vipe:moreutils pstree ag:silversearcher-ag \
-    ifconfig:net-tools ip:iproute2 gawk fdfind:fd-find \
+TO_INSTALL_TOOLS_UBU="calc:apcalc vim.gtk3:vim-gtk xclip ack-grep:ack ctags:exuberant-ctags clang clang-format valgrind strace netcat:netcat-openbsd tcpdump \
+    vipe:moreutils pstree ccache \
+    ifconfig:net-tools ip:iproute2 traceroute dig:bind9-dnsutils lsof \
+    gawk fdfind:fd-find ag:silversearcher-ag \
     bfs psmisc build-essential xxd socat rlwrap rr \
-    -:manpages-dev -:manpages-posix-dev \
-    npm nodejs"
-if ! $IS_DOCKER; then
+    -:manpages-dev -:manpages-posix-dev"
+if ! $IS_VIRTUAL_OS; then
   INSTALL_FEATURES_EXT_UBU='abcde autostart notify-log marblemouse pulse-audio x-opengl vrapper-eclipse less-highlight fonts docker user-groups root sudo-permissions'
   TO_INSTALL_TOOLS_BASIC+=' cowsay figlet lolcat fortune:fortune-mod'
   TO_INSTALL_TOOLS_UBU+=" cryptsetup openvpn unclutter dconf-cli \
@@ -174,9 +193,14 @@ if ! $IS_DOCKER; then
 else
   INSTALL_FEATURES_EXT_UBU='less-highlight user-groups root sudo-permissions'
 fi
-INSTALL_FEATURES_EXT_UBU+=' tools-cargo tools-fzf tools-pwntools tools-frida tools-pwndbg tools-radare2 tools-dedoc tools-nodejs'
+INSTALL_FEATURES_EXT_UBU+=' tools-cargo tools-pwntools tools-pwndbg tools-radare2 tools-dedoc tools-nodejs tools-aider tools-aichat tools-gemini'
+MK_INSTALL_GO_TOOLS+=' github.com/jorgerojas26/lazysql@latest'
+# MK_INSTALL_GO_TOOLS+=' github.com/jesseduffield/lazygit@latest'
+if $IS_DOCKER; then
+  INSTALL_FEATURES_EXT_UBU+=' tools-fzf tools-frida'
+fi
 TO_INSTALL_TOOLS_MAC="calc ack pbcopy:tmux-pasteboard ctags ag:the_silver_searcher \
-    bfs:tavianator/tap/bfs fd pidof pstree up"
+    bfs:tavianator/tap/bfs fd pidof pstree up gnu-getopt gnu-sed gawk"
 INSTALL_BIN_MISC_BASIC='cht.sh keep-pass.sh'
 INSTALL_BIN_MISC_BASIC_UBU=' up:ubu'
 INSTALL_BIN_MISC_BASIC_MAC=''
@@ -227,6 +251,8 @@ PROFILES_FILE=$APPS_CFG_PATH/setup_profiles
 dbg -n "Loading cfg file... "
 set +e
 dbg "  Loading $script_path/bash/runtime.basic" && source $script_path/bash/runtime.basic >/dev/null
+dbg "  Loading $ALIASES_D/0.essentials" && source $ALIASES_D/0.essentials >/dev/null
+dbg "  Loading $script_path/bash/completion.basic" && source $script_path/bash/completion.basic >/dev/null
 dbg "  Loading $script_path/bash/runtime" && source $script_path/bash/runtime >/dev/null
 for p in $SETUP_PROFILES; do
   [[ -e $script_path/bash/profiles/$p/runtime ]] && dbg "  Loading $script_path/bash/profiles/$p/runtime" && source $script_path/bash/profiles/$p/runtime >/dev/null
@@ -261,6 +287,7 @@ if [[ -z $INSTALL_FROM_ARGS ]]; then # {{{
   if ! ${IS_MAC:-false}; then
     TO_INSTALL+=" $INSTALL_FEATURES_EXT_UBU"
   else
+    TO_INSTALL+=" mac-copy-paste"
     TO_INSTALL+=" $INSTALL_FEATURES_EXT_MAC"
   fi
   if [[ ! -z $INSTALL_FEATURES ]]; then
@@ -287,7 +314,7 @@ TO_INSTALL="@ $TO_INSTALL @"
 # }}}
 # Installation # {{{
 # Configurations, etc. # {{{
-if ! $IS_MAC && ! $IS_DOCKER && $INSTALL_SUDO_ALLOWED && [[ ! -h ~/.bashrc ]]; then # {{{
+if ! $IS_MAC && ! $IS_VIRTUAL_OS && $INSTALL_SUDO_ALLOWED && [[ ! -h ~/.bashrc ]]; then # {{{
   if which add-apt-repository >/dev/null 2>&1; then
     dbg "Configuring (apt repositories)... "
     yes | sudo add-apt-repository main
@@ -301,9 +328,7 @@ fi # }}}
 if install 'bashrc'; then # {{{
   dbg -n "Configuring (bashrc)... "
   ln -sf $script_path/bash/bashrc ~/.bashrc
-  ln -sf $script_path/bash/bash_profile ~/.bash_profile
   ln -sf $script_path/bash/bash_login ~/.bash_login
-  ln -sf $script_path/bash/profile ~/.profile
   ln -sf $script_path/bash/inputrc ~/.inputrc
   ln -sf $script_path/bash/inits/radare2rc $HOME/.radare2rc
   touch $HOME/.hushlogin
@@ -577,10 +602,51 @@ if install 'agignore'; then # {{{
   dbg -n "Configuring (agignore)... "
   cfg_file=$HOME/.agignore
   files="$script_path/bash/inits/agignore"
-  [[ ! -z $SETUP_PROFILES ]] && files+=" $(eval echo $script_path/bash/profiles/{${SETUP_PROFILES// /,}}/inits/agignore)"
-  appender $cfg_file $files
-  ln -sf $HOME/.agignore $HOME/.fdignore
+  if [[ ! -z $SETUP_PROFILES ]]; then
+    files+=" $(eval echo $script_path/bash/profiles/{${SETUP_PROFILES// /,}}/inits/agignore)"
+    appender $cfg_file $files
+  else
+    [[ -e $cfg_file ]] && mv $cfg_file $cfg_file.bak
+    ln -sf $files $cfg_file
+  fi
+  ln -sf $cfg_file $HOME/.fdignore
   dbg "[DONE]"
+fi # }}}
+if install 'mac-copy-paste' && $IS_MAC; then # {{{
+  if [[ ! -e $HOME/Library/KeyBindings/DefaultKeyBinding.Dict ]]; then
+    mkdir -p $HOME/Library/KeyBindings
+    # via: https://blog.victormendonca.com/2020/04/27/how-to-change-macos-key-bindings/
+    cat >$HOME/Library/KeyBindings/DefaultKeyBinding.Dict <<-'EOF'
+			{
+			    "^x" = "cut:";
+			    "^c" = "copy:";
+			    "^v" = "paste:";
+			    "^a" = "selectAll:";
+			    "^z" = "undo:";
+			    "^Z" = "redo:";
+			    "^s" = "save:"; /* not work, probably */
+			    "^f" = "find:"; /* not work, probably */
+			    /* <C+Left/Right> */
+			    "^\UF702"  = "moveWordLeft:";
+			    "^\UF703"  = "moveWordRight:";
+			    /* <C+S+Left/Right> */
+			    "^$\UF702" = "moveWordLeftAndModifySelection:";
+			    "^$\UF703" = "moveWordRightAndModifySelection:";
+			    /* <Home/End> */
+			    "\UF729" = "moveToBeginningOfLine:";
+			    "\UF72B" = "moveToEndOfLine:";
+			    /* <S+Home/End> */
+			    "$\UF729" = "moveToBeginningOfLineAndModifySelection:";
+			    "$\UF72B" = "moveToEndOfLineAndModifySelection:";
+			    /* <C+Home/End> */
+			    "^\UF729" = "moveToBeginningOfDocument:";
+			    "^\UF72B" = "moveToEndOfDocument:";
+			    /* <C+S+Home/End> */
+			    "^$\UF729" = "moveToBeginningOfDocumentAndModifySelection:";
+			    "^$\UF72B" = "moveToEndOfDocumentAndModifySelection:";
+			}
+		EOF
+  fi
 fi # }}}
 if install 'gdb'; then # {{{
   dbg -n "Configuring (gdb)... "
@@ -691,7 +757,7 @@ if install 'speedtest-net' && $INSTALL_SUDO_ALLOWED; then # {{{
   fi
   dbg "[DONE]"
 fi # }}}
-if install 'docker' && ! $IS_DOCKER; then # {{{
+if install 'docker' && ! $IS_VIRTUAL_OS; then # {{{
   dbg -n "Configuring (docker)... "
   dockerFile="$HOME/.docker/config.json"
   if [[ -e $dockerFile ]]; then
@@ -728,7 +794,8 @@ if install 'root' && $INSTALL_SUDO_ALLOWED; then # {{{
   sudo chmod 755 /root/bin/utils.sh
 fi # }}}
 if install 'sudo-permissions' && $INSTALL_SUDO_ALLOWED; then # {{{
-  prgList="ip mount nice renice dbus-monitor suspend.wrap tcpdump service ufw"
+  prgList=" ip mount umount nice renice dbus-monitor suspend.wrap tcpdump "
+  $IS_VIRTUAL_OS && prgList+=" service tee ufw "
   (
     echo "# vim: ft=sudoers"
     echo
@@ -758,6 +825,7 @@ if install 'install-tools'; then
     tools="$TO_INSTALL_TOOLS_BASIC"
     if ! $IS_MAC; then
       tools+=" $TO_INSTALL_TOOLS_UBU"
+      sudo apt-get update
     else
       tools+=" $TO_INSTALL_TOOLS_MAC"
     fi
@@ -778,7 +846,7 @@ if install 'install-tools'; then
     fi
   done
 
-  if ${install_full:-false} && ! $IS_MAC && ! $IS_DOCKER; then
+  if ${install_full:-false} && ! $IS_MAC && ! $IS_VIRTUAL_OS; then
     tools="autofs nfs-kernel-server"
     for i in $tools; do
       get_app_name $i
@@ -798,7 +866,7 @@ for i in $bin_path/bash/profiles/*; do # {{{
 done # }}}
 # Configurations, etc. # {{{
 # dconf # {{{
-if install 'dconf-*' && ! $IS_DOCKER; then
+if install 'dconf-*' && ! $IS_VIRTUAL_OS; then
   if which dconf >/dev/null 2>&1; then
     dbg "DConf configuration..."
     if install 'dconf-keys'; then # {{{
@@ -874,10 +942,24 @@ if install 'tcpdump-permissions' && $INSTALL_SUDO_ALLOWED; then # {{{
     sudo setcap cap_net_raw,cap_net_admin=eip $tcpdump
     dbg "[DONE]"
   else
-    dbg "tcpdump configuration... [ERR: tcpdump not installed]"
+    dbg "tcpdump configuration... [ERR] tcpdump not installed]"
   fi
 fi # }}}
 # }}}
+# Tools: go # {{{
+dbg "Installing-go-tools"
+if which go >/dev/null 2>&1 && [[ ! -z $GOBIN ]]; then
+  for i in $MK_INSTALL_GO_TOOLS; do
+    if install "go-$i"; then
+      dbg "Installing-go-tools: $i"
+      go install $i
+      dbg "[DONE]"
+    fi
+  done
+  dbg "[DONE]"
+else
+  dbg "[ERR] No go or no GOBIN"
+fi # }}}
 # Tools: external # {{{
 if install 'tools-cargo'; then # {{{
   dbg "Installing-tools: cargo"
@@ -885,6 +967,42 @@ if install 'tools-cargo'; then # {{{
   export PATH=$HOME/.cargo/bin:$PATH
   which cargo 1>/dev/null 2>&1
   touch $TOOLS_PATH/.stat/cargo
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-nodejs' && ! which npm >/dev/null 2>&1 && $INSTALL_SUDO_ALLOWED; then # {{{
+  dbg "Installing-tools: nodejs"
+  if ${NODE_USE_NVM:-false}; then
+    if ! which nvm >/dev/null 2>&1; then
+      export NVM_DIR="$HOME/.nvm"
+      [[ -e $NVM_DIR ]] || curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+      source $NVM_DIR/nvm.sh
+    fi
+    nvm install ${NODE_VERSION:---lts}
+  else
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION:-22.x} | sudo -E bash - && sudo apt install -y nodejs
+  fi
+  touch $TOOLS_PATH/nodejs
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-aider'; then # {{{
+  dbg "Installing-tools: aider"
+  python -m pip install --break-system-packages aider-install
+  aider-install
+  touch $TOOLS_PATH/.stat/aider
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-aichat' && which cargo >/dev/null 2>&1; then # {{{
+  dbg "Installing-tools: aichat"
+  cargo install aichat
+  touch $TOOLS_PATH/.stat/aichat
+  dbg "[DONE]"
+fi # }}}
+if install 'tools-gemini'; then # {{{
+  dbg "Installing-tools: gemini"
+  sudo npm install -g @google/gemini-cli
+  mkdir $HOME/.gemini
+  [[ ! -e $HOME/.gemini/settings.json ]] && cp $SCRIPT_PATH/bash/inits/gemini/settings.json $HOME/.gemini/
+  touch $TOOLS_PATH/.stat/gemini
   dbg "[DONE]"
 fi # }}}
 if install 'tools-fzf'; then # {{{
@@ -906,12 +1024,6 @@ if install 'tools-pwntools'; then # {{{
   dbg "Installing-tools: pwntools"
   python3 -m pip install --break-system-packages pwntools
   touch $TOOLS_PATH/.stat/pwntools
-  dbg "[DONE]"
-fi # }}}
-if install 'tools-nodejs' && ! which npm >/dev/null 2>&1 && $INSTALL_SUDO_ALLOWED; then # {{{
-  dbg "Installing-tools: nodejs"
-  curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt install -y nodejs
-  touch $TOOLS_PATH/nodejs
   dbg "[DONE]"
 fi # }}}
 if install 'tools-frida'; then # {{{
@@ -977,13 +1089,15 @@ fi # }}}
 if install 'tools-dedoc'; then # {{{
   dbg "Installing-tools: dedoc"
   cargo install dedoc
-  mkdir -p $HOME/.dedoc >/dev/null
-  if dedoc fetch; then
-    dedoc download c cpp cmake bash python~3.13
-  else
-    cd $HOME/.dedoc
-    rm -rf *
-    tar xzf $SCRIPT_PATH/bash/inits/dedoc.tgz
+  if [[ ! -h $HOME/.dedoc ]]; then
+    mkdir -p $HOME/.dedoc >/dev/null
+    if dedoc fetch; then
+      dedoc download c cpp cmake bash python~3.13
+    else
+      cd $HOME/.dedoc
+      rm -rf *
+      tar xzf $SCRIPT_PATH/bash/inits/dedoc.tgz
+    fi
   fi
   touch $TOOLS_PATH/.stat/dedoc
   dbg "[DONE]"

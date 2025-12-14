@@ -19,15 +19,19 @@ _man() { # {{{
         | sed 's/^\([^ ]\+\) *(\([^)]\+\)).*/-S \2 \1/')"
       [[ -z $list ]] && return 0
     fi
-    (
-      set -o pipefail
       echo "$list" | while read -r l; do
-        man $l | \
-        if $BAT_INSTALLED && ${MAN_USE_BAT:-true}; then $BAT_PRG -l man -p --theme "$BAT_THEM2";
-        else less;
+        batLang="-l man"
+        ${MAN_USE_BAT:-true} || batLang=
+        manInfo="$(man $l 2>/dev/null)"
+        if (( $? != 0 )) && is-installed $l; then
+          manInfo="$($l --help)"
+          batLang="-l man"
         fi
+        echo "$manInfo" | \
+        { if $BAT_INSTALLED; then $BAT_PRG $batLang -p --theme "$BAT_THEM2";
+          else less;
+          fi; }
       done
-    )
     $loop || break
   done
   return 0

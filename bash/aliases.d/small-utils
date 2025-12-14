@@ -1,75 +1,307 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-is-installed() { # @@ # {{{
+bash-on-list() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
-    echo "-f --function -F -x --exporter-Function -b --both -w --which -t --type -v --var"
+    echo "--always --cont --pre --post --no-bash DIRS"
     return 0
   fi # }}}
-  local err=0 no=1
+  local exitOnErr=true preCmd= postCmd= always=false skipBash=false
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    -v       | --var)               declare -p $1;;
-    -f       | --function)          shift; declare -F $1;;
-    -F | -x  | --exporter-Function) shift; declare -Fx | command grep -q " $1$";;
-    -w       | --which)             shift; which $1;;
-    -t       | --type)              shift; type $1;;
-    -b       | --both | *)          ( declare -F "$1" || which "$1" );;
-    esac >/dev/null 2>&1
-    [[ $? != 0 ]] && err=$((err+no))
-    no=$((no*2))
-    shift
-  done # }}}
-  return $err
-}
-export HISTIGNORE+=":is-installed" # }}}
-save-in-backup() { # @@ # {{{
-  $ALIASES_SCRIPTS/small-utils/save-in-backup.sh "$@"
-} # }}}
-runx() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "-v -vv --cmd --cnt"
-    return 0
-  fi # }}}
-  local c= cmd=
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -v)    echormf -M + 1;;
-    -vv)   echormf -M + 2;;
-    --cmd) shift; cmd="$1"; break;;
-    --cnt) shift; c="$1";;
-    *) # {{{
-      if [[ -z $c ]]; then
-        c="$1"
-      else
-        cmd="${@@Q}"
-        break
-      fi;; # }}}
+    --always)  always=true;;
+    --cont)    exitOnErr=false;;
+    --pre)     preCmd="$2"; shift;;
+    --post)    postCmd="$2"; shift;;
+    --no-bash) skipBash=true;;
+    *)         break;;
     esac; shift
   done # }}}
-  [[ -z $c   ]] && echormf 0 "number of iterations not set" && return 1
-  [[ -z $cmd ]] && echormf 0 "command not set" && return 1
-  echormf "cnt: $c, cmd: $cmd"
-  local n= err=0
-  for ((n=0; n<$c; n++)); do
-    eval "$cmd" || { err=$?; break; }
-  done
-  return $err
+  local list="$@"
+  [[ ! -z $list ]] || return 1
+  local d= oPWD="$OLDPWD" retVal=0
+  for d in $list; do # {{{
+    local err=0
+    command cd "$d" >/dev/null 2>&1 || { echoe -f "Cannot cd to '$d', skipping"; continue; }
+    [[ -z $preCmd ]] || eval "$preCmd"
+    err=$?
+    if [[ $err == 0 ]] || $always; then
+      $skipBash || bash </dev/tty
+      err=$?
+    fi
+    if [[ ! -z $postCmd ]] && ( [[ $err == 0 ]] || ! $exitOnErr ); then # {{{
+      eval "$postCmd"
+      err=$?
+    fi # }}}
+    command cd - >/dev/null 2>&1
+    if [[ $err != 0 ]]; then
+      retVal=1
+      $exitOnErr && break
+    fi
+  done # }}}
+  OLDPWD="$oPWD"
+  return $retVal
 } # }}}
-# }}}
-up() { # {{{
-  is-installed up || { echor "up not installed"; return 1; }
-  ( TERM='xterm-256color' command up "$@" )
+bash-trace() { # @@ # {{{
+  set +x
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -f | --file) echo "FILE";;
+    --fd)        echo "FD";;
+    *)           echo "-f --file --fd --new start stop follow help";;
+    esac
+    return 0
+  fi # }}}
+  import-module time2s time-tools
+  local file= mode= xtraceFD=3 new=false local mS='{' mE='}'
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f | --file) file="$2"; shift;;
+    --fd)        xtraceFD="$2"; shift;;
+    --new)       new=true;;
+    help) # {{{
+      echo "start : exec 3>>a-file; export BASH_XTRACEFD=3; set -x"
+      echo "stop  : set +x; exec 3>&-; unset BASH_XTRACEFD";; # }}}
+    start | stop | follow)
+      mode="$1";;
+    esac; shift
+  done # }}}
+  if [[ -z "$file" ]]; then # {{{
+    file="$TMP_MEM_PATH/trace.$PPID.log"
+    [[ ! -e "$file" ]] && echoe -f "Tracing into $file"
+  fi # }}}
+  case $mode in
+  start) # {{{
+    if $new; then # {{{
+      rm -f "$file"
+      (
+        echo "# vim: fdl=0 ft=default"
+        echo
+      ) >"$file"
+    fi # }}}
+    local no=1
+    [[ -e $file ]] && no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") + 1 ))"
+    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mS$mS$mS" >>"$file"
+    eval "exec $xtraceFD>>\"$file\""
+    export BASH_XTRACEFD=$xtraceFD
+    set -x;; # }}}
+  stop) # {{{
+    eval "exec $BASH_XTRACEFD>&-"
+    unset BASH_XTRACEFD
+    local no=1
+    [[ -e  "$file" ]] && no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") ))"
+    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mE$mE$mE" >>"$file";; # }}}
+  follow) # {{{
+    if [[ $file == '-' ]]; then
+      file="$(get-file-list -t -1 "$TMP_MEM_PATH/trace.*.log")"
+      [[ -e $file ]] && echoe -f "Following $(basename "$file")"
+    fi
+    if [[ ! -e $file && $file != /* && $file != ./* ]]; then # {{{
+      if [[ -e "$TMP_MEM_PATH/$file" ]]; then
+        file="$TMP_MEM_PATH/$file"
+      elif [[ -e "$TMP_MEM_PATH/trace.$file.log" ]]; then
+        file="$TMP_MEM_PATH/trace.$file.log"
+      elif [[ -e "$TMP_MEM_PATH/trace.%$file.log" ]]; then
+        file="$TMP_MEM_PATH/trace.%$file.log"
+      fi
+    fi # }}}
+    tail -F "$file";; # }}}
+  *) # {{{
+    echoe -f "Wrong mode [$mode]"; return 1;; # }}}
+  esac
+}
+export -f bash-trace # }}}
+byebye() { # {{{
+  local ask=true overSSH=false pid=
+  [[ $1 == '-' ]] && ask=false
+  $ask && ! progress --msg "suspend & log off" --wait 3s --key && return 0
+  if [[ -n $TMUX ]]; then
+    pid=$($ALIASES_SCRIPTS/tmux/tm.sh --is-ssh --pid) && overSSH=true
+  elif [[ -n $SSH_CONNECTION ]]; then
+    overSSH=true
+  fi
+  ( sleep 5 && suspend ) &
+  disown
+  if $overSSH; then
+    if [[ -e /proc/$pid/environ ]]; then
+      local ip=
+      read ip _ < <(strings /proc/$pid/environ | sed -n '/^SSH_CLIENT=/ s/.*=//p')
+      if [[ ! -z $ip ]]; then
+        while read -r _ _ _ _ _ _ sshPid _; do
+          sshPid=${sshPid%%/*}
+          pstree -p $sshPid | grep -q "$pid" && continue
+          kill-rec $sshPid
+        done < <(w -ip | grep "$ip")
+      fi
+    fi
+    if [[ ! -n $TMUX ]]; then
+      command logout 2>/dev/null || command exit
+    else
+      echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
+      tmux detach -P
+    fi
+  fi
+} # }}}
+change-monitor() { # @@ # {{{
+  $ALIASES_SCRIPTS/small-utils/change-monitor.sh "$@"
 } # }}}
 clean-ansi() { # {{{
   if [[ ! -z $1 ]]; then
     echo -e "$@"
   else
     command cat -
-  fi | sed -e 's/\x1b\[[0-9;]\+[mMGK]//g' -e 's/\x1b\[[Jm]//g'
+  fi | sed -u -e 's/\x1b\[[0-9;]\+[mMGK]//g' -e 's/\x1b\[[Jm]//g'
 } # }}}
-capture() { # @@ # {{{
-  $ALIASES_SCRIPTS/small-utils/capture.sh "$@"
+clr() { # @@ # {{{
+  local scr=true reset=false hist=false
+  if [[ $1 == '@@' ]]; then
+    local ret=""
+    $scr   && ret+=" --no-scr"   || ret+=" --scr"
+    $reset && ret+=" --no-reset" || ret+=" --reset"
+    if [[ -n $TMUX ]]; then
+      $hist && ret+=" --no-hist" || ret+=" --hist"
+    fi
+    echo "$ret"
+    return 0
+  fi
+  while [[ ! -z $1 ]]; do
+    case $1 in
+      --reset)    reset=true;;
+      --no-reset) reset=false;;
+      --scr)      scr=true;;
+      --no-scr)   scr=false;;
+      --hist)     hist=true;;
+      --no-hist)  hist=false;;
+    esac
+    shift
+  done
+  if $scr; then
+    $reset && reset || clear -x
+  fi
+  if $hist && [[ -n $TMUX ]]; then
+    tmux clear-history
+  fi
+  unset PS1_CONVERTER_ADD_SEPARATOR
+  return 0
+} # }}}
+Exit() { # {{{
+  if [[ ! -n $TMUX ]]; then
+    command exit $@
+  else
+    local title="$TMUX_SESSION"
+    tmux detach -P
+    tmux kill-session -t $title
+  fi
+} # }}}
+fix-agent() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "--start-if --fix -c --check"
+    return 0
+  fi
+  local err=0
+  case $1 in
+  '' | -c | --check)
+    local keys=
+    keys="$(ssh-add -l 2>/dev/null)" || keys=
+    [[ ! -z $keys ]] && echoe -f "$SSH_AGENT_PID: $(echo -e "$keys" | awk '{print $3}' | sort | tr '\n' ' ')" && return 0
+    source $SCRIPT_PATH/bin/fix-ssh-agent.sh --start-if
+    err=$?; unset __fsa_err
+    [[ $err == 0 ]] || eval $(die $err fix-agent "cannot start ssh-agent")
+    keys="$(ssh-add -l)" || keys=
+    [[ ! -z $keys ]] && echoe -f "$SSH_AGENT_PID: $(echo -e "$keys" | awk '{print $3}' | sort | tr '\n' ' ')" && return 0
+    if [[ ! -z $SSH_KEYS ]]; then
+      sshh-add --keys $SSH_KEYS
+      keys="$(ssh-add -l)" || keys=
+    fi
+    [[ ! -z $keys ]] && echoe -f "$SSH_AGENT_PID: $(echo -e "$keys" | awk '{print $3}' | sort | tr '\n' ' ')" && return 0
+    echoe -f "$SSH_AGENT_PID: no keys installed"
+    return;;
+  esac
+  source $SCRIPT_PATH/bin/fix-ssh-agent.sh "$@"
+  err=$?; unset __fsa_err
+  return $err
+} # }}}
+fix_caps() { # {{{
+  which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
+  if which xcape >/dev/null 2>&1; then
+    killall xcape >/dev/null 2>&1
+    xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
+  fi
+} # }}}
+for-do() { # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "- -l"
+    return 0
+  fi # }}}
+  local arg= cmd= xargsP="-n1 -r" wasBracketParam=false processWords=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -)  xargsP+=" -I{}"; wasBracketParam=true;;
+    -w) processWords=true;;
+    *)  break;;
+    esac; shift
+  done # }}}
+  if [[ ! -t 0 ]]; then # {{{
+    arg="$(<-)"
+    cmd="$@" # }}}
+  elif [[ "$@" == *\ --\ * ]]; then # {{{
+    arg="$@"
+    cmd="$@"
+    args="$(echo "${arg/ -- *}" | sed -e 's/^\s\+//' -e 's/\s\+$//')"
+    cmd="$( echo "${cmd/* -- }" | sed -e 's/^\s\+//' -e 's/\s\+$//')" # }}}
+  else # {{{
+    arg="$1"
+    shift
+    cmd="$@"
+  fi # }}}
+  ! $wasBracketParam && [[ $cmd == *{}* ]] && xargsP+=" -I{}"
+  echo -n "$arg" | { if $processWords; then sed 's/ /\n/g'; else command cat -; fi; } | sed '/^\s*$/d' | eval xargs $xargsP $cmd
+} # }}}
+fr() { # {{{
+  if [[ $1 == '@@' ]]; then # @@:new # {{{
+    tmux list-panes -a -F '#S:#I.#P'
+    tmux list-panes -s -F ':#I.#P'
+    tmux list-panes -F '.#P'
+    echo "@@-d"
+    return 0
+  fi # }}}
+  local from=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -t) shift; from=$(tmux display-message -t $1 -p -F '#{pane_current_path}');;
+    *)
+      if [[ -d $1 ]]; then
+        from="$1"
+        break
+      else
+        from=$(tmux display-message -t $1 -p -F '#{pane_current_path}')
+      fi;;
+    esac; shift
+  done # }}}
+  if [[ -t 1 ]]; then
+    if [[ -z $from ]]; then
+      from="$PWD"
+      echo "export FROM=\"$from\"; F=\"$from\"" | tee >(xclip --put)
+    else
+      export FROM="$from"
+      export F="$FROM"
+    fi
+  else
+    echo "${from:-$PWD}"
+  fi
+} # }}}
+getCurPos() { # {{{
+  local p=
+  read -sdR -p $'\E[6n' pos
+  echo "${pos#*[}"
+} # }}}
+logout() { # {{{
+  if [[ ! -n $TMUX ]]; then
+    command logout 2>/dev/null || command exit
+  else
+    echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
+    tmux detach -P
+  fi
 } # }}}
 mapShortCutToFull() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
@@ -105,6 +337,22 @@ mapShortCutToFull() { # @@ # {{{
     fi
   fi # }}}
 } # }}}
+restore() { # @@ # {{{
+  if [[ $1 == @@ ]]; then
+    echo "-?"
+    return 0
+  fi
+  local captureFile=$CAPTURE_FILE
+  if [[ -z $CAPTURE_FILE ]]; then
+    captureFile="$TMP_MEM_PATH/capture.txt"
+    [[ -n $TMUX ]] && captureFile="$TMP_MEM_PATH/capture-$(tmux display-message -pF '#S-#W').txt"
+  fi
+  [[ -e ./cap.tmp~ ]] && captureFile="./cap.tmp~"
+  [[ $1 == '-?' ]] && echo "$captureFile" && return 0
+  [[ -e $captureFile ]] || return 1
+  /bin/cat $captureFile
+}
+export PHISTORY_IGNORED_COMMANDS+=":capture:restore" # }}}
 rpath() { # {{{
   local pwd="." src= p="-s"
   while [[ ! -z $1 ]]; do # {{{
@@ -120,92 +368,6 @@ rpath() { # {{{
   [[ $src == $pwd* ]] && pre="./"
   echo "$pre$(realpath $p --relative-to "$pwd" "$src")"
 } # }}}
-bash-on-list() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "--always --cont --pre --post --no-bash DIRS"
-    return 0
-  fi # }}}
-  local exitOnErr=true preCmd= postCmd= always=false skipBash=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --always)  always=true;;
-    --cont)    exitOnErr=false;;
-    --pre)     preCmd="$2"; shift;;
-    --post)    postCmd="$2"; shift;;
-    --no-bash) skipBash=true;;
-    *)         break;;
-    esac; shift
-  done # }}}
-  local list="$@"
-  [[ ! -z $list ]] || return 1
-  local d= oPWD="$OLDPWD" retVal=0
-  for d in $list; do # {{{
-    local err=0
-    command cd "$d" >/dev/null 2>&1 || { echor "Cannot cd to '$d', skipping"; continue; }
-    [[ -z $preCmd ]] || eval "$preCmd"
-    err=$?
-    if [[ $err == 0 ]] || $always; then
-      $skipBash || bash </dev/tty
-      err=$?
-    fi
-    if [[ ! -z $postCmd ]] && ( [[ $err == 0 ]] || ! $exitOnErr ); then # {{{
-      eval "$postCmd"
-      err=$?
-    fi # }}}
-    command cd - >/dev/null 2>&1
-    if [[ $err != 0 ]]; then
-      retVal=1
-      $exitOnErr && break
-    fi
-  done # }}}
-  OLDPWD="$oPWD"
-  return $retVal
-} # }}}
-fix-agent() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then
-    echo "--start --start-if --fix --fix-tmux"
-    return 0
-  fi
-  [[ -z $1 ]] && set -- --fix
-  source $SCRIPT_PATH/bin/fix_ssh_agent.sh "$@"
-} # }}}
-clr() { # @@ # {{{
-  local scr=true reset=false hist=false
-  if [[ $1 == '@@' ]]; then
-    local ret=""
-    $scr   && ret+=" --no-scr"   || ret+=" --scr"
-    $reset && ret+=" --no-reset" || ret+=" --reset"
-    if [[ -n $TMUX ]]; then
-      $hist && ret+=" --no-hist" || ret+=" --hist"
-    fi
-    echo "$ret"
-    return 0
-  fi
-  while [[ ! -z $1 ]]; do
-    case $1 in
-      --reset)    reset=true;;
-      --no-reset) reset=false;;
-      --scr)      scr=true;;
-      --no-scr)   scr=false;;
-      --hist)     hist=true;;
-      --no-hist)  hist=false;;
-    esac
-    shift
-  done
-  if $scr; then
-    $reset && reset || clear -x
-  fi
-  if $hist && [[ -n $TMUX ]]; then
-    tmux clear-history
-  fi
-  unset PS1_CONVERTER_ADD_SEPARATOR
-  return 0
-} # }}}
-getCurPos() { # {{{
-  local p=
-  read -sdR -p $'\E[6n' pos
-  echo "${pos#*[}"
-} # }}}
 sudo() { # {{{
   if [[ ! -z $1 ]]; then
     command sudo $@
@@ -213,167 +375,14 @@ sudo() { # {{{
     command sudo --preserve-env=HOME -s
   fi
 } # }}}
-for-do() { # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "- -l"
-    return 0
-  fi # }}}
-  local arg= cmd= xargsP="-n1 -r" wasBracketParam=false processWords=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -)  xargsP+=" -I{}"; wasBracketParam=true;;
-    -w) processWords=true;;
-    *)  break;;
-    esac; shift
-  done # }}}
-  if [[ ! -t 0 ]]; then # {{{
-    arg="$(<-)"
-    cmd="$@" # }}}
-  elif [[ "$@" == *\ --\ * ]]; then # {{{
-    arg="$@"
-    cmd="$@"
-    args="$(echo "${arg/ -- *}" | sed -e 's/^\s\+//' -e 's/\s\+$//')"
-    cmd="$( echo "${cmd/* -- }" | sed -e 's/^\s\+//' -e 's/\s\+$//')" # }}}
-  else # {{{
-    arg="$1"
-    shift
-    cmd="$@"
-  fi # }}}
-  ! $wasBracketParam && [[ $cmd == *{}* ]] && xargsP+=" -I{}"
-  echo -n "$arg" | { if $processWords; then sed 's/ /\n/g'; else command cat -; fi; } | sed '/^\s*$/d' | eval xargs $xargsP $cmd
+up() { # {{{
+  is-installed up || { echoe -f "up not installed"; return 1; }
+  ( TERM='xterm-256color' command up "$@" )
 } # }}}
-change-monitor() { # @@ # {{{
-  $ALIASES_SCRIPTS/small-utils/change-monitor.sh "$@"
-} # }}}
-fix_caps() { # {{{
-  which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
-  if which xcape >/dev/null 2>&1; then
-    killall xcape >/dev/null 2>&1
-    xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
-  fi
-} # }}}
-pid-tree() { # @@ # {{{
-  $ALIASES_SCRIPTS/small-utils/pid-tree.sh "$@"
-}
-export PHISTORY_IGNORED_COMMANDS+=":pid-tree" # }}}
-kill-rec() { # @@ # {{{
-  $ALIASES_SCRIPTS/small-utils/kill-rec.sh "$@"
-}
-export PHISTORY_IGNORED_COMMANDS+=":kill-rec:kr" # }}}
 zipf() { # {{{
   [ -d "$1" ] && zip -r $1.zip $@ && return 0
   [ "$1" == '-' ] && shift && zip -r $1.zip $@ && return 0
   while [ -f "$1" ]; do gzip $1; shift; done
-} # }}}
-logout() { # {{{
-  if [[ ! -n $TMUX ]]; then
-    command logout 2>/dev/null || command exit
-  else
-    echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
-    tmux detach -P
-  fi
-} # }}}
-byebye() { # {{{
-  local ask=true overSSH=false
-  [[ $1 == '-' ]] && ask=false
-  $ask && ! progress --msg "suspend & log off" --wait 3s --key && return 0
-  if [[ -n $TMUX ]]; then
-    local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
-    if $IS_MAC; then
-      pstree -p $cpid | command grep -q ' sshd:\?\($\| \)' && overSSH=true
-    else
-      pstree -A -s $cpid | command grep -q -e '---sshd---' && overSSH=true
-    fi
-  elif [[ -n $SSH_CONNECTION ]]; then
-    overSSH=true
-  fi
-  ( sleep 5 && suspend ) &
-  disown
-  if $overSSH; then
-    logout
-  fi
-} # }}}
-Exit() { # {{{
-  if [[ ! -n $TMUX ]]; then
-    command exit $@
-  else
-    local title="$TMUX_SESSION"
-    tmux detach -P
-    tmux kill-session -t $title
-  fi
-} # }}}
-bash-trace() { # @@ # {{{
-  set +x
-  if [[ $1 == '@@' ]]; then # {{{
-    case $3 in
-    -f | --file) echo "FILE";;
-    --fd)        echo "FD";;
-    *)           echo "-f --file --fd --new start stop follow";;
-    esac
-    return 0
-  fi # }}}
-  local file= mode= xtraceFD=3 new=false local mS='{' mE='}'
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -f | --file) file="$2"; shift;;
-    --fd)        xtraceFD="$2"; shift;;
-    --new)       new=true;;
-    start | stop | follow)
-      mode="$1";;
-    esac; shift
-  done # }}}
-  if [[ -z "$file" ]]; then # {{{
-    file="$TMP_MEM_PATH/trace.$PPID.log"
-    [[ ! -e "$file" ]] && echor "Tracing into $file"
-  fi # }}}
-  case $mode in
-  start) # {{{
-    if $new; then # {{{
-      rm -f "$file"
-      (
-        echo "# vim: fdl=0 ft=default"
-        echo
-      ) >"$file"
-    fi # }}}
-    local no=1
-    [[ -e $file ]] && no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") + 1 ))"
-    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mS$mS$mS" >>"$file"
-    eval "exec $xtraceFD>>\"$file\""
-    export BASH_XTRACEFD=$xtraceFD
-    set -x;; # }}}
-  stop) # {{{
-    eval "exec $BASH_XTRACEFD>&-"
-    unset BASH_XTRACEFD
-    local no=1
-    [[ -e  "$file" ]] && no="$(( $(command grep -c "trace#[0-9]\+ # {\{3\}" "$file") ))"
-    echo "$(time2s now): trace#$(printf "%02d" "$no") # $mE$mE$mE" >>"$file";; # }}}
-  follow) # {{{
-    if [[ $file == '-' ]]; then
-      file="$(get-file-list -t -1 "$TMP_MEM_PATH/trace.*.log")"
-      [[ -e $file ]] && echor "Following $(basename "$file")"
-    fi
-    if [[ ! -e $file && $file != /* && $file != ./* ]]; then # {{{
-      if [[ -e "$TMP_MEM_PATH/$file" ]]; then
-        file="$TMP_MEM_PATH/$file"
-      elif [[ -e "$TMP_MEM_PATH/trace.$file.log" ]]; then
-        file="$TMP_MEM_PATH/trace.$file.log"
-      elif [[ -e "$TMP_MEM_PATH/trace.%$file.log" ]]; then
-        file="$TMP_MEM_PATH/trace.%$file.log"
-      fi
-    fi # }}}
-    tail -F "$file";; # }}}
-  *) # {{{
-    echor "Wrong mode [$mode]"; return 1;; # }}}
-  esac
-}
-export -f bash-trace # }}}
-remove-dups() { # {{{
-  local sep="${2:-:}"
-  printf "%s" "$1" | /usr/bin/awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
-} # }}}
-remove-dups() { # {{{
-  local sep="${2:-:}"
-  printf "%s" "$1" | /usr/bin/awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
 } # }}}
 # OS specifics # {{{
 if ! $IS_MAC; then
@@ -402,7 +411,7 @@ if ! $IS_MAC; then
       -)  bssid="-"; shift;;
       *)  ssid=$1; shift;;
       esac # }}}
-      [[ -z $ssid ]] && echor "No SSID" && return 1
+      [[ -z $ssid ]] && echoe -f "No SSID" && return 1
       if [[ ! -z $1 ]]; then # {{{
         bssid=$1
       elif [[ $bssid == '-' ]]; then
@@ -413,15 +422,15 @@ if ! $IS_MAC; then
         local -n bssidVal=$bssidId
         bssid=$bssidVal
       fi # }}}
-      echor "Getting bssids for $ssid"
+      echoe -f "Getting bssids for $ssid"
       local networks="$(nmcli d wifi list --rescan yes | awk "/ $ssid /")"
-      [[ -z $networks ]] && echor "No bssids for $ssid" && return 1
+      [[ -z $networks ]] && echoe -f "No bssids for $ssid" && return 1
       local bssidCurrent="$(echo "$networks" | awk '/^\*/ {print $2}')"
       [[ -z $bssid ]] && bssid="$(echo "$networks" | cut -c4- | head -n1 | awk '{print $1}')"
       if [[ $bssid == $bssidCurrent ]]; then
-        echor "Already connected to $ssid on AP $bssid"
+        echoe -f "Already connected to $ssid on AP $bssid"
       else
-        echor "Connecting to $ssid on AP $bssid"
+        echoe -f "Connecting to $ssid on AP $bssid"
         nmcli d wifi connect $bssid
       fi;; # }}}
     esac
@@ -429,9 +438,9 @@ if ! $IS_MAC; then
   COMPLETION_GENERIC_FUNCTIONS+=" wifi-tool" # }}}
 else
   wifi-tool() { # {{{
-    echor "Not implemented"
+    echoe -f "Not implemented"
   } # }}}
 fi
 # }}}
-export -f is-installed save-in-backup mapShortCutToFull rpath change-monitor pid-tree kill-rec bash-trace remove-dups capture
+export -f bash-trace change-monitor clean-ansi mapShortCutToFull rpath
 

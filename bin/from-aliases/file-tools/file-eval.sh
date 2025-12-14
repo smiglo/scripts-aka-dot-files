@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_file-eval() { # @@ # {{{
+file-eval() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     -f) # {{{
@@ -32,7 +32,7 @@ _file-eval() { # @@ # {{{
       if [[ $? == 0 ]]; then
         l="${l%% ## eval *} $prefix$evR"
       else
-        echormf 0 "e: [$ev]"
+        echoe -w "e: [$ev]"
         $stopOnFail && break
       fi
     fi
@@ -40,5 +40,5 @@ _file-eval() { # @@ # {{{
   done
   return 0
 } # }}}
-_file-eval "$@"
+file-eval "$@"
 

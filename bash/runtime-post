@@ -3,8 +3,8 @@
 
 # Is installed # {{{
 ${RCSTUFF_RUNTIME_POST_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
-export RCSTUFF_RUNTIME_POST_INSTALLED=true
 [[ $1 == '--force' ]] && shift
+export RCSTUFF_RUNTIME_POST_INSTALLED=true
 # }}}
 # Runtime file # {{{
 RUNTIME_POST_FILE=$RUNTIME_PATH/runtime-post.bash
@@ -15,14 +15,18 @@ done
 unset RUNTIME_POST_FILE
 # }}}
 # TMUX_STATUS_RIGHT_EXTRA # {{{
-TMUX_STATUS_RIGHT_EXTRA_SORTED=
-while read l; do
-  l=$(echo ${l#*:})
-  [[ -z $l ]] && continue
-  export TMUX_STATUS_RIGHT_EXTRA_SORTED+="$l "
-done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
-unset l TMUX_STATUS_RIGHT_EXTRA
-# }}}
+if [[ -z $TMUX_STATUS_RIGHT_EXTRA_SORTED ]]; then
+  TMUX_STATUS_RIGHT_EXTRA_SORTED=
+  while read l; do
+    l=$(echo ${l#*:})
+    [[ -z $l ]] && continue
+    export TMUX_STATUS_RIGHT_EXTRA_SORTED+="$l "
+  done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
+  unset l TMUX_STATUS_RIGHT_EXTRA
+fi # }}}
+if is-installed -w keep-pass.sh && ! is-installed --no-cache -t pp; then # {{{
+  source "$(dirname $(readlink -f $(which keep-pass.sh)))/keep-pass-pp.sh"
+fi # }}}
 # Source profiles' runtimes # {{{
 for profi in $BASH_PROFILES_FULL; do
   [[ -e $profi/runtime-post ]] && source $profi/runtime-post
@@ -88,11 +92,17 @@ unset REMOTE_CHANGES_APPLY REMOTE_CHANGES_ALLOW_PLAIN REMOTE_CHANGES_PWD REMOTE_
 # Check personalities # {{{
 [[ -z $PERS_USERS ]] && echo "Personalities not found!!!" >/dev/stderr && sleep 2
 # }}}
+# nvm # {{{
+if [[ -e $HOME/.nvm ]] && ${NODE_USE_NVM:-false}; then
+  export NVM_DIR="$HOME/.nvm"
+  [[ -s $NVM_DIR/nvm.sh ]] && source $NVM_DIR/nvm.sh
+  [[ -s $NVM_DIR/bash_completion ]] && source $NVM_DIR/bash_completion
+fi # }}}
 # Unicode extra chars # {{{
 if [[ ! -z "$UNICODE_EXTRA_CHARS_FILE" && ! -e "$UNICODE_EXTRA_CHARS_FILE" ]]; then
   touch "$UNICODE_EXTRA_CHARS_FILE"
   {
-    echo "declare -A UNICODE_EXTRA_CHARS"
+    echo "declare -Ag UNICODE_EXTRA_CHARS"
     for i in $(echo ${!UNICODE_EXTRA_CHARS[*]} | tr ' ' '\n' | sort); do
       echo "UNICODE_EXTRA_CHARS[$i]=\"${UNICODE_EXTRA_CHARS[$i]}\""
     done
@@ -145,24 +155,42 @@ __fzf_select__() { # {{{
     done
   ) | sed -e 's|'"$PWD/"'||' | tr '\n' ' '
 } # }}}
-fzf-dir-widget() { # {{{
+__fzf-dir-widget() { # {{{
   local selected="$(__fzf_select__ --dir "$@")"
   READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
   READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
 } # }}}
-export -f __fzf_select__ fzf-dir-widget __fzfcmd __fzf_defaults
-if $FZF_INSTALLED; then # {{{
-  bind -x '"\C-t": "fzf-dir-widget"'
+__fzf_cd__() { # {{{
+  __fzf-dir-widget "$@"
+} # }}}
+__fzf-history() { # {{{
+  local rlPoint=$READLINE_POINT
+  READLINE_POINT=
+  READLINE_LINE="$( history -r; __fzf_history__)"
+  READLINE_POINT=$rlP
+} # }}}
+if $FZF_INSTALLED && ! [[ -z $PS1 ]]; then # {{{
+  bind -m vi-command -x '"\C-r": __fzf-history'
+  bind -m vi-insert  -x '"\C-r": __fzf-history'
+  bind -m vi-command -x '"\C-t": "__fzf-dir-widget"'
+  bind -m vi-insert  -x '"\C-t": "__fzf-dir-widget"'
+  bind -m vi-insert     '"\ec": "\C-gcd\C-m"'
+  bind -m vi-command -x '"\ed": __fzf_cd__'
+  bind -m vi-insert  -x '"\ed": __fzf_cd__'
 fi # }}}
 # }}}
+if ${BASHRC_GIT_COMPLETION_FIX:-true} && ! is-installed -t __git_wrap__git_main; then # {{{
+  __git_compl_f="${BASHRC_GIT_COMPLETION:-/usr/share/bash-completion/completions/git}"
+  [[ -e $__git_compl_f ]] && source $__git_compl_f
+  unset __git_compl_f
+fi # }}}
 if $IS_MAC; then # {{{
   [[ -z $PS1_CURSOR_COLOR ]] && PS1_CURSOR_COLOR=false
 fi # }}}
 if ${TMUX_POPUP:-false}; then # {{{
   if ! $TMUX_POPUP_SILENT; then
-    echorm --name popup
-    echorv -nl -e s d
-    echorm --name -
+    echoe -m popup "s=[$s]"
+    echoe -m popup "d=[$d]"
   fi
   export BASH_PHISTORY_FILE=
   export TMUX_SESSION=POPUP
@@ -171,7 +199,7 @@ if ${TMUX_POPUP:-false}; then # {{{
   fi
 fi # }}}
 if $IS_DOCKER; then # {{{
-  if ! $IS_VSCODE && [[ ! -n $TMUX && ! -z $PS1 && $UID != 0 ]]; then # {{{
+  if ! $IS_VSCODE && $BASHRC_FULL_START; then # {{{
     $ALIASES_SCRIPTS/docker-tools/clipboard-docker.sh &
     disown $!
   fi # }}}

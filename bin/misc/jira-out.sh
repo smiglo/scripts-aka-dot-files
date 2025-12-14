@@ -18,6 +18,7 @@ if [[ $1 == '@@' ]]; then # {{{
   esac
   exit 0
 fi # }}}
+import-module echor
 region= f= dbg=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -32,7 +33,7 @@ if [[ ! -t 0 || $f == '-' ]]; then # {{{
   f="$TMP_PATH/jira-out.txt"
 fi # }}}
 regionS= regionE=
-declare -A colorsMap=([module]='yellow')
+declare -A colorMap=([module]='yellow')
 $dbg && echorm -M +
 eval $(echorm -f?var)
 if [[ ! -z $region ]]; then # {{{

@@ -31,7 +31,6 @@ _get-file-list() { # @@ # {{{
     esac
     shift
   done # }}}
-  set +f
   [[ ! -e $pwd ]] && echo "Path [$pwd] does not exist" >/dev/stderr && return 1
   [[ $pwd != '.' ]] && cd "$pwd"
   if $monitor; then # {{{

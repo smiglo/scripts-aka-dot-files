@@ -4,17 +4,12 @@
 _find-wide() { # {{{
   local r= sl= cnt=
   if [[ -t 0 ]]; then
-    find-short "$@"
+    $ALIASES_SCRIPTS/find-tools/find-short.sh "$@"
   else
     command cat -
   fi \
-  | sed -e 's|^\./||' -e 's|/$||' \
-  | while read r; do
-    sl=${r//[^\/]}
-    cnt=${#sl}
-    echo "$cnt $r"
-  done \
-  | sort -k1,1n -k2,2 \
+  | awk -F'/' '{print NF-1, $0}' \
+  | sort -n -k1,1 \
   | cut -d' ' -f2-
 } # }}}
 _find-wide "$@"

@@ -25,7 +25,7 @@ _find-up() { # @@ # {{{
     done
     cwd="${cwd%/*}"
   done
-  die "'$(echo "$what" | xargs)' not found"
+  eval $(die "'$(echo "$what" | xargs)' not found")
 } # }}}
 _find-up "$@"
 

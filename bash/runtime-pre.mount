@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+if [[ -e $HOME/.bashrc-mount.trace && ! -n $TMUX ]]; then # {{{
+  traceF="$HOME/.tmp/bashrc-mount-$(command date +"%Y%m%d-%H%M%S").log"
+  tmpFD=3
+  eval "exec $tmpFD>\"$traceF\""
+  export BASH_XTRACEFD=$tmpFD
+  export BASHRC_MOUNT_TRACING=true
+  unset tmpFD traceF
+  set -x
+fi # }}}
 if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
   user_id="$UID"
   [[ -e $RUNTIME_PATH/runtime-pre.cfg ]] && source $RUNTIME_PATH/runtime-pre.cfg
-  if ! $IS_DOCKER; then
+  if ! $IS_DOCKER; then # {{{
     [[ -z $mount_src ]] && mount_src="/run/user/$user_id"
-    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true
-  else
+    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true # }}}
+  else # {{{
     [[ -z $mount_src ]] && mount_src="/tmpfs"
     [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=false
-  fi
+  fi # }}}
   if ${RUNTIME_MOUNT_DO_MOUNT:-true} && [[ -e "$mount_src" && ( ! -n $TMUX || $1 == '-f' ) ]]; then
-    [[ -e $mount_src  ]] || echor "Mount-Src ($mount_src) does not exist"
+    [[ -e $mount_src  ]] || eval $(die runtime-pre.mount "Mount-Src ($mount_src) does not exist")
     mount_p="bind"
-    $IS_MAC || $IS_DOCKER || mount_p+=",x-gvfs-hide"
+    $IS_MAC || $IS_VIRTUAL_OS || mount_p+=",x-gvfs-hide"
     mounts_default=".tmp/.mem $BASHRC_RUNTIME_PATH"
-    ! $IS_DOCKER && mounts_default+=" Desktop/mem"
-    ts="mount.$ts"
+    $IS_VIRTUAL_OS || mounts_default+=" Desktop/mem"
+    ts="mount.ts"
     for aDir in ${RUNTIME_MOUNT_MEM_DIRS:-$mounts_default}; do
       aDir="${aDir/$HOME\/}"
       do_mount=false
@@ -27,10 +36,10 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
       d="$aDir"
       [[ "$d" == /* ]] || d="$HOME/$d"
       [[ -e "$(dirname "$d")" ]] || continue
-      if [[ ! -e "$mount_src/$s" ]]; then
+      if [[ ! -e "$mount_src/$s" ]]; then # {{{
         command mkdir -p "$mount_src/$s"
         do_mount=true
-      fi
+      fi # }}}
       if $do_mount || [[ $1 == '-f' ]]; then
         touch $mount_src/$s/$ts
         if [[ ! -e $d/$ts ]]; then
@@ -42,7 +51,8 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
           if ${RUNTIME_MOUNT_USE_MOUNT:-false}; then # {{{
             command mkdir -p "$d"
             command mount | command grep -qF "$d" && sudo umount "$d"
-            sudo mount -o $mount_p "$mount_src/$s" "$d" # }}}
+            sudo mount -o $mount_p "$mount_src/$s" "$d"
+            ${RUNTIME_MOUNT_ADD_EXEC:-true} && command mount | command grep -q "$d.*noexec" && sudo mount -o remount,exec "$d" # }}}
           else # {{{
             ln -sf "$mount_src/$s" "$d"
           fi # }}}
@@ -58,5 +68,9 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
   fi
   unset user_id mount_src RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT
 fi
-
+if ${BASHRC_MOUNT_TRACING:-false}; then # {{{
+  set +xv
+  eval "exec $BASH_XTRACEFD>&-"
+  unset BASH_XTRACEFD BASHRC_MOUNT_TRACING
+fi # }}}
 

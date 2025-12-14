@@ -2,9 +2,10 @@
 # vim: fdl=0
 
 src() { # @@ # {{{
-  echormf -M +?
   local i= ii= verb=false
   local list="$(find $SCRIPT_PATH/bash/aliases.d -maxdepth 1 -type f)"
+  local dbgMode=false
+  [[ $dbgMode ]] && import-module echor && echormf -M +?
   for i in $BASH_PROFILES_FULL; do
     [[ -e $i/aliases ]] && list+="\n$($i/aliases __util_src)"
   done
@@ -13,12 +14,12 @@ src() { # @@ # {{{
     echo "-1 -2 -5 -f -l -a"
     return 0
   fi # }}}
-  list="$(ls -t $(echo -e "$list"))"
+  list="$(command ls -t $(echo -e "$list"))"
   i=$1
   case $i in
   -f) # {{{
     for ii in $(find $BASHRC_RUNTIME_PATH -name 'aliases-*.dump'); do
-      echormf "source ${ii##*/}"
+      $dbgMode && echormf "source ${ii##*/}"
       source $ii
     done
     return 0;; # }}}
@@ -36,7 +37,20 @@ src() { # @@ # {{{
     for ii in $list; do
       [[ $(command stat -c %Y "$ii") -gt $mod ]] && i+=" $ii"
     done
-    [[ -z $i ]] && return 0
+    if [[ -z $i ]]; then
+      local list="$(command cd $BASHRC_RUNTIME_PATH; find . -maxdepth 1 -type f -name 'aliases-*.dump' -not -name '*-local.dump')" t= ts= src_i=
+      for src_i in $list; do
+        local t=${src_i#./aliases-} && t=${t%.dump} && t=${t//-/_}
+        local -n tsRef="ALIASES_TS_${t^^}"
+        local ts="$(command stat -c %Y "$BASHRC_RUNTIME_PATH/$src_i")"
+        if [[ $ts -gt ${tsRef:-0} ]]; then
+          $dbgMode && echormf "updating from $src_i"
+          source "$BASHRC_RUNTIME_PATH/$src_i"
+          tsRef=$ts
+        fi
+      done
+      return 0
+    fi
     ;; # }}}
   -[0-9]*) # {{{
     verb=true
@@ -54,10 +68,13 @@ src() { # @@ # {{{
   local src_i= src_df=
   for src_i; do # {{{
     [[ -z $src_i ]] && continue
-    echormf "sourcing ${src_i/$HOME\//\~\/}"
+    $dbgMode && echormf "sourcing ${src_i/$HOME\//\~\/}"
     source $src_i
-    local src_df="$(set +f; command grep -l "^#-#-# START: $src_i # {\{3\}" $BASHRC_RUNTIME_PATH/aliases*.dump 2>/dev/null | head -n1)"
-    [[ -z $src_df ]] && echormf "dump for '${src_i##*/}' not found" && continue
+    local src_df="$(command grep -l "^#-#-# START: $src_i # {\{3\}" $BASHRC_RUNTIME_PATH/aliases*.dump 2>/dev/null | head -n1)"
+    if [[ -z $src_df ]]; then
+      $dbgMode && echormf "dump for '${src_i##*/}' not found"
+      continue
+    fi
     local i_sed="$(echo "$src_i" | sed 's:[]\[^$.*/&]:\\&:g')"
     command cp $src_df $src_df.tmp
     touch "${src_df}.tmp"
@@ -69,12 +86,14 @@ src() { # @@ # {{{
       echo "#-#-# END: $src_i # }}}"
     } >>"${src_df}.tmp" # }}}
     mv "${src_df}.tmp" "$src_df"
+    local t=${src_df#*/aliases-} && t=${t%.dump} && t=${t//-/_}
+    local -n tsRef="ALIASES_TS_${t^^}"
+    tsRef="$(command stat -c %Y "$src_df")"
   done
-  set +f
   export PATH="$(remove-dups "$PATH" ":")"
   export HISTIGNORE="$(remove-dups "$HISTIGNORE" ":")"
   export PHISTORY_IGNORED_COMMANDS="$(remove-dups "$PHISTORY_IGNORED_COMMANDS" ":")"
-  unset COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS
+  unset COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS COMPLETION_GENERIC_UTILS_OLD COMPLETION_GENERIC_FUNCTIONS_OLD
 } # }}}
 source-basic() { # {{{
   source $HOME/.bashrc --do-basic

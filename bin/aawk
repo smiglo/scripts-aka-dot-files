@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module echor
+
+aawk() { # @@ # {{{
+  local scriptPath="$SCRIPT_PATH/bin/awk.script"
+  if [[ $1 == '@@' ]]; then # {{{
+    case $3 in
+    -f) get-file-list '*.awk'; get-file-list --pwd "$scriptPath" '*.awk';;
+    -F) echo "\'[=\\ ]\'";;
+    *)  echo "1 2 3 -F -f";;
+    esac
+    return 0
+  fi # }}}
+  local params= print= pre= script=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    /*)      pre="$1";;
+    [0-9]*)  print+=",\$$1";;
+    -f)      script="$2"; shift;;
+    *)       params+="$1 ";;
+    esac; shift
+  done # }}}
+  if [[ -z $script ]]; then
+    echormf "awk $params '$pre{print \"${print#,}\"}'"
+    eval awk $params "'$pre{print "${print#,}"}'"
+  else
+    if [[ $script != /* ]]; then
+      [[ ! -e $script ]] && script="$scriptPath/$script"
+      [[ ! -e $script ]] && echormf -C 0 "script file [$script] %err:%s" "not found" && return 1
+    fi
+    echormf "awk $params -f $script"
+    eval awk $params -f $script
+  fi
+} # }}}
+aawk "$@"
+

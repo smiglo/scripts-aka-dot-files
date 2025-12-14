@@ -12,15 +12,15 @@ else # {{{
   mode="FIFO"
   hostIn=${DOCKER_CLIP_D2H:-$CLIP_FILE.d2h}
   hostOu=${DOCKER_CLIP_H2D:-$CLIP_FILE.h2d}
-  dockIn=${hostOu/$HOME/$DOCKER_HOST}
-  dockOu=${hostIn/$HOME/$DOCKER_HOST}
+  dockIn=${hostOu/$HOME/$HOST}
+  dockOu=${hostIn/$HOME/$HOST}
 fi # }}}
 
 delay=${DOCKER_CLIP_POLLING:-2}
 dbgLvl=${DOCKER_CLIP_DBG_LVL:-D}
 
 writer() { # {{{
-  local dataOu=$1 sum=0000000 sumLast=0000000 fTmp=$TMP_MEM_PATH/$(basename $CLIP_FILE).w fSum=$TMP_MEM_PATH/clip-doc.sum
+  local dataOu=$1 sum=0000000 sumLast=0000000 fTmp=$TMP_MEM_PATH/$(basename $CLIP_FILE).w
   dbg --set --name="wrt"
   case $mode in
   TCP) # {{{
@@ -36,11 +36,9 @@ writer() { # {{{
     xclip --get >$fTmp
     [[ -s $fTmp ]] || { sleep $delay; continue; }
     sum=$(sha1sum $fTmp | cut -d' ' -f 1)
-    [[ -s $fSum ]] && sumLast=$(<$fSum)
-    [[ $sum == $sumLast ]] && sleep $delay && continue
+    [[ $sum == $sumLast ]] && { sleep $delay; continue; }
     dbg I "writing: [${sumLast:0:7} > ${sum:0:7}]: $(head -n1 $fTmp)..."
     sumLast=$sum
-    echo "$sumLast" >$fSum
     case $mode in
     TCP)  cat $fTmp | netcat $ncP $pOHost $dataOu;;
     FIFO) cat $fTmp >$dataOu;;
@@ -51,7 +49,7 @@ writer() { # {{{
   done
 } # }}}
 reader() { # {{{
-  local dataIn=$1 sum=0000000 sumLast=0000000 fTmp=$TMP_MEM_PATH/$(basename $CLIP_FILE).r fSum=$TMP_MEM_PATH/clip-doc.sum
+  local dataIn=$1 sum=0000000 sumLast=0000000 fTmp=$TMP_MEM_PATH/$(basename $CLIP_FILE).r
   dbg --set --name="rdr"
   case $mode in
   TCP) # {{{
@@ -67,21 +65,19 @@ reader() { # {{{
     TCP)  netcat -l $ncP $pIHost -p $dataIn >$fTmp;;
     FIFO) cat $dataIn >$fTmp;;
     esac
-    sum=$(sha1sum $fTmp | cut -d' ' -f 1)
     [[ -s $fTmp ]] || continue
+    sum=$(sha1sum $fTmp | cut -d' ' -f 1)
     dbg D "got, [${sum:0:7}]"
-    [[ -s $fSum ]] && sumLast=$(<$fSum)
-    if [[ $sum != $sumLast ]]; then
-      dbg I "updating: [${sumLast:0:7} > ${sum:0:7}]: $(head -n1 $fTmp)..."
-      sumLast=$sum
-      echo "$sumLast" >$fSum
-      cat $fTmp | xclip --put
-    fi
+    [[ $sum == $sumLast ]] && continue
+    dbg I "updating: [${sumLast:0:7} > ${sum:0:7}]: $(head -n1 $fTmp)..."
+    sumLast=$sum
+    cat $fTmp | xclip --put
   done
 } # }}}
 
 fPid=$MEM_KEEP/clip-doc.pid fLog=$TMP_MEM_PATH/clip-doc.log
 export DBG_ID=CLIP_DOC
+import-module dbg
 dbg --init -v=$dbgLvl --ts-abs --out=$fLog --name="clip" --id=show
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -116,7 +112,7 @@ else # {{{
 fi # }}}
 case $mode in
 TCP) # {{{
-  is-installed netcat || { dbg E "netcat not found"; die "netcat not foud"; }
+  is-installed -w netcat || { dbg E "netcat not found"; die "netcat not foud"; }
   dbg I "W: $dataOu, R: $dataIn, host: $pOHost"
   reader $dataIn $pIHost &
   writer $dataOu $pOHost &

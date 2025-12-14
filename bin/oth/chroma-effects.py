@@ -66,13 +66,10 @@ action.add_argument('--test', action='store_true')
 args = parser.parse_args()
 
 device_manager = openrazer.client.DeviceManager()
-keyboard = None
 
-for device in device_manager.devices:
-    if device.type == 'keyboard':
-        keyboard = device
-        break
-else:
+all_keyboards = [d for d in device_manager.devices if d.type == 'keyboard']
+
+if not all_keyboards:
     if not args.test:
         print("Could not find suitable keyboard", file=sys.stderr)
     sys.exit(1)
@@ -80,7 +77,16 @@ else:
 if args.test:
     sys.exit(0)
 
-elif args.breath_random:
+keyboard = all_keyboards[0]
+razer_keyboard_env = os.getenv('RAZER_KEYBOARD')
+
+if razer_keyboard_env:
+    for dev in all_keyboards:
+        if razer_keyboard_env.lower() in dev.name.lower():
+            keyboard = dev
+            break
+
+if args.breath_random:
     if keyboard.fx.has("breath_random"):
         keyboard.fx.breath_random()
     else:

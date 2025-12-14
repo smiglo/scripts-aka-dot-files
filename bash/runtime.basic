@@ -5,40 +5,59 @@
 export TMP_PATH=$HOME/.tmp
 export TMP_MEM_PATH=$TMP_PATH/.mem
 [[ -h $TMP_MEM_PATH && ! -e $TMP_MEM_PATH ]] && rm $TMP_MEM_PATH
-[[ ! -e $TMP_MEM_PATH ]] && command mkdir -p $TMP_MEM_PATH
 export MEM_KEEP=$TMP_MEM_PATH/keep
-[[ ! -e $MEM_KEEP ]] && command mkdir -p $MEM_KEEP
+export TMPDIR=$TMP_PATH/.tmp-dir
 export RUNTIME_PATH=$HOME/.runtime
 export APPS_CFG_PATH=$RUNTIME_PATH/apps
-[[ -e $APPS_CFG_PATH ]] || mkdir -p $APPS_CFG_PATH
 export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 [[ -h $BASHRC_RUNTIME_PATH && ! -e $BASHRC_RUNTIME_PATH ]] && rm $BASHRC_RUNTIME_PATH
-[[ -e $BASHRC_RUNTIME_PATH ]] || command mkdir -p $BASHRC_RUNTIME_PATH
 export BIN_PATH="${BIN_PATH:-$HOME/.bin}"
 export BASH_PATH="${BASH_PATH:-$BIN_PATH/bash}"
 export PROFILES_PATH="$BASH_PATH/profiles"
 export ALIASES="$BASH_PATH/aliases"
-if [[ -z $MY_PROJ_PATH ]]; then
-  export MY_PROJ_PATH=$HOME/projects/my
-  [[ ! -e $MY_PROJ_PATH/scripts ]] && MY_PROJ_PATH=$HOME/projects
-  if [[ ! -e $MY_PROJ_PATH/script ]]; then
-    MY_PROJ_PATH="$(readlink -f $HOME/.bashrc)"
-    MY_PROJ_PATH=${MY_PROJ_PATH%%/scripts/*}
-  fi
-fi
+# os-kind (mac/docker/wsl/virt-os/vscode # {{{
 if [[ -z $IS_MAC ]]; then # {{{
   export IS_MAC=false
   [[ $(uname) == 'Darwin' ]] && IS_MAC=true
 fi # }}}
 if [[ -z $IS_DOCKER ]]; then # {{{
   export IS_DOCKER=false
-  [[ -e /.dockerenv ]] && IS_DOCKER=true && export DOCKER_HOST="/host"
+  [[ -e /.dockerenv ]] && IS_DOCKER=true && export HOST="/home/host"
 fi # }}}
+if [[ -z $IS_WSL ]]; then # {{{
+  export IS_WSL=false
+  which clip.exe >/dev/null 2>&1 && IS_WSL=true
+fi # }}}
+export IS_VIRTUAL_OS=false
+( $IS_DOCKER || $IS_WSL ) && IS_VIRTUAL_OS=true
 export IS_VSCODE=false
-[[ $TERM_PROGRAM == "vscode" ]] && export IS_VSCODE=true
-if $IS_VSCODE ]]; then
-  [[ -e $APPS_CFG_PATH/vscode ]] || mkdir -p $APPS_CFG_PATH/vscode
+if [[ $TERM_PROGRAM == "vscode" ]]; then
+  export IS_VSCODE=true
+  [[ $ENV_SNAPSHOT == *.main ]] && unset ENV_SNAPSHOT
+fi
+# }}}
+export ENV_SNAPSHOT_PRE=$MEM_KEEP/snapshot
+[[ $UID != 0 ]] || ENV_SNAPSHOT_PRE+="-root"
+if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
+  if ${TMUX_POPUP:-false}; then
+    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.tpopup
+  elif $IS_VSCODE; then
+    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.vscode
+  else
+    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.main
+    [[ -n $TMUX ]] && export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
+  fi
+  [[ -e $ENV_SNAPSHOT ]] || command mkdir -p $ENV_SNAPSHOT
 fi # }}}
+if [[ -z $MY_PROJ_PATH ]]; then # {{{
+  export MY_PROJ_PATH=$HOME/projects/my
+  [[ ! -e $MY_PROJ_PATH/scripts ]] && MY_PROJ_PATH=$HOME/projects
+  if [[ ! -e $MY_PROJ_PATH/script ]]; then
+    MY_PROJ_PATH="$(readlink -f $HOME/.bashrc)"
+    MY_PROJ_PATH=${MY_PROJ_PATH%%/scripts/*}
+  fi
+fi # }}}
+# }}}
 # Clear appended variables, init env # {{{
 export ALIASES_MAP=
 export BASH_EXTRA_FEATURES=
@@ -47,9 +66,14 @@ export BASH_UPDATE_TIME=
 export BASH_ALIASES_DUMMY="compl-add"
 export COMPLETION_GENERIC_UTILS=
 export COMPLETION_GENERIC_FUNCTIONS=
+export COMPLETION_GENERIC_UTILS_OLD=
+export COMPLETION_GENERIC_FUNCTIONS_OLD=
+export COMPLETION_USE_NEW=
 export COLUMNS=$COLUMNS
 export CD_INTERACTIVE_PREDEFINED_LIST=
 export CD_INTERACTIVE_USER_LIST=
+export CD_INTERACTIVE_EXCLUDE_LIST="tmp* temp *.bck"
+export CD_INTERACTIVE_EXCLUDE=
 export CD_LAST_DIRS_INTERACTIVE_IGNORE=
 export CD_LAST_DIRS_STORED=
 export CLANG_PARAMS_COMMON="-g -O0"
@@ -57,13 +81,15 @@ export CLANG_PARAMS_W="-Wall -Wno-disabled-macro-expansion -Wno-writable-strings
 export CLANG_PARAMS="-std=c99"
 export CLANGPP_PARAMS="-std=c++11"
 export CLIP_FILE="$MEM_KEEP/clip"
+export CMAKE_ARGS=
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
 export GREP_EXCLUDES=
 export HISTIGNORE=
 export HISTIGNORE+=":reset:clear:exit"
-export HISTIGNORE+=":keep-pass.sh:./keep-pass.sh"
+export HISTIGNORE+=":keep-pass.sh:./keep-pass.sh:pp:keep-pass-pp.sh"
+export HISTIGNORE+=":encryptor"
 export HISTIGNORE+=":vim-enc.sh"
 export HISTIGNORE+=":reboot:shutdown"
 export HISTIGNORE_WILD_WHITELIST=
@@ -77,6 +103,7 @@ export J2_TICKET_FILE=".ticket.sh .ticket"
 [[ -z $J2_USE_J2_WRAPPER ]] && export J2_USE_J2_WRAPPER=true
 export KB_PATHS=
 export KEEP_PASS_JOURNALS=
+[[ -z $KEEP_PASS_MASTER_KEY ]] && export KEEP_PASS_MASTER_KEY="$MEM_KEEP/keep-pass.mkey"
 export MANPATH=
 export PHISTORY_IGNORED_COMMANDS=
 export PHISTORY_IGNORED_COMMANDS+="exec"
@@ -108,12 +135,11 @@ export TMUX_FINGERS_REGEX=
 export TMUX_INIT_SESSIONS=
 export TMUX_INIT_SESSIONS_SKIP=
 export TMUX_REMOTE_PREFIXES=
-export TMUX_SMART_BLACKLIST_DOCKER="EMPTY_VALUE"
-export TMUX_SMART_BLACKLIST_SSH="EMPTY_VALUE"
 export TMUX_STATUS_LEFT_EXTRA_MAP=
 export TMUX_STATUS_RIGHT_EXTRA=
 export TMUX_SWITCH_CLIENT_MAP=
 [[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
+export TMUX_NEST="$MEM_KEEP/tmux.nest"
 export TOOLS_PATH="$HOME/tools"
 export TO_INSTALL_BIN_MISC='BASIC'
 export TO_INSTALL_TOOLS=
@@ -125,6 +151,7 @@ export VIM_PRJ_PARAMS=
 # MY_PROJ_PATH setup # {{{
 export SCRIPT_PATH=$MY_PROJ_PATH/scripts
 export ALIASES_SCRIPTS="$SCRIPT_PATH/bin/from-aliases"
+export ALIASES_D="$SCRIPT_PATH/bash/aliases.d"
 export BASH_UPDATE_REPOS="$MY_PROJ_PATH/scripts $MY_PROJ_PATH/vim"
 export BASH_UPDATE_TIME="$((1*18*60*60))"
 export GIT_REPOS="$BASH_UPDATE_REPOS $MY_PROJ_PATH/info"
@@ -160,21 +187,22 @@ export BASH_PROFILES="$(command cd $PROFILES_PATH 2>/dev/null; echo *)"
 [[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
 export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
 # }}}
+if $BASHRC_FULL_START; then # {{{
+  command mkdir -p \
+    $TMP_PATH $TMPDIR $TMP_MEM_PATH \
+    $MEM_KEEP \
+    $RUNTIME_PATH $RUNTIME_PATH/tmux-buffers $BASHRC_RUNTIME_PATH \
+    $APPS_CFG_PATH $APPS_CFG_PATH/vscode \
+    $TMUX_NEST
+  chmod 700 $TMPDIR $TMP_MEM_PATH
+fi # }}}
 # Runtime Path - Setup # {{{
-[[ ! -e $RUNTIME_PATH ]] && command mkdir $RUNTIME_PATH
 for profi in $BASH_PROFILES; do
   [[ -e $RUNTIME_PATH/runtime-pre.bash.$profi ]] && source $RUNTIME_PATH/runtime-pre.bash.$profi
 done
 [[ -e $RUNTIME_PATH/runtime-pre.bash ]] && source $RUNTIME_PATH/runtime-pre.bash
 [[ -e $RUNTIME_PATH/runtime-pre.mount ]] && source $RUNTIME_PATH/runtime-pre.mount
-[[ -e $RUNTIME_PATH/tmux-buffers ]] || command mkdir $RUNTIME_PATH/tmux-buffers
 export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
-[[ -e $APPS_CFG_PATH ]] || command mkdir $APPS_CFG_PATH
-# }}}
-# TMP Paths # {{{
-export TMPDIR=$TMP_PATH/.tmp-dir
-[[ ! -e $TMPDIR ]] && command mkdir -p $TMPDIR
-chmod 700 $TMPDIR $TMP_MEM_PATH
 # }}}
 # shortcuts to env # {{{
 export RT=$RUNTIME_PATH
@@ -182,6 +210,6 @@ export TP=$TMP_PATH
 export TM=$TMP_MEM_PATH
 export MK=$MEM_KEEP
 export AP=$APPS_CFG_PATH
-export BA=$BASHRC_RUNTIME_PATH
+export BR=$BASHRC_RUNTIME_PATH
 # }}}
 

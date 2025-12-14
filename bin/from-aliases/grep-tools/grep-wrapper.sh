@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_grep-wrapper() { # @@ # {{{
+grep-wrapper() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "+tee=true +tee=false +fzf +-fzf"
     echo "+i +I"
@@ -49,7 +49,7 @@ _grep-wrapper() { # @@ # {{{
   done # }}}
   $smart_case && params+=" -i"
   if [[ ! -z $color ]]; then # {{{
-    params+=" --color=yes"
+    [[ $use_colors != "--no-colors" ]] && use_colors="--colors" && params+=" --color=yes"
     case $(echo ${color,,}) in
     gr|gray|grey)   GREP_COLORS=$(echo $GREP_COLORS | sed 's/mt=[0-9;]*/mt=01;30/');;
     r|red)          GREP_COLORS=$(echo $GREP_COLORS | sed 's/mt=[0-9;]*/mt=01;31/');;
@@ -98,7 +98,7 @@ _grep-wrapper() { # @@ # {{{
     params="${params/--color=no}"
   fi
   set - "$args"
-  echormf "$use_tee +fzf=$use_fzf $ignoreErr \"eval $cmd\" $params \"$@\" $exclude"
+  # echoe -w "$use_tee +fzf=$use_fzf $ignoreErr \"eval $cmd\" $params \"$@\" $exclude"
   [[ -z $fzf_prompt ]] && fzf_prompt="grep: $query> "
   $ALIASES_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee $use_colors +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
   err=$?
@@ -106,5 +106,5 @@ _grep-wrapper() { # @@ # {{{
   $IS_MAC && ! $gnuGrep && export GREP_COLOR=$oldColors
   return $err
 } # }}}
-_grep-wrapper "$@"
+grep-wrapper "$@"
 

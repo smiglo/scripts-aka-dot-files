@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_snapshot() { # @@ # {{{
+snapshot() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "-r --restore -f --file --plain"
     return 0
@@ -52,17 +52,17 @@ _snapshot() { # @@ # {{{
     [[ ! -z $SNAPSHOT_INCLUDE ]] && tarList+="\n$SNAPSHOT_INCLUDE"
     (
       set -o pipefail
-      tar $tarExclude $tarParams -cz -T <(echo "$tarList") \
+      tar $tarExclude $tarParams -cz -T <(echo -e "$tarList") \
       | { if $useEnc; then encryptor --bin --key $SNAPSHOT_KEY; else cat -; fi } >$TMP_MEM_PATH/$(basename $dst)
     )
     if [[ $? == 0 && -s $TMP_MEM_PATH/$(basename $dst) ]]; then
       [[ -e $dst ]] && mv "$dst" "${dst%.tgz}-last.tgz"
       mv $TMP_MEM_PATH/$(basename $dst) $dst
     else
-      echor "snapshot failed"
+      echoe -w "snapshot failed"
       rm -f $TMP_MEM_PATH/$(basename $dst)
     fi
   )
 } # }}}
-_snapshot "$@"
+snapshot "$@"
 

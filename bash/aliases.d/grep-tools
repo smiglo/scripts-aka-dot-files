@@ -44,12 +44,13 @@ mg() { # @@ # {{{
 } # }}}
 gr() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
-    echo "-I"
+    echo +c={Gray,Red,Green,Yellow,Blue,Pink,Cyan,Gold,Hls,Search}
+    echo "+i"
     return 0
   fi
-  local params=
-  [[ $1 == '-I' ]] && params+=" +I" && shift
+  local params="--line-buffered"
+  [[ $1 == '+i' ]] && params+=" +i" && shift
   [[ -t 1 ]] && params+=" --colors"
-  $ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep +tee=false $params -E $@
+  $ALIASES_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-egrep +tee=false $params "$@"
 } # }}}
 

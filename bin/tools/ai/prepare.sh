@@ -7,17 +7,17 @@ vEnv="./${AI_VENV_PATH:-.venv}"
 v="$($python --version)"
 v="${v##* }"
 
-echor "Python: $v"
+echoe -m prepare-ai "Python: $v"
 
 if [[ $v != $vExp && "$v" != "$(echo -en "$v\n$vExp" | sort -Vr | head -n1)" ]]; then
-  echor "Python needs to be $vExp+"
+  echoe -m prepare-ai "Python needs to be $vExp+"
 fi
 
-echor "Setting venv in $vEnv"
+echoe -m prepare-ai "Setting venv in $vEnv"
 $python -m venv $vEnv
 source $vEnv/bin/activate || exit $?
 
-echor "Installing packages"
+echoe -m prepare-ai "Installing packages"
 pip install -r requirements.txt || exit $?
-echor "source $vEnv/bin/activate"
+echoe -m prepare-ai "source $vEnv/bin/activate"
 

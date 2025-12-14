@@ -9,12 +9,22 @@ set-title-pane() { # {{{
     set-title "$@"
     return 0
   fi
-  local force=false
-  [[ $1 == '-f' ]] && force=true && shift
-  if $force || [[ -n $TMUX ]] || ${SET_TITLE_PANE_NO_TMUX:-true}; then
+  local force=false lock_in=false
+  while [[ ! -z $1 ]]; do
+    case $1 in
+      -f) force=true;;
+      -l) lock_in=true;;
+      -u) unset PANE_TITLE_LOCKED;;
+      *) break;;
+    esac; shift
+  done
+  if $force || ( ! ${PANE_TITLE_LOCKED:-false} && ( [[ -n $TMUX ]] || ${SET_TITLE_PANE_NO_TMUX:-false} ) ); then
     local title="$@"
     [[ -z $title ]] && title="${PWD/$HOME/\~}" && title="${title##*/}"
     printf ']2;%s\\' "$title" >/dev/stderr
+  fi
+  if $lock_in; then
+    export PANE_TITLE_LOCKED=true
   fi
 } # }}}
 export -f set-title set-title-pane

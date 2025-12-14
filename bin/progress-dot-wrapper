@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $3 in
+  -C | --background-cmd) echo "CMD";;
+  --check-cmd)  echo "CMD";;
+  -n)     echo "1 3 5 10 15 20";;
+  -f | --file-marker) echo "@@-f";;
+  --init-p) echo "---";;
+  --step) echo "1 0.5 2 5";;
+  -w | --wait)  echo "1m 5m 30m";;
+  *)
+    echo "--check-cmd -n -every"
+    echo "--background-cmd -C"
+    echo "--init-p --no-info --no-err --step -f --file-marker"
+    echo "-w --wait 1m 5m 30m";;
+  esac
+  exit 0
+fi # }}}
+
+import-module progress-dot progress
+import-module time-tools
+
+delay="5m"
+checkCmd=
+workerCmd=
+workerCmdPid=
+cmd_n=10
+params="-r 6 --align"
+reportError=true
+showInfo=true
+fileMarker=
+step=1.0
+
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -C | --background-cmd) workerCmd="$2"; shift;;
+  --check-cmd) checkCmd="$2"; shift;;
+  -n) cmd_n="$2"; shift;;
+  --every) cmd_n="1";;
+  -f | --file-marker) fileMarker="$2"; shift;;
+  --init-p) params+=" $2"; shift;;
+  --no-err) reportError=false;;
+  --no-info) showInfo=false;;
+  --step) step="$2"; shift;;
+  -w | --wait) delay="$2"; shift;;
+  *) delay=$1;;
+  esac; shift
+done # }}}
+
+[[ -z $fileMarker ]] || rm -f $fileMarker
+
+if [[ ! -z $workerCmd ]]; then # {{{
+  $workerCmd &
+  workerCmdPid=$!
+fi # }}}
+
+clean-up() { # {{{
+  if [[ ! -z $workerCmdPid ]]; then # {{{
+    kill $workerCmdPid 2>/dev/null
+    wait $workerCmdPid
+  fi # }}}
+  [[ -z $fileMarker ]] || rm -f $fileMarker
+} # }}}
+
+trap "clean-up; $reportError && exit 1 || exit 0" INT
+
+delay=$(time2s $delay -o s)
+t_end=$((EPOCHSECONDS + $delay))
+$showInfo && printfc "%ts:%s: end at %info:%s, pid: %purple:%s" "$(date +$TIME_FMT -d @$EPOCHSECONDS)" "$(date +$TIME_FMT -d @$t_end)" "$$"
+
+endReason="timeout"
+progress-dot --init $params --end $t_end
+sleep-precise -s $step
+for ((i=1; EPOCHSECONDS < t_end; i++)); do # {{{
+  if [[ ! -z $checkCmd || ! -z $fileMarker ]] && (($i % $cmd_n == 0)); then
+    [[ ! -z $fileMarker && -e $fileMarker ]] || eval $checkCmd
+    if (( $? == 0 )); then
+      progress-dot --dot=ok
+      endReason="checkCmd"; break
+    elif (( cmd_n == 1 )); then
+      progress-dot --dot
+    else
+      progress-dot --dot=err
+    fi
+  else
+    progress-dot --dot
+  fi
+  sleep-precise
+  read -s -n 1 -t 0.001 key </dev/tty && \
+  case ${key,,} in
+  q) progress-dot --dot=cyan:sep-x@UC; endReason="break"; break;;
+  esac
+done # }}}
+
+case $endReason in # {{{
+checkCmd)
+  progress-dot --end
+  exit 0;;
+break)
+  progress-dot --end=Q
+  $reportError && exit 1 || exit 0;;
+timeout)
+  progress-dot --end=T
+  $reportError && exit 10 || exit 0;;
+*)
+  progress-dot --end=?
+  exit 2;;
+esac # }}}
+

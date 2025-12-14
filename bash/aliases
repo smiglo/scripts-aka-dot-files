@@ -7,13 +7,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && ! -z $1 ]]; then # {{{
   export BASH_ALIASES_FROM_CMD=true
   if [[ $1 == '--clean' ]]; then # {{{
     shift
-    set +f; shopt -s extglob
     rm -f $BASHRC_RUNTIME_PATH/aliases*
   fi # }}}
 else
   if [[ $1 == '--clean' ]]; then
     shift
-    set +f; shopt -s extglob
     rm -f $BASHRC_RUNTIME_PATH/aliases*
     RCSTUFF_ALIASES_INSTALLED=false
   fi
@@ -36,14 +34,11 @@ install-function() { # START: install-function # {{{
   local doCheck=true
   [[ $1 == --force-yes ]] && doCheck=false && shift
   local tool="$1"
-  local add_completion=
-  if [[ "$tool" == *:@@* ]]; then
-    add_completion="${tool##*:@@}"
-    tool="${tool%:@@*}"
-    [[ -z $add_completion ]] && add_completion="$tool"
-  fi
-  $doCheck && [[ $TO_INSTALL != *\ $tool\ * ]] && return 1
+  local add_completion="$2"
+  local add_completion_old="$3"
+  ! $doCheck || [[ $TO_INSTALL == *\ $tool\ * ]] || return 1
   [[ ! -z $add_completion ]] && export COMPLETION_GENERIC_FUNCTIONS+=" ${add_completion//:/ }"
+  [[ ! -z $add_completion_old ]] && export COMPLETION_GENERIC_FUNCTIONS_OLD+=" ${add_completion_old//:/ }"
   return 0
 }
 export -f install-function
@@ -52,47 +47,39 @@ install-extensions() { # START: install-extensions # {{{
   local ask=true
   [[ $1 == --no-ask ]] && ask=false && shift
   local name="$2"
-  local dumpFile="$BASHRC_RUNTIME_PATH/aliases-$name.dump" complFile="$BASHRC_RUNTIME_PATH/aliases.compl" lockDir="$BASHRC_RUNTIME_PATH/.lock-$name.lock"
+  local dumpFile="$BASHRC_RUNTIME_PATH/aliases-$name.dump" lockDir="$BASHRC_RUNTIME_PATH/.lock-$name.lock"
   $BASH_ALIASES_FROM_CMD && [[ ! -e "$dumpFile" ]] && dumpFile="${dumpFile%.dump}-local.dump"
-  if [[ ! -e "$dumpFile" || ! -e "$complFile" ]]; then # {{{
-    local i= fi= compl= list= wdir=$1
+  if [[ ! -e "$dumpFile" ]]; then # {{{
+    local i= fi= wdir=$1
     if ! $BASH_ALIASES_FROM_CMD; then
       ( ii=0; while ! command mkdir "$lockDir" 2>/dev/null && [[ $ii -lt 6 ]]; do
           sleep 0.5; ii=$(($ii+1))
         done
       )
     fi
-    local complOrig="$COMPLETION_GENERIC_FUNCTIONS"
-    COMPLETION_GENERIC_FUNCTIONS=""
+    local complOrig="$COMPLETION_GENERIC_FUNCTIONS" && COMPLETION_GENERIC_FUNCTIONS=""
+    local complOldOrig="$COMPLETION_GENERIC_FUNCTIONS_OLD" && COMPLETION_GENERIC_FUNCTIONS_OLD=""
     for i in $(command cd $wdir; find . -maxdepth 1 -type f \( -name '*.ign' -prune -o -name '*~' -prune -o -print \) | sed 's|^\./||' | sort -n); do # {{{
       fi="$wdir/$i"
-      [[ "$(head -n1 $fi)" == "#!"* ]] || { echor "Skipping file [$i] because of missing shebang"; continue; }
+      local fcon_= ask_i=$ask complOld= complNew= arkup= fc_i=
+      mapfile -t fcon < <(command sed -n -e 1p -e '/# @@\|# @-@\|# @@:new/p' $fi)
+      [[ "${fcon[0]}" == "#!"* ]] || { echoe -f "Skipping file [$i] because of missing shebang"; continue; }
       [[ $i =~ ^[0-9]+\..* ]] && i="${i#*.}"
-      local ask_i=$ask
       [[ $i == -* ]] && ask_i=true && i=${i#-}
-      compl= && list=
-      [[ -e $complFile ]] && compl="$(awk '/^'"${fi##*/}"': / {print $2}' "$complFile")"
-      if [[ -z $compl ]]; then # {{{
-        list+=" $(sed -n 's/^\s*\([a-zA-Z].*\)()\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi")"
-        list+=" $(sed -n 's/^\s*function \([a-zA-Z].*\)\(()\)\?\s*{.*# @@\($\|[^:].*\)/\1/p' "$fi")"
-        list+=" $(sed -n '/# @@:/s/.*# @@:\s*\([^ ]*\).*/\1/p' "$fi")"
-        list+=" $(awk -F'[ =]' '/^alias .*# @@$/ {print $2}' "$fi")"
-        list="$(echo $list | tr '\n' ' ')"
-        if command grep -q "^# complete" "$fi"; then
-          list+=" $(sed -n '/^# complete:/s/^[^:]*://p' "$fi")"
-          list="$(echo $list)"
-          [[ -z $list ]] && compl=":@@"
+      for fc_i in ${!fcon[*]}; do
+        if false; then :
+        elif [[ ${fcon[$fc_i]} =~ ^\ *([a-zA-Z].*)\(\)\ *\{\ *#\ (@-@|@@:new) ]]; then # }
+          complNew+=":${BASH_REMATCH[1]}"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *([a-zA-Z].*)\(\)\ *\{\ *#\ @@ ]]; then # }
+          complOld+=":${BASH_REMATCH[1]}"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *alias\ *([a-zA-Z].*)=.*\ *#\ (@-@|@@:new) ]]; then
+          complNew+=":${BASH_REMATCH[1]}"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *alias\ *([a-zA-Z].*)=.*\ *#\ @@ ]]; then
+          complOld+=":${BASH_REMATCH[1]}"
         fi
-        if [[ ! -z $list ]]; then
-          list="$(echo $list | tr '[ :]' '\n' | sort -u | sed '/^\s*^/d' | tr '\n' ':' | sed 's/:$//')"
-          compl=":@@:$list"
-        fi
-        echo "${fi##*/}: ${compl:--}" >>"$complFile" # }}}
-      elif [[ $compl == '-' ]]; then # {{{
-        compl=""
-      fi # }}}
-      command grep -q "^# env:" "$fi" && eval "$(sed -n '/# env: /s/# env: \(.*\)/\1/p' "$fi")"
-      if install-function $(! $ask_i && echo "--force-yes") "$i$compl"; then # {{{
+      done
+      if install-function $(! $ask_i && echo "--force-yes") "$i" "${complNew#:}" "${complOld#:}"; then # {{{
+        # command grep -q "^# env:" "$fi" && eval "$(sed -n '/# env: /s/# env: \(.*\)/\1/p' "$fi")"
         if [[ ! -e "$dumpFile" ]]; then
           cat >"$dumpFile" <<-EOF
 						#!/usr/bin/env bash
@@ -102,16 +89,19 @@ install-extensions() { # START: install-extensions # {{{
         fi
         {
           echo "#-#-# START: $fi # {{{"
-          cat "$fi"
+          /bin/cat "$fi"
           sed -n '/^# env: /s/# env: \(.*\)/\1/p' "$fi"
           echo "#-#-# END: $fi # }}}"
         } >>"$dumpFile"
       fi # }}}
     done # }}}
-    local complNew="$COMPLETION_GENERIC_FUNCTIONS"
-    export COMPLETION_GENERIC_FUNCTIONS="$complOrig"
     echo >>"$dumpFile"
-    echo "export COMPLETION_GENERIC_FUNCTIONS+=\" $complNew\"" | sed 's/\s\+/ /g' >>"$dumpFile"
+    local complUpdated="$COMPLETION_GENERIC_FUNCTIONS" && export COMPLETION_GENERIC_FUNCTIONS="$complOrig"
+    local complOldUpdated="$COMPLETION_GENERIC_FUNCTIONS_OLD" && export COMPLETION_GENERIC_FUNCTIONS_OLD="$complOldOrig"
+    (
+      echo "export COMPLETION_GENERIC_FUNCTIONS+=\" $complUpdated\""
+      echo "export COMPLETION_GENERIC_FUNCTIONS_OLD+=\" $complOldUpdated\""
+    ) | sed 's/\s\+/ /g' >>"$dumpFile"
     rm -rf "$lockDir"
   fi # }}}
   if [[ -e "$dumpFile" ]]; then # {{{
@@ -148,8 +138,7 @@ if [[ ! -z $ALIASES_MAP ]]; then # {{{
   unset a_map
 fi # }}}
 TO_INSTALL=" $TO_INSTALL "
-declare -F echor >/dev/null 2>&1 || source $HOME/.bashrc --do-min
-echorm "To alias: [$TO_INSTALL]"
+# echoe -m aliases "To alias: [$TO_INSTALL]"
 # }}}
 # }}}
 # Functions # {{{
@@ -168,7 +157,7 @@ done # }}}
 # Check if not sourced and called with params # {{{
 if $BASH_ALIASES_FROM_CMD; then # {{{
   # ALIASES_SILENT=true
-  ${ALIASES_SILENT:-true} || echorm "cmd=[$@]"
+  ${ALIASES_SILENT:-true} || echoe -w "cmd=[$@]"
   cmd=$1 err=0
   shift
   case $cmd in
@@ -208,5 +197,4 @@ fi # }}} # }}}
 # }}}
 # Cleaning # {{{
 unset TO_INSTALL i BASH_ALIASES_FROM_CMD ALIASES_AUTO_SUDO_PROMPT
-set +f; shopt -s extglob
 # }}}

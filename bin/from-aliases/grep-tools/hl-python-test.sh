@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
+
 mode="1"
 showCmd=false
 while [[ ! -z $1 ]]; do # {{{

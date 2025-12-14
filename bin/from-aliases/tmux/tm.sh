@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_tm() { # @@ # {{{
+import-module echor
+tm() { # @@ # {{{
   ! type tmux >/dev/null 2>&1 && return 1
   local buffers_path="$APPS_CFG_PATH/tmux/buffers" layouts_path="$APPS_CFG_PATH/tmux/layouts"
   local lFile="$layouts_path/l.layout"
+  [[ ! -z $APPS_CFG_PATH ]] || eval $(die tmux-tm "env not initialized")
   if [[ $1 == '@@' ]]; then # {{{
     local dir=${PWD/*\/}
     local sessions="$(tmux list-sessions -F '#S')"
     local ret=""
     if [[ $2 == 1 ]]; then
-      ret="-d -a --attach -p --path -s --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l"
-      ret+=" --new --pane --env -e --switch --pids --session"
+      ret="-d -a --attach -p --path -s --install --exec ${dir^^} $sessions -n --nest -b --buffers --b-dump --b-restore --l-dump --l-restore --l-edit ld lr --layout l --add-disabled"
+      ret+=" --new --pane --env -e --switch --pids --session --is-ssh"
       ret+=" ss se sd sr pa"
     else
       case $4 in
+      --is-ssh)    ret="--pid";;
       --session)   ret="-s --save -d --delete -e --edit -r --restore";;
       -a|--attach) ret="$sessions";;
       -p|--path)   ret="@@-d";;
       --b-restore) ret="$(cd $buffers_path; ls -Ad *)";;
-      --pid)       ret="-a -s";;
+      --pids)      ret="-a -s -f";;
       --env | -e) # {{{
         ret=" -w -v"
         ret+="$(tmux show-environment -g | awk -F'=' '/^[A-Z].*=/ && !/=\(\)/{print $1}')";; # }}}
@@ -54,12 +57,19 @@ _tm() { # @@ # {{{
           --l-edit) ret="--file .";;
           esac;; # }}}
         esac;;& # }}}
+      sr) # {{{
+        lFile="$TMUX_SESSION_PATH/windows.save"
+        if [[ -e "$lFile" ]]; then
+          ret+=" $(sed -n -e '/^-/d' -e '/^#/p' $lFile | awk '{print $2}' | sed -e 's/^[^:]*:\(.*\)/\L\1/')"
+          ret+=" $(sed    -e '/^-/d' -e '/^#/d' $lFile | awk '{print $1}' | sed -e 's/^[^:]*:\(.*\)/\L\1/')"
+        fi
+        ;; # }}}
       --l-dump | ld) # {{{
         ret+=" --paths --no-paths --ignore-backup -d --default -w"
         [[ -e $lFile ]] && ret+=" $(awk '!/^#/ && /^[^:]* /{print $1}' "$lFile")"
         ;; # }}}
       --l-restore | lr) # {{{
-        ret+=" --all-all --cd --acd --mcd --no-cd --match -d --default -w -wd --choose --dst --set-pane-1 --no-pane-1"
+        ret+=" --all-all --cd --acd --mcd --no-cd --match -d --default -w -wd --choose --dst --set-pane-1 --no-pane-1 --set-cd-all"
         [[ " $@ " =~ \ --file\ +([^\ ]+) ]] && lFile="${BASH_REMATCH[1]}"
         case $lFile in
         l)            lFile="$layouts_path/l.layout";;
@@ -93,6 +103,7 @@ _tm() { # @@ # {{{
       fi
     fi # }}}
   else # {{{
+    pgrep tmux >/dev/null 2>&1 || tmux ls >/dev/null 2>&1 || tmux-startup.sh
     [[ -z $1 ]] && set -- -a
   fi # }}}
   case $1 in # {{{
@@ -121,6 +132,7 @@ _tm() { # @@ # {{{
     --new          | \
     --switch       | \
     --session      | \
+    --is-ssh       | \
     --exec)
           case $1 in # {{{
           -a) utils='attach';;
@@ -143,19 +155,35 @@ _tm() { # @@ # {{{
   [[ ! -z $utils ]] || return 1
   local var= i= buffer_fix='buffer'
   case $utils in # {{{
+  is-ssh) # {{{
+    local printPid=false
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      --pid) printPid=true;;
+      esac; shift
+    done
+    local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
+    if $IS_MAC; then
+      pstree -p $cpid | command grep -q ' sshd:\?\($\| \)'
+    else
+      pstree -A -s $cpid | command grep -q -e '---sshd---'
+    fi && { $printPid && echo "$cpid"; return 0; }
+    return 1;; # }}}
   session) # {{{
     local dst="$TMUX_SESSION_PATH/windows.save"
     local name=$(tmux display-message -pF '#S:#W')
     case $1 in
     -s | --save) # {{{
-      update-file $dst --update-line "^$name " "$(tm --l-dump --file -)";; # }}}
+      $ALIASES_SCRIPTS/file-tools/update-file.sh $dst --update-line "^$name " "$(tm --l-dump --file -)";; # }}}
     -d | --delete) # {{{
-      update-file $dst --remove-line "^$name ";; # }}}
+      $ALIASES_SCRIPTS/file-tools/update-file.sh $dst --remove-line "^$name ";; # }}}
     -e | --edit) # {{{
       vim $dst;; # }}}
     -r | --restore) # {{{
       shift
-      tm --l-restore --file $dst --set-pane-1 "$@";; # }}}
+      local last=${@: -1}
+      [[ ! -z $@ && $last != -* ]] && tmux rename-window "$last"
+      tm --l-restore --file $dst --set-cd-all --add-disabled "$@";; # }}}
     esac
     return 0;; # }}}
   env) # {{{
@@ -233,8 +261,8 @@ _tm() { # @@ # {{{
     fi
     return 0;; # }}}
   l-dump | l-restore) # {{{
-    local session= wName= all=false firstMatch=true entry= lOrig= l= e= all_all=false entries= file= paths= do_cd= real_paths= verbose=false match= ignoreBackup=false
-    local dst= wId= wNo= setPane1=false
+    local session= wName= all=false firstMatch=true entry= lOrig= l= e= all_all=false entries= file= paths= do_cd= real_paths= verbose=false match= ignoreBackup=false allowDisabled=false
+    local dst= wId= wNo= setPane1=false setCdAll=false
     lFile=
     read session wNo wName wId lOrig <<<$(tmux display-message -t $TMUX_PANE -pF '#S #I #S:#W #{window_id} #{window_layout}')
     entry="${wName//[\/]/-}"
@@ -290,10 +318,12 @@ _tm() { # @@ # {{{
           --mcd)     do_cd=true;;
           --no-cd)   do_cd=false;;
           --choose)  firstMatch=false;;
+          --add-disabled) allowDisabled=true;;
           --dst)     dst="$2"; shift;;
           --match)   match="$2"; shift;;
           --set-pane-1) setPane1=true;;
           --no-pane-1)  setPane1=false;;
+          --set-cd-all) setCdAll=true;;
           -d | --default | -w | -wd) # {{{
             [[ -z $lFile ]] && lFile="./.layout"
             [[ -e "$lFile" ]] || return 1
@@ -336,7 +366,7 @@ _tm() { # @@ # {{{
           tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
           | sed -e 's/::/~/g' -e 's/://g' \
           | tr '\n' ':' \
-          | sed -e "s|$HOME|~|g" -e 's/:$//' \
+          | sed -e 's/:$//' \
           )" >>"$lFile"
       done # }}}
     else # {{{
@@ -356,7 +386,7 @@ _tm() { # @@ # {{{
           tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
           | sed -e 's/::/~/g' -e 's/://g' \
           | tr '\n' ':' \
-          | sed -e "s|$HOME|~|g" -e 's/:$//' \
+          | sed -e 's/:$//' \
           )" >>"$lFile"
           # }}}
       else # {{{
@@ -369,7 +399,11 @@ _tm() { # @@ # {{{
     fi # }}}
     return 0;; # }}}
   l-restore) # {{{
-    [[ -z $lFile && -e './.layout' ]] && lFile="./.layout"
+    newName=
+    if [[ ( -z $lFile && -e './.layout' ) || ( -e $lFile && $lFile =~ (\./)?\.layout$ )  ]]; then
+      lFile="./.layout"
+      (( $(wc -l $lFile | cut -d' ' -f1 ) == 1 )) && entry="$(awk '{print $1}' $lFile)" && newName="${entry#*:}"
+    fi
     [[ -z $lFile ]] && lFile="$layouts_path/l.layout"
     if [[ "$lFile" != "/dev/stdin" ]]; then
       [[ ! -e "$lFile" ]] && echor -cn $silent "Layout file [$lFile] not exist" && return 1
@@ -408,6 +442,7 @@ _tm() { # @@ # {{{
         for e in $entries; do
           e_out="$(grep -i "$e " "$lFile")"
           [[ -z "$e_out" ]] && continue
+          [[ -z $(echo -e "$e_out" | grep -v "^#") ]] && $allowDisabled && e_out="$(echo -e "$e_out" | sed 's/^# *//')"
           if $firstMatch; then
             out+="$(echo "$e_out" | grep -v "^#")\n"
           else
@@ -459,11 +494,9 @@ _tm() { # @@ # {{{
         if [[ $do_cd == 'true' || $do_cd == 'auto' ]]; then
           if [[ $i -lt ${#pNow[*]} || $do_cd == 'auto' ]]; then
             local paneNo=$((i+1))
-            local panePids="$(unset -f tm; pstree $(tmux display-message -t ".$paneNo" -pF '#{pane_pid}') | wc -l | xargs)"
+            local panePids="$(pstree $(tmux display-message -t ".$paneNo" -pF '#{pane_pid}') | wc -l | xargs)"
             paths[i]="${paths[i]/\~/$HOME}"
-            if [[ $panePids == 1 ]]; then
-              tmux send-keys -t "$dst.$paneNo" " cd \"${paths[i]}\"; clear"
-            elif ${setPane1:-false} && [[ $paneNo == 1 ]]; then
+            if ( $setCdAll ) || ( $setPane1 && [[ $paneNo == 1 ]] ) || ( [[ $panePids == 1 ]] ); then
               tmux send-keys -t "$dst.$paneNo" " cd \"${paths[i]}\"; clear"
             else
               echor -c $verbose "pane[$paneNo]: skipping cd to '${paths[i]}'"
@@ -478,6 +511,7 @@ _tm() { # @@ # {{{
       fi # }}}
     fi # }}}
     [[ "$l" != "$lOrig" ]] && { tmux select-layout -t $dst "$l" >/dev/null 2>&1; err=$?; }
+    [[ ! -z $newName ]] && tmux rename-window "$newName"
     [[ $err == 0 && "${l#*,}" != "${lOrig#*,}" ]] && $verbose && echo "lOrig=\"$lOrig\""
     return $err;; # }}}
   b-dump) # {{{
@@ -798,32 +832,43 @@ _tm() { # @@ # {{{
       -s) tmuxParams="-s"; sortParams="-k2,2"; paneId="#I.#P";;
       esac; shift
     done
+    fzf_prev() {
+      local p="$1"
+      if $IS_MAC; then
+        pstree $p
+      else
+        pstree -aUTp $p
+      fi \
+      | { if which grcat >/dev/null 2>&1; then grcat conf.ps; else /bin/cat -; fi }
+    }
+    export -f fzf_prev
     pane=$(
       i= pPid= pId= pTitle= pTty= pPath= pidInfo=
       tmux list-panes $tmuxParams -F 'pPid="#{pane_pid}"; pId="'"$paneId"'"; pTitle="#{=15:pane_title}"; pTty="#{s|/dev/||:pane_tty}"; pPath="#{pane_current_path}"' \
       | while read i; do
           eval $i
-          pidInfo=$(ps -g $pPid -o $pidParam | sed -n 2p | awk '{print $1,$3}')
+          read lPid pidInfo < <(ps -g $pPid -o $pidParam | sed -n 2p)
           if [[ ! -z $pidInfo ]]; then
-            lPid=${pidInfo%% *}
-            pidInfo=${pidInfo#* }
-            [[ -z $pidInfo ]] && pidInfo='cli'
             if ! $full; then
+              pidInfo="${pidInfo#bash }"
+              [[ $pidInfo =~ ^[^\ ]+/(.*) ]] && pidInfo="${BASH_REMATCH[1]}"
               pPid=$lPid
-              pidInfo=${pidInfo##*/}
             else
               pidInfo="$pidInfo@$lPid"
             fi
           fi
           if ! $full; then
-            echo "$pPid $pId ${pidInfo:--} $pPath"
+            printf "%d; %s; %s; %s\n" "$pPid" "$pId" "$pidInfo" "$pPath"
           else
-            echo "$pPid $pId ${pidInfo:--} ${pTitle// /-} $pTty $pPath"
+            printf "%d; %s; %s; %s; %s; %s\n" "$pPid" "$pId" "$pidInfo" "$pTitle" "$pTty" "$pPath"
           fi
         done \
       | sort $sortParams \
       | sed -e 's|'"$HOME"'|~|g' \
-      | column -t | fzf)
+      | column -t -s ";" \
+      | if is-installed -w grcat; then grcat conf.ps; else cat -; fi \
+      | fzf --ansi --prompt "> " --preview 'fzf_prev {1}' --preview-window=hidden \
+    )
     [[ $? != 0 || -z $pane ]] && return 0
     if ! $full; then
       echo "$pane" | awk '{print $1}' | tr '\n' ' '
@@ -837,9 +882,9 @@ _tm() { # @@ # {{{
     return 0;; # }}}
   esac # }}}
   if [[ ! -z $cmd ]]; then # {{{
-    echo $cmd
-    eval $cmd
+    echo "$cmd"
+    eval "$cmd"
   fi # }}}
 } # }}}
-_tm "$@"
+tm "$@"
 

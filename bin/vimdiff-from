@@ -1,0 +1,70 @@
+#!/bin/bash
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  -t)
+    tmux list-panes -a -F '#S:#I.#P'
+    tmux list-panes -s -F ':#I.#P'
+    tmux list-panes -F '.#P';;
+  -c) echo "@"
+    [[ -e $FROM ]] && ( cd $FROM; git branch | cut -c3-);;
+  *)
+    if [[ $cur == ./* ]]; then
+      echo "@@-f"
+      exit 0
+    fi
+    echo "-v -c -t"
+    dir=$3 from=${FROM:-.}
+    if [[ -d $dir ]]; then
+      from+="/$dir"
+    else
+      echo "@@-d:${FROM:-.}"
+    fi
+    echo "@@-f:$from";;
+  esac
+  exit 0
+fi # }}}
+
+silent=true
+fromParams=
+commit=
+from=$FROM
+while [[ ! -z $2 ]]; do # {{{
+  case $1 in
+  -c) commit=$2; shift;;
+  -t) from="$(from -t "$2" -)"; shift;;
+  -v) silent=false;;
+  - | --) # {{{
+    break;; # }}}
+  -*) fromParams+=" $1";;
+  *) # {{{
+    if [[ -d $1 ]]; then
+      from+="/$1"
+    else
+      break
+    fi;; # }}}
+  esac; shift
+done # }}}
+
+if [[ ! -z $commit ]]; then
+  [[ ! -z $from ]] || die -s=$silent "FROM not set"
+  for file in $(cd $from; git show $commit --name-only | tail -n+3); do
+    [[ -e $from/$file ]] || { echoe "No remote file: $file; skipping, vimdiff \$from/$file $file" continue; }
+    [[ -e $file ]] || { echoe "No local file: $file; skipping, vimdiff \$from/$file $file" continue; }
+    vimdiff $from/$file $file || break
+  done
+else
+  [[ ! -z $1 ]] || die -s=$silent "File missing"
+  file="./${1#./}"; shift
+
+  [[ ! -z $from ]] || die -s=$silent "FROM not set"
+  inF="$(from --from "$from" --no-fzf $fromParams $file)"
+  [[ -e $inF ]] || die -s=$silent "file '${file#./}' not found in '$from'"
+
+  [[ -e $1 ]] && { file="./${1#./}"; shift; }
+  [[ -e $file ]] || die -s=$silent "file '$file' not found in ."
+
+  vimdiff $inF $file $@
+fi
+
+

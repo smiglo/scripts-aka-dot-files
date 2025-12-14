@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
 echorm --name tt-setup
 func="$(getFunctionBody 'setup')"
 export func

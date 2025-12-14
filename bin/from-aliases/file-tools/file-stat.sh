@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
+import-module echor
+import-module time2s time-tools
+
 _file-stat() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in

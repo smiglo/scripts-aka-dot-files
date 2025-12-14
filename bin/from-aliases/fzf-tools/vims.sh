@@ -33,7 +33,14 @@ _vims() { # @@ # {{{
     case $1 in
     -v) verb=true;;
     -t) dst="$2"; shift;;
-    *)  f="$@"; shift $#;;
+    *:*.*) dst=$1;;
+    *)
+      if [[ $1 =~ ^\.[0-9]+$ && ! -e $1 ]]; then
+        dst=$1
+        shift; continue
+      else
+        f="$@"; shift $#
+      fi;;
     esac; shift
   done
   [[ $dst =~ .*\..* ]] || dst+=".1"

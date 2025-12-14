@@ -118,7 +118,7 @@ getGradientColor() { # {{{
     [40]="blue"
     [55]="green"
     [70]="yellow"
-    [80]="HLSearch"
+    [80]="imp"
     [200]="red"
   )
   local t=$1 v=
@@ -167,7 +167,7 @@ fi # }}}
 
 if ! $doPrint && ! $oneShot && ! $out2dev; then # {{{
   if $isRunning; then
-    echor "Already running, so printing"
+    echoe -w "Already running, so printing"
     doPrint=true
   elif [[ ! -t 0 ]]; then
     doPrint=true
@@ -195,7 +195,7 @@ if $oneShot; then # {{{
   fi # }}}
   dbg --init -o1 --prefix=hide --ts=hide --colors=$colorsOn # }}}
 else # {{{
-  ! $isRunning || { echor "already running"; exit 1; }
+  ! $isRunning || { echoe -w "already running"; exit 1; }
   $out2dev || echo $$ >$pidFile
   [[ ! -e $logFile ]] || $append || rm $logFile
   if [[ -z $printHeader ]]; then # {{{

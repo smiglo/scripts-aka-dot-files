@@ -1,3 +1,5 @@
-# Generic
-*.git
-
+*.app
+*.lrdata
+Applications
+Library
+Photos\ Library.photoslibrary

@@ -16,7 +16,7 @@ docker run ^
   --tmpfs /tmpfs:exec,mode=1777 ^
   -v %runtimeDir%:%hDir%/.runtime ^
   -v %sshDir%:%hDir%/.ssh ^
-  -v %HOME%:/host ^
+  -v %HOME%:/home/host ^
   -v %HOME%\share:%hDir%/share ^
   -v %dockerHost%\projects:%hDir%/projects ^
   -w /home/tom ^

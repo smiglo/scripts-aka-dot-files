@@ -1,7 +1,20 @@
+#!/usr/bin/env python3
+
 import json
 import os
 import re
 import sys
+import logging
+
+verbose = logging.WARNING
+TRACE = logging.DEBUG - 1
+logging.addLevelName(TRACE, 'TRACE')
+
+logging.basicConfig(
+    level=verbose,
+    format='[%(levelname)-5s] %(message)s')
+
+log = logging.getLogger(__name__)
 
 config = {
     "colors_file": ".hl-colors.json",
@@ -11,7 +24,6 @@ config = {
 
 only_matching = False
 use_colors = None
-verbose = 0
 
 regex_def = {}
 regex_file_default = {}
@@ -22,16 +34,12 @@ colors = {}
 colors_basic_idx = 0
 config_dir = None
 
-def log(lvl, msg):
-    if verbose < lvl: return
-    print(msg, file=sys.stderr)
-
 def load(a_file, a_dir = "."):
     if a_file.startswith("/"):
         a_dir = "/"
     if not a_dir: return ""
     if not os.path.exists(f"{a_dir}/{a_file}"): return ""
-    log(1, f"loading data from {a_dir}/{a_file}")
+    log.debug(f"loading data from {a_dir}/{a_file}")
     with open(f"{a_dir}/{a_file}") as f:
         return json.load(f)
 
@@ -68,7 +76,7 @@ def merge_markups(input_text, preprocessed_texts):
         offset += len(markup)
 
     t = ''.join(output_text)
-    log(1, f"merged: {t}")
+    log.info(f"merged: {t}")
 
     return t
 
@@ -77,24 +85,24 @@ def insert_markups(text, regex_map):
     to_skip = []
     keys = []
     for i, (regex, item) in enumerate(regex_map.items()):
+        ignoreCaseFlag = re.I
         keys.append(regex)
         if item.get("name") in to_skip: continue
-        t_repl = re.sub(f"({regex})", f"<<S:{i}>>\\1<<E:{i}>>", text)
+        if item.get("case-match", False) or regex != regex.lower(): ignoreCaseFlag = 0
+        t_repl = re.sub(f"({regex})", f"<<S:{i}>>\\1<<E:{i}>>", text, 0, ignoreCaseFlag)
         if t_repl != text:
             text_with_markups.append(t_repl)
             skip = item.get("skip")
             if skip: to_skip.extend(skip)
 
-    if verbose >= 2:
-        for tt in text_with_markups:
-            log(2, f"t+markups: {tt}")
+    for tt in text_with_markups:
+        log.debug(f"t+markups: {tt}")
 
     return (text_with_markups, keys)
 
 def colorize_text(text, regex_map):
     ( text_with_markups, keys ) = insert_markups(text, regex_map)
     if not text_with_markups:
-        print("--> NOT match")
         return (text, False)
 
     t = merge_markups(text, text_with_markups)
@@ -144,6 +152,7 @@ def gen_regex_v(color, name, skip=[], embedded=True):
         "name": name,
         "skip": skip,
         "embedded": embedded,
+        "case-match": False,
     }
 
 def conv_regex_map(regex_map, name_prefix):
@@ -154,6 +163,19 @@ def conv_regex_map(regex_map, name_prefix):
         regex_map[k] = vn
     return regex_map
 
+args = sys.argv
+cmd = os.path.basename(args.pop(0))
+
+if len(args) > 0 and args[0] in ["-v", "-vv", "-vvv"]:
+    arg = args.pop(0)
+    match(arg):
+        case "-v":   verbose = logging.INFO
+        case "-vv":  verbose = logging.DEBUG
+        case "-vvv": verbose = TRACE
+        case _:      verbose = log.WARNING
+
+    log.setLevel(verbose);
+
 config_dir = os.getenv("HL_CONFIG_DIR")
 if not config_dir:
     cfgHome = os.getenv("XDG_CONFIG_HOME")
@@ -161,7 +183,7 @@ if not config_dir:
     config_dir = f"{cfgHome}/hl-python"
 
 if os.path.exists(f"{config_dir}"):
-    log(1, f"config dir: {config_dir}")
+    log.debug(f"config dir: {config_dir}")
 else:
     config_dir = None
 
@@ -175,8 +197,6 @@ config["colors_basic"] = [c for c in config["colors_basic"] if c in colors]
 regex_def.update(load("regs-default.json", config_dir))
 regex_file_default.update(load(config["regex_file"]))
 
-args = sys.argv
-cmd = os.path.basename(args.pop(0))
 last_reg = None
 while len(args) > 0:
     arg = args.pop(0)
@@ -202,6 +222,8 @@ while len(args) > 0:
     elif arg == "--name":
         v = args.pop(0)
         if last_reg: regex_cli[last_reg]["name"] = v
+    elif arg == "+i" or arg == "--case-sensitive":
+        regex_cli[last_reg]["case-match"] = True
     elif arg == "--skip":
         v = args.pop(0)
         if last_reg:
@@ -215,8 +237,6 @@ while len(args) > 0:
         (c, last_reg) = (args.pop(0), args.pop(0))
         regex_cli_no += 1
         regex_cli[last_reg] = gen_regex_v(c, "CLI-P:{:03d}".format(regex_cli_no))
-    elif arg == "-v" or arg == "-vv" or arg == "-vvv":
-        verbose = arg.count('v')
     elif arg == "--help" or arg == "-h":
         print(f"""
 SYNOPSIS
@@ -230,18 +250,20 @@ OPTIONS
     -m, --only-matching
         Print only matching lines
     -c, --colors
-        Force to color
+        Force to use colors
     -C, --no-colors
-        Do not color
+        Do not use colors
     --name <NAME>
         Name the last one provided reg-expr
+    +i , --case-sensitive
+        Case sensitive last one provided reg-expr
     --skip <NAME | <[ NAME ...]>
         Skip processing given reg-exprs when the last one provided is found
     --no-embed
         Do not embed other reg-exprs inside the last one provided
     -p <COLOR> <REG-EXPR>
-    -v, -vv
-        Verbosity level
+    -v, -vv, -vvv
+        Verbosity level (must be first)
     -h, --help
         This message
 
@@ -269,29 +291,27 @@ regex_map = conv_regex_map(regex_map, "HMM")
 if not use_colors:
     use_colors = os.isatty(sys.stdout.fileno())
 
-if verbose >= 1:
-    if verbose >= 2:
-        log(2, f"regs-full={json.dumps(regex_map, indent=2)}")
-    log(1, "regs={")
+if verbose <= logging.INFO:
+    log.log(TRACE, f"regs-full={json.dumps(regex_map, indent=2)}")
+    log.info("regs={")
     for i, (k, v) in enumerate(regex_map.items()):
         cn = v["color"]
         c = get_color(cn)
         if c:
-            log(1, "  {:3}: {:60}: {:15} {:40}".format(i, f"\"{k}\"", f"\"{cn}\",", "{:}### {:8} ###{:}".format(c, cn, get_color('off'))))
+            log.info("  {:3}: {:60}: {:15} {:40}".format(i, f"\"{k}\"", f"\"{cn}\",", "{:}### {:8} ###{:}".format(c, cn, get_color('off'))))
         else:
-            log(1, "  {:3}: {:60}: {:15} {:40}".format(i, f"\"{k}\"", f"\"{cn}\",", "!!! {:8} !!!".format("NOT-DEF")))
-    log(1, "}")
-    if verbose >= 3:
-        log(2, "colors={")
-        for c in sorted(colors):
-            log(2, "  {:15}: {:15} {:20}".format(f"\"{c}\"", f"\"{colors[c]}\",", f"{get_color(c)}### COLOURED-TEXT ###{get_color('off')}"))
-        log(2, "}")
+            log.info("  {:3}: {:60}: {:15} {:40}".format(i, f"\"{k}\"", f"\"{cn}\",", "!!! {:8} !!!".format("NOT-DEF")))
+    log.info("}")
+    log.log(TRACE, "colors={")
+    for c in sorted(colors):
+        log.log(TRACE, "  {:15}: {:15} {:20}".format(f"\"{c}\"", f"\"{colors[c]}\",", f"{get_color(c)}### COLOURED-TEXT ###{get_color('off')}"))
+    log.log(TRACE, "}")
 
 if os.isatty(sys.stdin.fileno()):
-    log(0, "stdin must be piped")
+    log.error("stdin must be piped")
     exit(1)
 
-log(1, "")
+log.info("")
 
 for l in sys.stdin:
     l = l.rstrip('\n')

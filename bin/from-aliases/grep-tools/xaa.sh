@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module echor
+
+_xaa() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    find . -maxdepth 1 -type f -perm -u+x
+    declare -F | awk '{print $3}' | sed -n -e '/^_/d' -e '/^\(.\)\{,6\}$/p'
+    return 0
+  fi # }}}
+  local cmd= args=
+  while [[ ! -z 1 ]]; do # {{{
+    case $1 in
+    -v) echormf +;;
+    *)  cmd=$1; shift; break;;
+    esac
+    shift
+  done # }}}
+  eval local $(echormf -f?var)
+  args="$@"
+  [[ -z $cmd ]] && cmd="echo"
+  if [[ -e "$cmd" ]]; then # {{{
+    echormf -l1 -xv
+    xargs -r -I{} "$cmd" $args "{}"
+    echormf -l1 +xv
+    # }}}
+  elif declare -F "$cmd" >/dev/null 2>&1; then # {{{
+    echormf -l1 -xv
+    xargs -r -I{} $(which bash) -c "$(declare -f $cmd); $cmd $args {}"
+    echormf -l1 +xv
+    # }}}
+  else # {{{
+    if [[ $cmd != *{}* && $cmd != *\$1* && $cmd != *\$@* ]]; then
+      if [[ -z $args ]]; then
+        cmd+=" \$1"
+      else
+        cmd+=" {}"
+      fi
+    fi
+    args="${args# }" && args="${args% }"
+    echormf -l1 -xv
+    xargs -r -I{} $(which bash) -c 'f() { '"eval $cmd"'; }; f '"$args"' {}'
+    echormf -l1 +xv
+  fi # }}}
+} # }}}
+_xaa "$@"
+

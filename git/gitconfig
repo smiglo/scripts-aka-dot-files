@@ -4,31 +4,21 @@
   useConfigOnly = true # }}}
 [core] # {{{
   editor = vim --fast-save
-  pager = less -x4
+  pager = less -RXx4
   excludesfile = ~/.gitignore
+  autocrlf = input
+  safecrlf = true
   whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2 # }}}
+[init] # {{{
+  templatedir = ~/.git_template
+  defaultBranch = main # }}}
+[include] # {{{
+  path = ~/.runtime/gitconfig # }}}
 [color] # {{{
   ui = auto # }}}
 [diff] # {{{
   tool = vimdiff
   guitool = kdiff3 # }}}
-[diff "zip"] # {{{
-  textconv = unzip -v # }}}
-[diff "pdf"] # {{{
-  textconv = pdfinfo # }}}
-[diff "asta"] # {{{
-  textconv = hexdump -v -C # }}}
-[diff "bin"] # {{{
-  textconv = hexdump -v -C # }}}
-[difftool "vimdiff"] # {{{
-  cmd = vimdiffgit $LOCAL $REMOTE
-  trustExitCode = true # }}}
-[difftool "kdiff3"] # {{{
-  path = kdiff3
-  trustExitCode = false # }}}
-[mergetool "kdiff3"] # {{{
-  path = kdiff3
-  trustExitCode = false # }}}
 [merge] # {{{
   tool = vimdiff
   conflictstyle = diff3
@@ -39,7 +29,7 @@
   bash-switches = !"git-cmds.sh bash-switches"
   br = branch
   cba = !"git-cmds.sh cba"
-  c = !"git-cmds.sh commit"
+  c = commit
   ci = !"git-cmds.sh commit"
   ci-fast = !"git-cmds.sh commit-fast"
   cia  = commit --all --no-verify
@@ -49,6 +39,7 @@
   ciamp = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
   ciamm = commit --amend --no-verify
   cim = commit -m
+  cf = clang-format
   clone-bare = !"git-cmds.sh clone-bare"
   co = checkout
   d = diff
@@ -57,21 +48,13 @@
   dffp = !"git diffp --relative"
   dffw = diff --relative --word-diff
   diffc = diff --cached
-  diffp = !"bash -c 'f() { local rev=\"HEAD\"; [[ $1 == -b ]] && shift; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git diff $rev~..$rev $@; }; f \"$@\";'" -
-  db    = !"bash -c 'f() { local b=\"$(git rev-parse --abbrev-ref --symbolic-full-name @)\" rB=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u})\"; git diff $rB..$b; }; f \"$@\"'" -
   dc    = !"git diffc"
+  dl    = diff tmp/sync/last
   dp    = !"git diffp"
-  dr    = !"bash -c 'f() { local ups=\"\"; \
-              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
-              elif [[ $1 == */* ]]; then ups=\"$1\"; \
-              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
-              fi; \
-              [[ -z $ups ]] && return 1; \
-              git diff $ups..@; \
-            }; f \"$@\";'" -
   f      = fetch
   fr     = fetchr
-  fetchr = !"git fetch && git rreset"
+  felo   = "!git fetch local && git fetch origin"
+  fetchr = !"git-cmds.sh tag_sync fetchr; git fetch && git rreset"
   i    = info -p
   info = log --pretty=fuller     --date=local    -1
   init-repo = !"git-cmds.sh init-repo"
@@ -79,43 +62,48 @@
   l    = !"git-cmds.sh log --fzf -l 'log --pretty=date-first --date=relative' --this"
   lf   = !"git-cmds.sh log --fzf"
   l2   = log --pretty=l2         --date=local
-  lg   = log --pretty=date-first --date=short    --graph
-  lga  = log --pretty=date-first --date=short    --graph --all
+  lg   = log --pretty=date-first --date=short --graph --decorate-refs-exclude=refs/tags/tmp/sync/*
+  lga  = log --pretty=date-first --date=short --graph --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes
+  lgaa = log --pretty=date-first --date=short --graph --all
   ld   = log --pretty=date-first --date=format:'%Y-%m-%d-%H%M%S'
-  lgo  = !"git-cmds.sh log"
-  lgf  = !"git lgo --pretty=tb --graph"
-  lgfa = !"git lgo --pretty=tb --graph --all"
+  lgo   = !"git-cmds.sh log"
+  lgf   = !"git lgo --fzf -m -      -l 'log --pretty=tb --graph --decorate-refs-exclude=refs/tags/tmp/sync/*'"
+  lgfa  = !"git lgo --fzf -m - -b - -l 'log --pretty=tb --graph --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes'"
+  lgfaa = !"git lgo --fzf -m - -b - -l 'log --pretty=tb --graph --all'"
   melddiff = difftool -y -t meld
+  m  = merge
+  m-a = merge --abort
+  m-c = merge --continue
+  me = merge
+  mt = mergetool
   ps = push --recurse-submodules=check
-  puf   = !"bash -c 'f() { local ups=\"\"; \
-              if [[ -z $1 ]]; then ups=\"$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)\"; \
-              elif [[ $1 == */* ]]; then ups=\"$1\"; \
-              else ups=\"$1/$(git rev-parse --abbrev-ref HEAD)\"; \
-              fi; \
-              [[ -z $ups ]] && return 1; \
-              git-cmds.sh tag_sync -r $ups; \
-              git push -f ${ups/\\// }; \
-            }; f \"$@\";'" -
+  pul = push -f local
+  pulo = "!git push -f local && git push origin"
   range-diff2 = !"git-cmds.sh range-diff"
+  r = reset
   rb = rebase
-  rba = rebase -i --autosquash
+  rba = rebase -i --autosquash --rebase-merges
+  rb-a = rebase --abort
+  rb-c = rebase --continue
+  rb-s = rebase --skip
+  rbb = !"git-cmds.sh rbb"
+  re = reset
+  rH = !"git-cmds.sh tag_sync resetH && git reset --hard"
+  reho = "!stash=$(git s push) && git-cmds.sh tag_sync resetH && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD) && git s pop $stash"
   remote-backup = !"git-cmds.sh remote-backup $@"
   restash = !"git stash pop && git stash"
-  retag = !"bash -c 'f() { local t=${1:-$(git config --get utils.retag-tag)}; [[ -z $t ]] && return 1; git tag -d $t; git tag $t; }; f \"$@\";'" -
   rreset = !"git-cmds.sh rreset"
   s = stash-toggle
   stash-toggle = !"git-cmds.sh stash_toggle"
   sh = show -w
-  shv = !"bash -c 'f() { git shst $@ | vim --Fast -; }; f \"$@\";'" -
-  shst = !"bash -c 'f() { git diffp $@ --name-status; }; f \"$@\";'" -
-  shstf = !"bash -c 'f() { git shst $@ | cut -c3- | fzf ; }; f \"$@\";'" -
   sr = sync --reset
   st = status --short -b
-  stv = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git status --short -b $@ | vim --Fast -; }; f \"$@\";'" -
   sync = !"git-cmds.sh sync"
   userset = !"git-cmds.sh userset"
+  wt = worktree
   vimdiff = difftool -y -t vimdiff --trust-exit-code
-  vimdiff-p = !"bash -c 'f() { local rev=\"HEAD\"; [[ ! -z $1 && $1 != -* ]] && rev=$1 && shift; git vimdiff $rev~..$rev $@; }; f \"$@\";'" -
+  vd = vimdiff
+  vdp = vimdiff-p
   wipe = !"git-cmds.sh commit-fast 'WIPE SavePoint' >/dev/null 2>&1 && git reset HEAD~1 --hard >/dev/null 2>&1"
   # }}}
 [bash] # {{{
@@ -128,30 +116,17 @@
   autosetuprebase = always
   sort = -committerdate # }}}
 [format] # {{{
-  pretty = %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(green)(%cd) %C(blue)<%an>%C(reset) # }}}
+  pretty = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%ad)%C(reset) %C(blue)<%an>%C(reset) # }}}
 [pretty] # {{{
-  tb = %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(green)(%cd) %C(blue)<%an>%C(reset)
+  tb = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%ad)%C(reset) %C(blue)<%an>%C(reset)
   short2 = %h %s
-  l2 = %C(auto)%h%C(reset) - %C(green)%cd%C(reset) %C(dim green)(%cr)%C(reset)%C(auto)%d%C(reset)%n  %C(white)%s%C(reset) %C(blue)- %an%C(reset)
-  date-first = %C(green)%cd%C(reset): %C(auto)%h%C(reset) -%C(auto)%d%C(reset) %s %C(blue)<%an>%C(reset) # }}}
-[giggle] # {{{
-  main-window-maximized = false
-  main-window-geometry = 974x734+468+116
-  history-view-vpane-position = 428
-  file-view-vpane-position = 592
-  main-window-view = HistoryView # }}}
+  l2 = %C(auto)%h,%C(reset)%C(auto)%d%C(reset) %C(green)%cs,%C(reset) %C(dim green)%cr%C(reset)%n  %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
+  date-first = %C(dim green)%ad:%C(reset) %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset) # }}}
 [push] # {{{
   default = current # }}}
-[svn] # {{{
-  # push empty directory removals back to svn as directory deletes
-  rmdir = true
-  # set svn:mergeinfo when pushing merge commits
-  pushmergeinfo = true # }}}
-[init] # {{{
-  templatedir = ~/.git_template # }}}
 [fetch] # {{{
   prune = true
-  recurseSubmodules = true # }}}
+  recurseSubmodules = false # }}}
 [rerere] # {{{
   enabled = true # }}}
 [help] # {{{
@@ -170,7 +145,49 @@
   autosquash = true # }}}
 [advice] # {{{
   detachedHead = false
-  ignoredHook = false # }}}
+  ignoredHook = false
+  skippedCherryPicks = false # }}}
+[url "https://github"] # {{{
+  insteadOf = git://github # }}}
+# tools # {{{
+# diff tools # {{{
+[diff "zip"] # {{{
+  textconv = unzip -v # }}}
+[diff "pdf"] # {{{
+  textconv = pdfinfo # }}}
+[diff "asta"] # {{{
+  textconv = hexdump -v -C # }}}
+[diff "bin"] # {{{
+  textconv = hexdump -v -C # }}}
+[difftool "vimdiff"] # {{{
+  cmd = vimdiffgit $LOCAL $REMOTE
+  trustExitCode = true # }}}
+[difftool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+# }}}
+# merge tools # {{{
+[mergetool] # {{{
+  keepBackup = false # }}}
+[mergetool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[mergetool "vimdiff"] # {{{
+  layout = "LOCAL,BASE,REMOTE / MERGED + BASE,LOCAL + BASE,REMOTE + LOCAL,REMOTE"
+  trustExitCode = true # }}}
+# }}}
+# external # {{{
+[svn] # {{{
+  # push empty directory removals back to svn as directory deletes
+  rmdir = true
+  # set svn:mergeinfo when pushing merge commits
+  pushmergeinfo = true # }}}
+[giggle] # {{{
+  main-window-maximized = false
+  main-window-geometry = 974x734+468+116
+  history-view-vpane-position = 428
+  file-view-vpane-position = 592
+  main-window-view = HistoryView # }}}
 [gitsh] # {{{
   prompt = "[0;36m%D[0m[0;32m(%b)[0m%c%#%w"
   noGreeting = true
@@ -181,8 +198,5 @@
   smudge = git-lfs smudge -- %f
   process = git-lfs filter-process
   required = true # }}}
-[include] # {{{
-  path = ~/.runtime/gitconfig # }}}
-[url "https://github"] # {{{
-  insteadOf = git://github # }}}
-
+# }}}
+# }}}

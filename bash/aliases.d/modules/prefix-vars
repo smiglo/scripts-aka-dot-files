@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if false; then # {{{
+# BASH # {{{
+  prefixVars-util-isVar() {
+    [[ -v "$1" ]]
+  }
+# BASH # }}}
+# OS-X # {{{
+  prefixVars-util-isVar() {
+    compgen -v | command grep -q "^$1$"
+  }
+# OS-X # }}}
+fi # }}}
+if ! $IS_MAC; then
+  source <(sed -n '/^# BASH/,/^# BASH/p' "$SCRIPT_PATH/bash/aliases.d/modules/prefix-vars")
+else
+  source <(sed -n '/^# OS-X/,/^# OS-X/p' "$SCRIPT_PATH/bash/aliases.d/modules/prefix-vars")
+fi
+prefixVars-util() { # {{{
+  local cmd=$1 ret=0 all=false
+  shift
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --all) all=true;;
+    *)     break;;
+    esac; shift
+  done # }}}
+  local prefix="$1" name="$2"
+  shift 2
+  [[ -z $prefix ]] && echoe -m "prefix-vars" "No prefix provided" && return 1
+  prefix=${prefix//[.,:-]/_}
+  [[ $1 == '-' ]] && prefix="vv_PID$$"
+  [[ ! -z $name && $name != '-' ]] && name="${prefix}_$name" || name="$prefix"
+  case $cmd in
+  --isSet) # {{{
+    case $1 in
+    '')     [[ ! -z ${!name} ]];;
+    -z)     [[ -z ${!name} ]];;
+    true)   [[ ${!name} == true ]];;
+    false)  [[ ${!name} == false ]];;
+    -v)     prefixVars-util-isVar $name;;
+    *)      [[ ${!name} == $1 ]];;
+    esac
+    ret=$?;; # }}}
+  --get) # {{{
+    if ! $all; then # {{{
+      local default=$1 defaultOnEmpty=false
+      [[ $1 == '-z' ]] && default=$2 && defaultOnEmpty=true
+      if ! prefixVars-util-isVar $name || ( $defaultOnEmpty && [[ -z ${!name} ]] ); then
+        echo -en "$default"
+      else
+        echo -en "${!name}"
+      fi # }}}
+    else # {{{
+      for name in $(eval echo \${!$prefix*}); do
+        echo "export $name=\"${!name}\""
+      done
+    fi;; # }}}
+    # }}}
+  --set) # {{{
+    eval export $name="$1";; # }}}
+  --clean) # {{{
+    eval unset \${!$prefix*};; # }}}
+  esac
+  return $ret
+} # }}}
+vIsSet() { prefixVars-util --isSet "$@"; }
+vGet()   { prefixVars-util --get   "$@"; }
+vSet()   { prefixVars-util --set   "$@"; }
+vClean() { prefixVars-util --clean "$@"; }
+vBool() { # {{{
+  local ret=false
+  case $1 in
+  false | [1-9] | '');;
+  true  | 0) ret=true;;
+  *)
+    if [[ $1 =~ ^[1-9][0-9]+$ ]]; then # only digits: assuming error code
+      :
+    elif eval "$@" >/dev/null 2>&1; then
+      ret=true
+    fi;;
+  esac
+  echo "$ret"
+  $ret
+} # }}}
+vDumpArrayNicely() { # {{{
+  local n=${1} i= decl=
+  [[ -z $n ]] && return 1
+  decl="$(declare -p $n 2>/dev/null | sed 's/=.*//')"
+  [[ -z "$decl" ]] && return 2
+  if [[ "$decl" =~ ^"declare -a" ]]; then
+    decl="-a"
+  elif [[ "$decl" =~ ^"declare -A" ]]; then
+    decl="-A"
+  else
+    return 3
+  fi
+  local -n ref=$n
+  echo "declare -p $n >/dev/null 2>&1 || declare $decl $n"
+  for i in $(echo ${!ref[*]} | tr ' ' '\n' | LC_COLLATE=C sort); do
+    echo "$n[$i]=\"${ref[$i]}\""
+  done
+} # }}}
+__export_prefix-vars() { # {{{
+  export -f vIsSet vGet vSet vClean vBool prefixVars-util vDumpArrayNicely prefixVars-util-isVar
+}
+export -f __export_prefix-vars # }}}
+if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+  __export_prefix-vars
+  "$@"
+fi
+

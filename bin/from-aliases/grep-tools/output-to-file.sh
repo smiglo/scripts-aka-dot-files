@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_output-to-file() { # @@ # {{{
+output-to-file() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
     echo "+tee=true +tee=false --ignore=err +fzf +-fzf --no-err --no-sort"
     return 0
@@ -65,7 +65,7 @@ _output-to-file() { # @@ # {{{
       echo
     ) >$file
   fi # }}}
-  ${DBG_SHOW_CMD:-false} && echormf "$use_eval $cmd $colors \"$@\""
+  ${DBG_SHOW_CMD:-false} && echoe -w "$use_eval $cmd $colors \"$@\""
   if $use_fzf; then # {{{
     $use_eval $cmd $colors "$@" 2>$errout | { [[ $sort_params == 'NO-SORT' ]] && cat - || sort -st':' -k1,1 -k2,2n $sort_params; } >$tmpFile
     err=${PIPESTATUS[0]}
@@ -107,5 +107,5 @@ _output-to-file() { # @@ # {{{
   rm -f $tmpFile
   return $err
 } # }}}
-_output-to-file "$@"
+output-to-file "$@"
 

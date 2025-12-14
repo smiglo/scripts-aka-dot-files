@@ -4,14 +4,15 @@
 _docker() { # {{{
   [[ -z $DOCKER_CONTAINER_DEFAULT ]] && export DOCKER_CONTAINER_DEFAULT='ubu'
   [[ -z $DOCKER_IMAGE_DEFAULT ]] && export DOCKER_IMAGE_DEFAULT='ubu'
+  local dockerCmd="docker"
   if [[ $1 == '@@' ]]; then # {{{
-    local containers="$(docker container ls -a --format "{{.Names}}")"
-    local images="$(docker image ls -a --format "{{.Repository}}")"
+    local containers="$($dockerCmd container ls -a --format "{{.Names}}")"
+    local images="$($dockerCmd image ls -a --format "{{.Repository}}")"
     case $3 in
     -c) echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT";;
     -i) echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
     advance) echo "$containers";;
-    build) echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
+    build) echo "--amd64 $images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
     clean) echo "$containers -";;
     commit) # {{{
       echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT"
@@ -39,8 +40,11 @@ _docker() { # {{{
     return 0
   fi # }}}
   local cName=${DOCKER_CONTAINER:-$DOCKER_CONTAINER_DEFAULT} iName=${DOCKER_IMAGE:-$DOCKER_IMAGE_DEFAULT}
+  case $cName in
+  ubu-amd64) iName="ubu-amd64";;
+  esac
   local cSet=false iSet=false out=/dev/null
-  local containerList="$(docker container ls -a --format ". {{.Names}} : {{.Image}}")"
+  local containerList="$($dockerCmd container ls -a --format ". {{.Names}} : {{.Image}}")"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --dbg) out=/dev/stderr;;
@@ -49,7 +53,7 @@ _docker() { # {{{
     *) break;;
     esac; shift
   done # }}}
-  [[ -z $1 ]] && set -- start
+  [[ -z $1 ]] && set -- ls
   cmd=$1; shift
   case $cmd in
   advance) # {{{
@@ -58,27 +62,37 @@ _docker() { # {{{
     [[ -z $cName ]] && eval $(die "no container specified")
     cName="${cName%-next}"
     cNameNext="$cName-next"
-    [[ $containerList == *". $cNameNext "* ]] || eval $(die -r "no such container [$cNameNext]")
-    [[ $containerList == *". $cName "* ]] && docker container remove $cName
-    docker container rename $cNameNext $cName;; # }}}
+    [[ $containerList == *". $cNameNext "* ]] || eval $(die "no such container [$cNameNext]")
+    [[ $containerList == *". $cName "* ]] && $dockerCmd container remove $cName
+    $dockerCmd container rename $cNameNext $cName;; # }}}
   build) # {{{
+    local arch= buildArchP=
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --amd64) # {{{
+        export DOCKER_DEFAULT_PLATFORM="linux/amd64"
+        buildArchP="--amd64"
+        arch="--platform=$DOCKER_DEFAULT_PLATFORM";; # }}}
+      *) break
+      esac; shift
+    done # }}}
     $iSet || { iName=${1:-$iName}; shift; }
     [[ -z $iName ]] && eval $(die "no image specified")
     case $iName in
-    ubu) # {{{
+    ubu | ubu-*) # {{{
       (
         cd $SCRIPT_PATH/bash/inits/ubu-docker
-        ./build.sh
+        ./build.sh $buildArchP
       ) ;; # }}}
     *) # {{{
-      docker build "$@" -t $iName .;; # }}}
+      $dockerCmd build $arch "$@" -t $iName .;; # }}}
     esac;; # }}}
   clean) # {{{
     $cSet || cName= # mandatory: container name on removal
     [[ ! -z $cName ]] || { cName=$1; shift; }
     [[ -z $cName ]] && eval $(die "no container specified")
     [[ ! -z $iName ]] || { iName=$1; shift; }
-    [[ $containerList == *". $cName "* ]] || eval $(die -r "no such container [$cName]")
+    [[ $containerList == *". $cName "* ]] || eval $(die "no such container [$cName]")
     if [[ $iName = '-' ]]; then
       iName=$cName
     elif [[ -z $iName ]]; then
@@ -87,27 +101,35 @@ _docker() { # {{{
     _docker rm $cName
     _docker irm $iName;; # }}}
   commit) # {{{
-    $cSet || { cName=${1:-$cName}; shift; }
-    $iSet || { iName=${1:-$iName}; shift; }
+    if ( $cSet && $iSet ) || (( $# == 0 )); then
+      :
+    elif (( $# >= 2 )); then
+      cName=$1; shift
+      iName=$1; shift
+    else
+      eval $(die "both container & image must be specified")
+    fi
     [[ -z $cName || -z $iName ]] && eval $(die "no container/image specified")
     [[ $iName == *:* ]] || iName="$iName:latest"
     local iNamePrev="${iName%:latest}:prev"
-    docker image ls -a --format "{{.Repository}}" | grep -q "$iNamePrev" && docker image rm $iNamePrev
-    docker image tag $iName $iNamePrev
-    docker commit $cName $iName;; # }}}
+    $dockerCmd image ls -a --format "{{.Repository}}" | grep -q "$iNamePrev" && $dockerCmd image rm $iNamePrev
+    $dockerCmd image tag $iName $iNamePrev
+    $dockerCmd commit $cName $iName;; # }}}
   exec) # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     [[ -z $cName ]] && eval $(die "no container specified")
-    docker exec "${@:--it}" $cName /bin/bash;; # }}}
+    $dockerCmd exec "${@:--it}" $cName /bin/bash;; # }}}
   irm) # {{{
     $iSet || iName= # mandatory: container name on removal
-    [[ ! -z $iName ]] || { iName=$1; shift; }
-    [[ -z $iName ]] && eval $(die "no image specified")
-    docker image rm $iName >$out;; # }}}
+    [[ -z $iName ]] || set -- $iName
+    [[ -z $1 ]] && eval $(die "no image specified")
+    for iName; do
+      $dockerCmd image rm $iName >$out
+    done;; # }}}
   ls) # {{{
-    docker ps -a
+    $dockerCmd ps -a
     echo
-    docker images;; # }}}
+    $dockerCmd images;; # }}}
   replace) # {{{
     local doStart=true
     while [[ ! -z $1 ]]; do # {{{
@@ -129,13 +151,15 @@ _docker() { # {{{
   root) # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     [[ -z $cName ]] && eval $(die "no container specified")
-    docker exec -u 0:0 "${@:--it}" $cName /bin/bash;; # }}}
+    $dockerCmd exec -u 0:0 "${@:--it}" $cName /bin/bash;; # }}}
   rm) # {{{
     $cSet || cName= # mandatory: container name on removal
-    [[ ! -z $cName ]] || { cName=$1; shift; }
-    [[ -z $cName ]] && eval $(die "no container specified")
-    docker stop $cName >$out
-    docker rm $cName >$out;; # }}}
+    [[ -z $cName ]] || set -- $cName
+    [[ -z $1 ]] && eval $(die "no container specified")
+    for cName; do
+      $dockerCmd stop $cName >$out
+      $dockerCmd rm $cName >$out
+    done;; # }}}
   run) # {{{
     local paramsDefault="-dit" doStart= staticImage=false
     while [[ ! -z $1 ]]; do # {{{
@@ -151,7 +175,8 @@ _docker() { # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     $iSet || { iName=${1:-$iName}; shift; }
     [[ -z $cName || -z $iName ]] && eval $(die "no container/image specified")
-    local pName="DOCKER_RUN_${cName^^}_PARAMS"
+    local pName=${cName%%-*}
+    pName="DOCKER_RUN_${pName^^}_PARAMS"
     local -n paramsEnv=${pName//[-]/_}
     local err=255
     $staticImage && [[ $cName != *"-static" ]] && cName="$cName-static"
@@ -162,27 +187,30 @@ _docker() { # {{{
       [[ -z $doStart ]] && doStart=true
       local dockerShare=${DOCKER_SHARE_PATH:-$HOME/share} hDir="/home/tom"
       [[ -e $HOME/.runtime/docker.ubu ]] || mkdir -p $HOME/.runtime/docker.ubu >/dev/null
+      sed -i '/\[127.0.0.1\]:4022/d' $HOME/.ssh/known_hosts*
       [[ -e $dockerShare ]] || mkdir -p $dockerShare >/dev/null
-      docker run \
+      $dockerCmd run \
         -u $(id -u):$(id -g) \
-        --hostname ubu \
+        --hostname $iName \
         --add-host=host.docker.internal:host-gateway \
+        -p 127.0.0.1:3030-3032:3030-3032 \
         -p 127.0.0.1:${DOCKER_PORT_OU:-3033}:${DOCKER_PORT_OU:-3033} \
-        -p 127.0.0.1:3030-3032:3030-3032 -p 127.0.0.1:4022:22 \
+        -p 127.0.0.1:4022:${DOCKER_PORT_SSH:-22} \
         --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
         --tmpfs /tmpfs:exec,mode=1777 \
-        $paramsEnv $paramsDefault \
-        -v $HOME:/host \
+        -v $HOME:/home/host \
         -v $HOME/.runtime/docker.ubu:$hDir/.runtime \
         -v $HOME/projects:$hDir/projects \
         -v $dockerShare:$hDir/share \
+        $(eval echo "$paramsEnv") \
+        $paramsDefault \
         -w /home/tom \
         --name $cName $iName \
         /bin/bash
       err=$?
-      [[ $err == 0 ]] && docker start $cName; err=$?
+      [[ $err == 0 ]] && $dockerCmd start $cName; err=$?
       if $staticImage && [[ $err == 0 ]]; then # {{{
-        docker exec -it $cName bash -c \
+        $dockerCmd exec -it $cName bash -c \
           "rm -rf $hDir/projects-my ; \
             mkdir -p $hDir/projects-my/ ; \
             cp -r $MY_PROJ_PATH/scripts $hDir/projects-my/ ; \
@@ -191,7 +219,7 @@ _docker() { # {{{
             rm -rf $hDir/projects-my/scripts/bash/profiles/*"
         err=$?
       fi # }}}
-      [[ $err == 0 ]] && docker exec -it $cName $hDir/tools/docker-post.sh --yes; err=$?
+      [[ $err == 0 ]] && $dockerCmd exec -it $cName $hDir/tools/docker-post.sh --yes; err=$?
       ;; # }}}
     *) # {{{
       if declare -f doc_ext >/dev/null 2>&1; then
@@ -199,7 +227,7 @@ _docker() { # {{{
         err=$?
       fi
       if [[ $err == 255 ]]; then
-        docker run $paramsEnv $paramsDefault "$@" --name $cName $iName
+        $dockerCmd run $paramsEnv $paramsDefault "$@" --name $cName $iName
         err=$?
       fi;; # }}}
     esac
@@ -210,9 +238,9 @@ _docker() { # {{{
     fi;; # }}}
   start | s) # {{{
     $cSet || { cName=${1:-$cName}; shift; }
-    [[ -z $cName ]] && eval $(die "no container specified")
-    docker container ls -a --format "{{.Names}}" | grep -q "$cName" || _docker run -ns $cName $iName
-    docker start $cName
+    [[ -z $cName ]] && eval $(die "docker no container specified")
+    $dockerCmd container ls -a --format "{{.Names}}" | grep -q "^$cName$" || _docker run -ns $cName $iName
+    $dockerCmd start $cName
     local pidClip=
     case $cName in
     ubu | ubu-*)
@@ -222,20 +250,20 @@ _docker() { # {{{
       exec 2>&3; exec 3>&-;;
     esac
     set-title "$cName"
-    docker attach $cName
+    $dockerCmd attach $cName
     if [[ ! -z $pidClip ]]; then
       $ALIASES_SCRIPTS/docker-tools/clipboard-docker.sh --kill
     fi;; # }}}
   stop) # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     [[ -z $cName ]] && eval $(die "no container specified")
-    docker stop $cName >$out;; # }}}
+    $dockerCmd stop $cName >$out;; # }}}
   i) # {{{
-    docker image "$@";; # }}}
+    $dockerCmd image "$@";; # }}}
   c) # {{{
-    docker container "$@";; # }}}
+    $dockerCmd container "$@";; # }}}
   *) # {{{
-    docker $cmd "$@";; # }}}
+    $dockerCmd $cmd "$@";; # }}}
   esac
 } # }}}
 _docker "$@"

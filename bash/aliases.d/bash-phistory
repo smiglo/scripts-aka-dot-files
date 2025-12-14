@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-# complete: h
-
 bash_phistory() { # {{{
   [[ ! -z $BASH_PHISTORY_FILE ]] || return
   [[ ${BASH_LAST_ERR:-0} != 0 ]] && return
@@ -181,8 +179,7 @@ phist () { # @@ # {{{
     fi
   fi # }}}
 }
-alias H="phist"
-# }}}
+alias H="phist" # @@ # }}}
 hist() { # {{{
   if [[ ! -z $HISTFILE && -e $HISTFILE ]]; then # {{{
     tac $HISTFILE | awk '!($0 in a){a[$0]; print}' | tac >$HISTFILE.tmp
@@ -207,6 +204,4 @@ hist() { # {{{
 alias h="hist" # }}}
 export -f bash_phistory
 alias l="fc -s"
-export HISTIGNORE+=":h:hist:history"
-export HISTIGNORE+=":phist:H"
 

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+b="$(git rev-parse --abbrev-ref --symbolic-full-name @)"
+rB="$(git rev-parse --abbrev-ref --symbolic-full-name @{u})"
+git diff $rB..$b
