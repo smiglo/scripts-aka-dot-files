@@ -26,8 +26,8 @@ _ack-ag-wrapper() { # {{{
     if [[ ! -t 1 ]]; then
       use_fzf=false
     else
-      use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*ACK-AG-WRAPPER:[^,]\+,' | command grep -o 'true\|false')"
-      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+      eval $FZF_USAGE
+      use_fzf=${fzfUsageA[ack-ag]:-$FZF_INSTALLED}
     fi
   fi # }}}
   if [[ -z $cmd ]] || ! which $cmd >/dev/null 2>&1; then
@@ -56,7 +56,11 @@ _ack-ag-wrapper() { # {{{
     rg*)  params+=" --color always";;
     esac
   fi
-  $ALIASES_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee +fzf=$use_fzf $fzf_params +fzf-p "--prompt '$prompt'" $cmd $params $@
+  if $use_tee || $use_fzf; then
+    $ALIASES_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee +fzf=$use_fzf $fzf_params +fzf-p "--prompt '$prompt'" $cmd $params $@
+  else
+    $cmd $params $@
+  fi
 } # }}}
 _ack-ag-wrapper "$@"
 

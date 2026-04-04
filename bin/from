@@ -32,8 +32,12 @@ from=
 fullPath=false
 fzfAll=
 dParams="-not -type d"
+[[ -n $1 ]] || set -- -l
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
+  -l)
+    lastPane="$(tmux list-panes -F '#{pane_last} #{pane_id}' | awk '/^1 /{print $2}')"
+    from=$(tmux display-message -t $lastPane -pF '#{pane_current_path}');;
   -f | --from) from="$2"; shift;;
   -F | --fzf) fzfAll=true;;
   --no-fzf) fzfAll=false;;
@@ -43,14 +47,19 @@ while [[ ! -z $1 ]]; do # {{{
   -s | --single) both=false;;
   -r | --reverse) reverse=true;;
   -d | --dirs) dParams=;;
-  -t) shift; from=$(tmux display-message -t $1 -p -F '#{pane_current_path}');;
-  -)
+  -t) # {{{
+    shift
+    from=$(tmux display-message -t $1 -p -F '#{pane_current_path}')
+    [[ $2 == ':' ]] && from+="$2$3" && shift 2;; # }}}
+  -) # {{{
+    [[ -z $from ]] && from=$FROM
+    [[ $from = *:*.* ]] && from=$(tmux display-message -t $from -p -F '#{pane_current_path}')
     if [[ -t 1 ]]; then
       echo "${from:-$PWD}" | tee >(xclip --put)
     else
       echo "${from:-$PWD}"
     fi
-    exit 0;;
+    exit 0;; # }}}
   *) break;;
   esac; shift
 done # }}}
@@ -111,4 +120,3 @@ $fullPath && from="$(realpath "$from")" && cwd="$(realpath "$cwd")"
     fi # }}}
   done # }}}
 )
-

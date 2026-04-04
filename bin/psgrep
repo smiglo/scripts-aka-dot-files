@@ -70,6 +70,7 @@ psgrep() { # @@ # {{{
   if [[ -z $useFzf ]]; then # {{{
     [[ -t 1 ]] && useFzf=true || useFzf=false
   fi # }}}
+  ! $useFzf && loop=false
   getProccesses() { # {{{
     local list=
     list="$(COLUMNS=999; command ps $psParams $psColumns)"

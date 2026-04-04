@@ -25,8 +25,7 @@ set emacs-mode-string  "\1\e[0;31m\2☯ \1\e[0m\2"
 # ---
 
 set keymap emacs
-"JJ":       vi-editing-mode
-"\C-kV":    "JJJJ"
+"\C-kV":    vi-editing-mode
 "\e[1;5C":  forward-word
 "\e[1;5D":  backward-word
 
@@ -44,13 +43,15 @@ set keymap vi-command
 "\C-h":     dynamic-complete-history
 # \C-i is TAB
 "\C-i":     menu-complete
+"\C-k":     vi-insertion-mode
+"\C-ks":    clear-screen
 "\C-kE":    emacs-editing-mode
 "\C-k\C-k": edit-and-execute-command
 "\C-k\C-l": kill-whole-line
-"\C-ks":    clear-screen
 "\C-o":     menu-complete-backward
 "\C-s":     forward-search-history
-"\C-w":     backward-kill-word
+"\C-w\C-h": backward-kill-word
+"\C-w\C-l": kill-word
 "\M-#":     insert-comment
 "\M-.":     yank-last-arg
 "\M-\M-":   kill-whole-line
@@ -66,19 +67,21 @@ set keymap vi-insert
 "JJ":       vi-movement-mode
 "KK":       vi-movement-mode
 # \C-i is TAB
-"\C-i":      menu-complete
+"\C-i":     menu-complete
 "\C-a":     beginning-of-line
 "\C-e":     end-of-line
 "\C-g":     kill-whole-line
-"\C-h":     dynamic-complete-history
+"\C-h":     backward-word
 "\C-k":     vi-movement-mode
+"\C-ks":    clear-screen
 "\C-kE":    emacs-editing-mode
+"\C-k\C-h": dynamic-complete-history
 "\C-k\C-k": edit-and-execute-command
 "\C-k\C-l": kill-whole-line
-"\C-ks":    clear-screen
 "\C-o":     menu-complete-backward
 "\C-s":     forward-search-history
-"\C-w":     backward-kill-word
+"\C-w\C-h": backward-kill-word
+"\C-w\C-l": kill-word
 "\M-#":     insert-comment
 "\M-.":     yank-last-arg
 "\M-j":     history-search-forward

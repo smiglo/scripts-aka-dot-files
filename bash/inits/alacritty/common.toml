@@ -1,36 +1,6 @@
 [colors]
 draw_bold_text_with_bright_colors = true
 
-[colors.bright]
-black = "0x928374"
-blue = "0x83A598"
-cyan = "0x8EC07C"
-green = "0xB8BB26"
-magenta = "0xD3869B"
-red = "0xFB4934"
-white = "0xEBDBB2"
-yellow = "0xFABD2F"
-
-[colors.cursor]
-cursor = "0x00b5b2"
-text = "0xe0e0e0"
-
-[colors.normal]
-black = "0x101010"
-# black = "0x0c0c12"
-# black = "0x101222"
-blue = "0x458588"
-cyan = "0x689D6A"
-green = "0x98971A"
-magenta = "0xB16286"
-red = "0xED655C"
-white = "0xFBF1C7"
-yellow = "0xD79921"
-
-[colors.primary]
-background = "0x121212"
-foreground = "0xFBF1C7"
-
 [env]
 TERM = "alacritty"
 
@@ -56,4 +26,99 @@ size = 14
 [window]
 dynamic_padding = true
 dynamic_title = true
+
+[[keyboard.bindings]]
+action = "Paste"
+key = "v"
+mods = "Control|Shift"
+[[keyboard.bindings]]
+action = "Copy"
+key = "c"
+mods = "Control|Shift"
+
+[[keyboard.bindings]]
+chars = "\u0105" # ą
+key = "a"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0104" # Ą
+key = "a"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u0107" # ć
+key = "c"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0106" # Ć
+key = "c"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u0119" # ę
+key = "e"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0118" # Ę
+key = "e"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u0142" # ł
+key = "l"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0141" # Ł
+key = "l"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u0144" # ń
+key = "n"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0143" # Ń
+key = "n"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u00f3" # ó
+key = "o"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u00d3" # Ó
+key = "o"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u015b" # ś
+key = "s"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u015a" # Ś
+key = "s"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u017a" # ź
+key = "x"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u0179" # Ź
+key = "x"
+mods = "Alt|Control|Shift"
+[[keyboard.bindings]]
+chars = "\u017c" # ż
+key = "z"
+mods = "Alt|Control"
+[[keyboard.bindings]]
+chars = "\u017b" # Ż
+key = "z"
+mods = "Alt|Control|Shift"
+
+[[keyboard.bindings]]
+chars = "\u2013" # –
+key = "-"
+mods = "Alt"
+[[keyboard.bindings]]
+chars = "\u2014" # —
+key = "-"
+mods = "Alt|Shift"
+[[keyboard.bindings]]
+chars = "\u2026" # …
+key = ";"
+mods = "Alt"
 

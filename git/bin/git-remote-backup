@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -d | --dst) echo "@@-d";;
+  -r | --remote) echo "local origin backup";;
+  --repo) echo "${PWD##*/}";;
+  *) echo "-r --remote -d --dst --repo";;
+  esac; exit 0
+fi # }}}
+source $ALIASES_D/0.essentials
+cwd="$PWD" remoteName=
+repo="$(basename $cwd)"
+backupDir="${GIT_REMOTE_BACKUP_DIR:-$(realpath $cwd/..)}"
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -r | --remote) remoteName="$2"; shift;;
+  -d | --dst)    backupDir="${2%/}"; shift;;
+  --repo)        repo="$2"; shift;;
+  esac; shift
+done # }}}
+repo="${repo#.git}.git"
+if [[ -z $remoteName ]]; then # {{{
+  list="local _backup origin"
+  for remoteName in $list; do
+    git remote | grep -q "$remoteName" || break
+  done
+fi # }}}
+git remote | grep -q "$remoteName" && { echoe "remote $remoteName already set"; exit 1; }
+if [[ ! -e "$backupDir/$repo" ]]; then # {{{
+  [[ -e $backupDir ]] || mkdir -p $backupDir >/dev/null
+  ( cd $backupDir
+    git clone --bare $cwd $repo
+  )
+else
+  echoe "repo $repo already exist, just adding"
+fi # }}}
+git remote add $remoteName $backupDir/$repo

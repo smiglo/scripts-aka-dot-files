@@ -1,0 +1,5 @@
+Host *
+  ForwardAgent no
+  # ControlMaster auto
+  # ControlPath ~/.tmp/.mem/.ssh/sockets/%C
+  # ControlPersist 60m

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  echo "-d"
+  br=$(git rev-parse --abbrev-ref HEAD)
+  git branch --all | sed -n -e '/\/'"$br"'/s/remotes\///p'
+  exit 0
+fi # }}}
+source $ALIASES_D/0.essentials
+ups="" showDiff=false shaHead= shaUps=
+[[ $1 == '-d' ]] && showDiff=true && shift
+if [[ -z $1 ]]; then
+  ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
+elif [[ $1 == */* ]]; then
+  ups="$1"
+else
+  ups="$1/$(git rev-parse --abbrev-ref HEAD)"
+fi
+[[ -z $ups ]] && exit 1
+shaUps=$(git log -1 --format='%H' $ups)
+shaHead=$(git log -1 --format='%H' HEAD)
+if [[ $shaUps == $shaHead ]]; then
+  echoe $showDiff "the same"
+  exit 0
+fi
+if ! git merge-base --is-ancestor HEAD $ups; then
+  git tag-sync
+fi
+git reset --hard $ups
+if $showDiff; then
+  echoe "$ git diff $shaHead..$shaUps"
+  git diff $shaHead..$shaUps
+fi

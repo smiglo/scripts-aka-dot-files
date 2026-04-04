@@ -17,7 +17,7 @@ if [[ $1 == '@@' ]]; then # {{{
     p | --t-pause) echo "30m 1h";;
     *)
       echo "-n c --comment d --date  s --t-start w --t-work p --t-pause"
-      echo {START-,}END:then:{PAUSE,wWORK};;
+      echo START{-END,}:then:{PAUSE,wWORK,-};;
     esac;; # }}}
   *) # {{{
     ret_val=
@@ -191,14 +191,15 @@ add_entry() { # {{{
       s | --t-start)  shift; tStart="$1";;
       p | --t-pause)  shift; tPause="$1";;
       *)
-        tEnd=$1 tWork=0
+        tStart=$1 tEnd="auto" tWork="8h"
         if [[ $1 == '-' ]]; then
-          tEnd="auto"
-          tWork="8h"
+          tStart=
         elif [[ $1 =~ (.*)-(.*) ]]; then
           tStart=${BASH_REMATCH[1]}
+          tStart=$(printf "%02d:%02d" "$((10#${tStart%%:*}))" "$((10#${tStart#*:}))")
           tEnd=${BASH_REMATCH[2]}
-          tEnd=$(printf "%02d:%02d" "${tEnd%%:*}" "${tEnd#*:}")
+          tEnd=$(printf "%02d:%02d" "$((10#${tEnd%%:*}))" "$((10#${tEnd#*:}))")
+          tWork=
         fi; shift
         case $1 in
         '') ;;
@@ -223,17 +224,19 @@ add_entry() { # {{{
       tStart=${LOGLAST_ADD_DEFAULT_START:-07:45}
       [[ $today == $entryDate ]] && tStart="$(echo "$entry" | awk '{print $6}')"
     else
-      tStart=$(printf "%02d:%02d" "${tStart%%:*}" "${tStart#*:}")
+      tStart=$(printf "%02d:%02d" "$((10#${tStart%%:*}))" "$((10#${tStart#*:}))")
     fi # }}}
     if [[ $tEnd == 'auto' ]]; then # {{{
-      if [[ $today == $entryDate ]]; then
-        tStart="$(echo "$entry" | awk '{print $6}')"
-        tEnd="$(date +"%H:%M")"
-        tWork=0
-        [[ -z $tPause && $entry =~ P\(([0-9]+)\) ]] && tPause=${BASH_REMATCH[1]}
-      else
-        tStart="$(date +"%H:%M")"
-        tEnd=
+      tEnd=
+      if [[ -z $tStart ]]; then
+        if [[ $today == $entryDate ]]; then
+          tStart="$(echo "$entry" | awk '{print $6}')"
+          tEnd="$(date +"%H:%M")"
+          tWork=0
+          [[ -z $tPause && $entry =~ P\(([0-9]+)\) ]] && tPause=${BASH_REMATCH[1]}
+        else
+          tStart="$(date +"%H:%M")"
+        fi
       fi
     fi # }}}
     [[ -z $tPause ]] && tPause=${LOGLAST_ADD_DEFAULT_PAUSE:-30}
@@ -256,6 +259,7 @@ add_entry() { # {{{
         y) ;;
         t|n) date=$today;;
         esac
+        echo
       fi
       date="${date//-}" # }}}
     else # {{{
@@ -1121,7 +1125,7 @@ loglast() { # {{{
           local waitCnt=5s
           echo 'System check:'
           echo '  Repositories:'
-          $BIN_PATH/git-cmds.sh gitst | grep -v 'UP-TO-DATE' | sed 's/^/    /'
+          git utils gitst | grep -v 'UP-TO-DATE' | sed 's/^/    /'
           if [[ ${PIPESTATUS[0]} == 0 ]]; then
             waitCnt=1s
           elif [[ $cmd != check ]]; then

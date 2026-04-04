@@ -34,48 +34,8 @@ export CPurple='[0;35m'
 export CCyan='[0;36m'
 export CWhite='[0;37m'
 # }}}
-if [[ $TERM_ORIG == 'linux' ]]; then # {{{
-  export CSearch="$CCyan"
-  export CHLSearch="$CBlue"
-  export CGoldOrig="$CYellow"
-  export CGold="$CYellow"
-
-  export CBBlack="$CBlack"
-  export CBRed="$CRed"
-  export CBGreen="$CGreen"
-  export CBYellow="$CYellow"
-  export CBBlue="$CBlue"
-  export CBPurple="$CPurple"
-  export CBCyan="$CCyan"
-  export CBWhite="$CWhite"
-
-  export CUBlack="$CBlack"
-  export CURed="$CRed"
-  export CUGreen="$CGreen"
-  export CUYellow="$CYellow"
-  export CUBlue="$CBlue"
-  export CUPurple="$CPurple"
-  export CUCyan="$CCyan"
-  export CUWhite="$CWhite"
-
-  export CIBlack="$CBlack"
-  export CIRed="$CRed"
-  export CIGreen="$CGreen"
-  export CIYellow="$CYellow"
-  export CIBlue="$CBlue"
-  export CIPurple="$CPurple"
-  export CICyan="$CCyan"
-  export CIWhite="$CWhite"
-
-  export CBIBlack="$CBlack"
-  export CBIRed="$CRed"
-  export CBIGreen="$CGreen"
-  export CBIYellow="$CYellow"
-  export CBIBlue="$CBlue"
-  export CBIPurple="$CBIPurple"
-  export CBICyan="$CCyan"
-  export CBIWhite="$CWhite" # }}}
-else # {{{
+case $TERM,$OS_KIND,$IS_DOCKER in
+alacritty* | *-256color* | *,arch,* | *,true) # {{{
   # 256 Colors # {{{
   export CSearch='[38;5;214m'
   export CHLSearch='[38;5;208m'
@@ -145,7 +105,50 @@ else # {{{
   export COnICyan='[0;106m'
   export COnIWhite='[0;107m'
   # }}}
-fi # }}}
+  ;; # }}}
+*) # {{{
+  export CSearch="$CCyan"
+  export CHLSearch="$CBlue"
+  export CGoldOrig="$CYellow"
+  export CGold="$CYellow"
+
+  export CBBlack="$CBlack"
+  export CBRed="$CRed"
+  export CBGreen="$CGreen"
+  export CBYellow="$CYellow"
+  export CBBlue="$CBlue"
+  export CBPurple="$CPurple"
+  export CBCyan="$CCyan"
+  export CBWhite="$CWhite"
+
+  export CUBlack="$CBlack"
+  export CURed="$CRed"
+  export CUGreen="$CGreen"
+  export CUYellow="$CYellow"
+  export CUBlue="$CBlue"
+  export CUPurple="$CPurple"
+  export CUCyan="$CCyan"
+  export CUWhite="$CWhite"
+
+  export CIBlack="$CBlack"
+  export CIRed="$CRed"
+  export CIGreen="$CGreen"
+  export CIYellow="$CYellow"
+  export CIBlue="$CBlue"
+  export CIPurple="$CPurple"
+  export CICyan="$CCyan"
+  export CIWhite="$CWhite"
+
+  export CBIBlack="$CBlack"
+  export CBIRed="$CRed"
+  export CBIGreen="$CGreen"
+  export CBIYellow="$CYellow"
+  export CBIBlue="$CBlue"
+  export CBIPurple="$CBIPurple"
+  export CBICyan="$CCyan"
+  export CBIWhite="$CWhite"
+  ;; # }}}
+esac
 # Aliases # {{{
 export CMagenta="$CPurple"
 export CBMagenta="$CPurple"
@@ -420,7 +423,7 @@ cl() { # {{{
     echo -e -n "$out"
   fi
 }
-complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic cl # }}}
+compl-add --old cl # }}}
 # cl wrappers # {{{
 printfc() { cl -F "$@"; }
 clf()     { cl -F "$@"; }

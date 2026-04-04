@@ -66,12 +66,14 @@ time2s() { # @@ # {{{
       echo "${color}$((d1-d2))${coff}"
       return 0;; # }}}
     --is-hms) # {{{
+      [[ -n $2 ]] || return 1
       [[ $2 =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]
       return $?;; # }}}
     --is-HMS) # {{{
+      [[ -n $2 ]] || return 1
       [[ $2 =~ ^([0-9]+):([0-9]+)(:[0-9]+)?$ ]]
       return $?;; # }}}
-    --split)
+    --split) # {{{
       if [[ $2 =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then
         local h=${BASH_REMATCH[1]%h}
         local m=${BASH_REMATCH[2]%m}
@@ -85,7 +87,7 @@ time2s() { # @@ # {{{
         printf "%d %d %d\n" "$((10#${h:-0}))" "$((10#${m:-0}))" "$((10#${s:-0}))"
         return
       fi
-      return 1;;
+      return 1;; # }}}
     --to-HMS) # {{{
       shift
       local dateP="--utc"
@@ -128,16 +130,7 @@ time2s() { # @@ # {{{
   if [[ $ts =~ ^([0-9]+h){0,1}([0-9]+m){0,1}([0-9]+s){0,1}$ ]]; then # {{{
     h="${BASH_REMATCH[1]%h}" m="${BASH_REMATCH[2]%m}" s="${BASH_REMATCH[3]%s}"
     out="$((${h:-0}*60*60 + ${m:-0}*60 + ${s:-0}))"
-    hms_is=true
-    # }}}
-  elif [[ $ts =~ ^([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})([0-9]{2})$ ]]; then # {{{
-    ts="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}"
-    now=0
-    out=$(command date +%s -d "$ts") # }}}
-  elif [[ $ts =~ ^([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})$ ]]; then # {{{
-    ts="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:00"
-    now=0
-    out=$(command date +%s -d "$ts") # }}}
+    hms_is=true # }}}
   elif [[ $ts =~ ^([0-9]+)$ ]]; then # {{{
     if [[ $ts =~ ^([0-9]{7,})$ ]]; then
       now=$(time2s -s '0:00')
@@ -145,6 +138,26 @@ time2s() { # @@ # {{{
     else
       out="$ts"
     fi # }}}
+  elif [[ $ts =~ ^([0-9]{0,4})[.-]?([0-9]{0,2})[.-]?([0-9]{1,2})[\ -]([0-9]{1,2}):?([0-9]{0,2})(:?([0-9]{0,2}))$ ]]; then # {{{
+    local aDate=( "${BASH_REMATCH[@]}" )
+    local aYear="$(date +%Y)"
+    if (( ${#aDate[1]} == 0 )); then
+      aDate[1]="$aYear"
+    elif(( ${#aDate[1]} == 2 )); then
+      aDate[1]="${aYear:0:2}${m[1]}"
+    fi
+    if (( ${#aDate[2]} == 0 )); then
+      aDate[2]="$(date +%m)"
+    fi
+    aDate[3]="$(printf "%02d" $((10#${aDate[3]})))"
+    aDate[4]="$(printf "%02d" $((10#${aDate[4]})))"
+    aDate[5]="$(printf "%02d" $((10#${aDate[5]:-0})))"
+    if (( ${#aDate[7]} == 0 )); then
+      aDate[7]="00"
+    fi
+    ts="${aDate[1]}-${aDate[2]}-${aDate[3]} ${aDate[4]}:${aDate[5]}:${aDate[7]}"
+    now=0
+    out=$(command date +%s -d "$ts") # }}}
   else # {{{
     now=$(time2s -s '0:00')
     out=$(time2s --diff "$ts" "@$now")
@@ -279,55 +292,56 @@ sleep-precise() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     -s | -S) echo "SLEEP_PER_STEP - 1.0";;
-    *) echo "-v --var -k --keep -r --reset -s --save -i --info --test -S"
+    --steps-in-round) echo "10 30 60 120";;
+    *) echo "-v --var -k --keep -r --reset -s --save -i --info --test -S --steps-in-round"
     esac
     return 0
   fi # }}}
+  sleep-precise-test() { # {{{
+    import-module echor
+    eval export ECHOR_NAME_$$="sleep-test"
+    sleep-test() { # {{{
+      export SLEEP_PRECISE_MARGIN=$1
+      local msg="${2:-Evaluation}"
+      local t1= t2= tSum=0 cnt=10 diff=
+      echor "$msg (SLEEP_PRECISE_MARGIN=$SLEEP_PRECISE_MARGIN)"
+      for i in $(seq 1 $cnt); do # {{{
+        t1=${EPOCHREALTIME//[.,]}
+        sleep-precise -s
+        sleep 0.5
+        sleep-precise 1
+        t2=${EPOCHREALTIME//[.,]}
+        diff=$(( (t2 - t1) - 1000000 ))
+        tSum=$((tSum + diff))
+        echor "[$i] $diff"
+      done # }}}
+      local margin=$((SLEEP_PRECISE_MARGIN + tSum / cnt))
+      echo "$margin"
+    } # }}}
+    local narrowN=0 margin=${SLEEP_PRECISE_MARGIN:-0}
+    case $1 in # {{{
+    -)  narrowN=0;;
+    '') margin=0; narrowN=3;;
+    *)  margin=$1;;
+    esac # }}}
+    for (( i=1; i<=narrowN; ++i )); do # {{{
+      echor "narrowing $i/$narrowN with $margin"
+      margin=$(sleep-test $margin)
+    done # }}}
+    margin=$(sleep-test $margin "Verification")
+    echor "export SLEEP_PRECISE_MARGIN=$margin"
+  } # }}}
+  local stepsInRound=60
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -v | --var)   var+="_$2"; shift;;
     -k | --keep)  keep=true;;
     -r | --reset) keep=false;;
     -s | --save)  save=true;;
+    --steps-in-round) stepsInRound="$2"; shift;;
     -S)           save=true; reset=true;;
     -i | --info)  printTime=true;;
-    --test) # {{{
-      shift
-      (
-        import-module echor
-        eval export ECHOR_NAME_$$="sleep-test"
-        sleep-test() { # {{{
-          export SLEEP_PRECISE_MARGIN=$1
-          local msg="${2:-Evaluation}"
-          local t1= t2= tSum=0 cnt=10 diff=
-          echor "$msg (SLEEP_PRECISE_MARGIN=$SLEEP_PRECISE_MARGIN)"
-          for i in $(seq 1 $cnt); do # {{{
-            t1=${EPOCHREALTIME//[.,]}
-            sleep-precise -s
-            sleep 0.5
-            sleep-precise 1
-            t2=${EPOCHREALTIME//[.,]}
-            diff=$(( (t2 - t1) - 1000000 ))
-            tSum=$((tSum + diff))
-            echor "[$i] $diff"
-          done # }}}
-          local margin=$((SLEEP_PRECISE_MARGIN + tSum / cnt))
-          echo "$margin"
-        } # }}}
-        local narrowN=0 margin=${SLEEP_PRECISE_MARGIN:-0}
-        case $1 in # {{{
-        -)  narrowN=0;;
-        '') margin=0; narrowN=3;;
-        *)  margin=$1;;
-        esac # }}}
-        for (( i=1; i<=narrowN; ++i )); do # {{{
-          echor "narrowing $i/$narrowN with $margin"
-          margin=$(sleep-test $margin)
-        done # }}}
-        margin=$(sleep-test $margin "Verification")
-        echor "export SLEEP_PRECISE_MARGIN=$margin"
-      )
-      return 0;; # }}}
+    --test) shift; sleep-precise-test "$@"; return 0;;
     *) break;;
     esac; shift
   done # }}}
@@ -342,7 +356,7 @@ sleep-precise() { # @@ # {{{
         [[ $sleepPerStep == '-' ]] && sleepPerStep=$sleepDefault
         [[ $sleepPerStep == *.* ]] || sleepPerStep="$sleepPerStep.0"
         sleepPerStep=$(( ${sleepPerStep%.*} * s2us + ${sleepPerStep#*.} * s2us / 10 ))
-        steps=$(( 60 * s2us / $sleepPerStep ))
+        steps=$(( $stepsInRound * s2us / $sleepPerStep ))
         vSleep=$sleepPerStep vSteps=$steps vStep=0
         vEnd=$((rt + vSteps * vSleep))
       fi
@@ -455,4 +469,3 @@ if [[ $0 == ${BASH_SOURCE[0]} ]]; then
   __export_time-tools
   "$@"
 fi
-

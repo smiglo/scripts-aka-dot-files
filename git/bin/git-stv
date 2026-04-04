@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
-rev="HEAD"
-[[ -n $1 && $1 != -* ]] && rev=$1 && shift
+if [[ $1 == '@@' ]]; then # {{{
+  echo "---"
+  exit 0
+fi # }}}
 git status --short -b "$@" | vim --Fast -

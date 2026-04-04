@@ -6,11 +6,11 @@ _cat() { # {{{
     echo "@@-f -p"
     return 0
   fi # }}}
-  local bcUse= bcP="--paging=auto --pager=less"
+  local bcUse= bcP="--paging=auto --pager=less" colors=
   [[ ! -z $BAT_INSTALLED ]] || bcUse=false
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    -p) bcUse=$BAT_INSTALLED;;
+    -p) bcUse=$BAT_INSTALLED; colors=true;;
     *) break;
     esac; shift
   done # }}}
@@ -18,7 +18,11 @@ _cat() { # {{{
     [[ -t 0 ]] && bcUse=$BAT_INSTALLED || bcUse=false
   fi # }}}
   if $bcUse; then # {{{
-    [[ -t 1 ]] && bcP+=" --color always"
+    if [[ -z $colors ]]; then
+      colors=true
+      [[ -t 1 ]] || colors=true
+    fi
+    $colors && bcP+=" --color always"
     local f1= i= params=
     while [[ ! -z $1 ]]; do # {{{
       case $1 in

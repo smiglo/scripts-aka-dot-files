@@ -30,7 +30,7 @@ if $LOCK; then # {{{
 fi # }}}
 # Source extensions # {{{
 for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/tmux-startup.sh ]] && source $i/tmux-startup.sh
+  [[ -e $i/bash/inits/tmux-startup.sh ]] && source $i/bash/inits/tmux-startup.sh
 done
 [[ -e $RUNTIME_PATH/tmux-startup.sh ]] && source $RUNTIME_PATH/tmux-startup.sh # }}}
 # }}}
@@ -453,7 +453,9 @@ restoreSaved() { # {{{
 } # }}}
 # initTmux_MAIN ... # {{{
 if ! declare -f initTmux_MAIN >/dev/null 2>&1; then
-  if ! $IS_DOCKER; then
+  useSimpleMain=${TMUX_INIT_MAIN_USE_SIMPLE:-true}
+  $IS_DOCKER && useSimpleMain=true
+  if ! $useSimpleMain; then
     initTmux_MAIN() { # {{{
       eval $(init "$HOME")
       tmux \
@@ -463,27 +465,41 @@ if ! declare -f initTmux_MAIN >/dev/null 2>&1; then
         select-pane   -t $sessionName:1.1
       local isNet=false vims=
       net --wait=10s && isNet=true
-      run $sessionName:1 set-title "Widgets"
+      run $sessionName:1 set-title "widgets"
       makePreconfiguredSplits --wnd 1
-      run $sessionName:2 set-title "Tools"
+      run $sessionName:2 set-title "env"
       if [[ " $TMUX_INIT_SESSIONS " != *" ENV "* || " $TMUX_INIT_SESSIONS_SKIP " == *" ENV "* ]]; then
-        vims+=" Tools"
+        vims+=" env"
       fi
       restoreSaved --vims "$vims"
     } # }}}
   else
     initTmux_MAIN() { # {{{
       eval $(init "$HOME")
+      local mainPath="${TMUX_INIT_MAIN_MAIN_PATH:-$PRJ_PATH}"
+      local mainTitle="$TMUX_INIT_MAIN_MAIN_TITLE"
+      if [[ -z $mainTitle ]]; then
+        if [[ $mainPath == */projects ]]; then
+          mainTitle="prj"
+        elif [[ $mainPath == */w ]]; then
+          mainTitle="w"
+        else
+          mainTitle="${mainPath##*/}"
+          mainTitle="${mainTitle,,}"
+        fi
+      fi
       tmux \
         split-window  -t $sessionName:1.1 -v $(splitParam 20) -d -c "$SCRIPT_PATH"\; \
-        new-window    -t $sessionName:1 -a -d \; \
-        split-window  -t $sessionName:2.1 -v $(splitParam 20) -d \; \
+        new-window    -t $sessionName:1 -a -d -c "$mainPath" \; \
+        split-window  -t $sessionName:2.1 -v $(splitParam 20) -d -c "$mainPath" \; \
         select-window -t $sessionName:1 \; \
         select-pane   -t $sessionName:1.1
       run $sessionName:1.1 cd "$SCRIPT_PATH"
-      run $sessionName:1 set-title "Tools"
-      run $sessionName:2 set-title "Main"
-      restoreSaved --vims "Main:docker"
+      run $sessionName:1 set-title "env"
+      run $sessionName:2 set-title "$mainTitle"
+      local vims="$mainTitle"
+      $IS_DOCKER && vims+=":docker"
+      restoreSaved --vims "$vims"
     } # }}}
   fi
 fi # }}}
@@ -616,7 +632,6 @@ done # }}}
 [[ ! -z $TMUX_USE_NICE_PRIO ]] && sudo renice -n ${TMUX_USE_NICE_PRIO} -p $(ps -A -o pid,comm | grep 'tmux: server' | awk '{print $1}') >/dev/null 2>&1
 rm -rf $TMUX_INIT_LOCK
 if $do_attach; then # {{{
-  trap "kill -SIGHUP $PPID" SIGHUP
   # Choose current session # {{{
   if [[ -z $sessionName ]] || ! tmux has-session -t $sessionName 1>/dev/null 2>&1; then
     [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && sessionName="$(cat $TMP_PATH/.tmux_last_session.$USER)"
@@ -629,6 +644,7 @@ if $do_attach; then # {{{
   fi # }}}
   # Attach to current session # {{{
   if [[ ! -n $TMUX ]]; then
+    trap "kill -SIGHUP $PPID" SIGHUP
     tmux attach-session -t $sessionName
   else
     tmux switch-client -t $sessionName
@@ -636,4 +652,3 @@ if $do_attach; then # {{{
 fi # }}}
 # }}}
 # }}}
-

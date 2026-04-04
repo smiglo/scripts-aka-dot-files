@@ -1,26 +1,60 @@
 #!/bin/bash
 
 if [[ $1 == '@@' ]]; then # @@:new # {{{
+  from=$FROM dir=
+  if [[ -n $3 ]]; then # {{{
+    case $3 in
+    -t)
+      f=$4
+      [[ $5 == ':' ]] && f+="$5$6"
+      from="$(from -t $f -)";;
+    -l | -) from="$(from -l -)";;
+    *)
+      if [[ $3 =~ ^((.*:)?([0-9]+)?\.[0-9]+)$ ]]; then
+        from=$(from -t ${BASH_REMATCH[1]} -)
+      elif [[ $3 == '-' ]]; then
+        from=$(from -l -)
+      elif [[ -d $3 ]]; then
+        dir=$3
+      fi;;
+    esac
+  fi # }}}
   case $2 in
-  -t)
+  -t) # {{{
     tmux list-panes -a -F '#S:#I.#P'
     tmux list-panes -s -F ':#I.#P'
-    tmux list-panes -F '.#P';;
-  -c) echo "@"
-    [[ -e $FROM ]] && ( cd $FROM; git branch | cut -c3-);;
-  *)
-    if [[ $cur == ./* ]]; then
+    tmux list-panes -F '.#P';; # }}}
+  -c) echo "@" # {{{
+    [[ -e $from ]] && ( cd $from; git branch | cut -c3-);; # }}}
+  *) # {{{
+    [[ -z $from || ! -e $from ]] && echo "---" && exit 1
+    last="${@: -1}"
+    if [[ -z $last || ! -e $from/$last ]]; then
+      echo "-v -c -t -l - -f"
+      if [[ " $@ " == *" -f "* ]]; then
+        echo "@@-f:$from"
+      else
+        while read -r l; do
+          [[ -e $l ]] || continue
+          echo "$l"
+        done < <( \
+          builtin cd "$from"
+          command grep -v -F -f <(compgen -d -P ^ -S '$' -- "$cur") <(compgen -f -P ^ -S '$' -- "$cur") | sed -e 's/^\^//' -e 's/\$$/ /'
+          compgen -d -S / -- "$cur"
+        )
+      fi
+      exit 0
+    fi
+    if [[ $cur == ./* || -e $from/$last ]]; then
       echo "@@-f"
       exit 0
     fi
-    echo "-v -c -t"
-    dir=$3 from=${FROM:-.}
     if [[ -d $dir ]]; then
       from+="/$dir"
     else
-      echo "@@-d:${FROM:-.}"
+      echo "@@-d:$from"
     fi
-    echo "@@-f:$from";;
+    echo "@@-f:$from";; # }}}
   esac
   exit 0
 fi # }}}
@@ -33,8 +67,10 @@ while [[ ! -z $2 ]]; do # {{{
   case $1 in
   -c) commit=$2; shift;;
   -t) from="$(from -t "$2" -)"; shift;;
+  -l | -) from="$(from -l -)";;
   -v) silent=false;;
-  - | --) # {{{
+  -f) ;; # just for completion -> full list
+  --) # {{{
     break;; # }}}
   -*) fromParams+=" $1";;
   *) # {{{
@@ -66,5 +102,3 @@ else
 
   vimdiff $inF $file $@
 fi
-
-

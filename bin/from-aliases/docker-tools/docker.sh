@@ -12,7 +12,7 @@ _docker() { # {{{
     -c) echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT";;
     -i) echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
     advance) echo "$containers";;
-    build) echo "--amd64 $images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
+    build) echo "--platform=linux/amd64 $images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
     clean) echo "$containers -";;
     commit) # {{{
       echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT"
@@ -21,11 +21,11 @@ _docker() { # {{{
     i | image) echo "prune";;
     irm) echo "$images";;
     ls) echo "---";;
-    replace) echo "-ns -s";;
+    replace) echo "--no-start -s --start";;
     root) echo "$containers";;
     rm) echo "$containers";;
     run) # {{{
-      echo "-ns -s --static"
+      echo "--platform=linux/amd64 --no-start -s --start --static"
       echo "- -d -i -t -dit"
       echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT"
       echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";; # }}}
@@ -66,26 +66,24 @@ _docker() { # {{{
     [[ $containerList == *". $cName "* ]] && $dockerCmd container remove $cName
     $dockerCmd container rename $cNameNext $cName;; # }}}
   build) # {{{
-    local arch= buildArchP=
+    local platform=
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
-      --amd64) # {{{
-        export DOCKER_DEFAULT_PLATFORM="linux/amd64"
-        buildArchP="--amd64"
-        arch="--platform=$DOCKER_DEFAULT_PLATFORM";; # }}}
+      --platform=*) platform=$1;;
       *) break
       esac; shift
     done # }}}
     $iSet || { iName=${1:-$iName}; shift; }
     [[ -z $iName ]] && eval $(die "no image specified")
     case $iName in
-    ubu | ubu-*) # {{{
+    ubu | ubu.*) # {{{
       (
         cd $SCRIPT_PATH/bash/inits/ubu-docker
-        ./build.sh $buildArchP
+        ./build.sh $platform
       ) ;; # }}}
     *) # {{{
-      $dockerCmd build $arch "$@" -t $iName .;; # }}}
+      $isSet || [[ -z $platform ]] || iName="$iName.${platform##*/}"
+      $dockerCmd build $platform "$@" -t $iName .;; # }}}
     esac;; # }}}
   clean) # {{{
     $cSet || cName= # mandatory: container name on removal
@@ -134,8 +132,8 @@ _docker() { # {{{
     local doStart=true
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
-      -ns) doStart=false;;
-      -s)  doStart=true;;
+      --no-start)   doStart=false;;
+      -s | --start) doStart=true;;
       *)   break;;
       esac
     done # }}}
@@ -161,11 +159,12 @@ _docker() { # {{{
       $dockerCmd rm $cName >$out
     done;; # }}}
   run) # {{{
-    local paramsDefault="-dit" doStart= staticImage=false
+    local paramsDefault="-dit" doStart= staticImage=false platform=
     while [[ ! -z $1 ]]; do # {{{
       case $1 in
-      -ns) doStart=false;;
-      -s)  doStart=true;;
+      --platform=*) platform=$1;;
+      --no-start)   doStart=false;;
+      -s | --start) doStart=true;;
       --static) staticImage=true;;
       -)   paramsDefault=;;
       -*)  paramsDefault+=" $1";;
@@ -175,6 +174,10 @@ _docker() { # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     $iSet || { iName=${1:-$iName}; shift; }
     [[ -z $cName || -z $iName ]] && eval $(die "no container/image specified")
+    if [[ -n $platform ]]; then
+      $cSet || cName="$cName.${platform##*/}"
+      $iSet || iName="$iName.${platform##*/}"
+    fi
     local pName=${cName%%-*}
     pName="DOCKER_RUN_${pName^^}_PARAMS"
     local -n paramsEnv=${pName//[-]/_}
@@ -187,21 +190,32 @@ _docker() { # {{{
       [[ -z $doStart ]] && doStart=true
       local dockerShare=${DOCKER_SHARE_PATH:-$HOME/share} hDir="/home/tom"
       [[ -e $HOME/.runtime/docker.ubu ]] || mkdir -p $HOME/.runtime/docker.ubu >/dev/null
-      sed -i '/\[127.0.0.1\]:4022/d' $HOME/.ssh/known_hosts*
       [[ -e $dockerShare ]] || mkdir -p $dockerShare >/dev/null
+      sed -i '/\[127.0.0.1\]:4022/d' $HOME/.ssh/known_hosts*
+      mounts=
+      for i in projects w; do
+        [[ -e $HOME/$i ]] || continue
+        [[ $paramsEnv == *\$hDir/$i* ]] && continue
+        mounts+=" -v $HOME/$i:$hDir/$i"
+      done
+      caps=
+      ${DOCKER_RUN_UBU_CAPS_GDB:-true} && caps+=" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
+      ${DOCKER_RUN_UBU_CAPS_TCPDUMP:-false} && caps+=" --cap-add=NET_ADMIN --cap-add=NET_RAW"
       $dockerCmd run \
+        $platform \
         -u $(id -u):$(id -g) \
         --hostname $iName \
         --add-host=host.docker.internal:host-gateway \
         -p 127.0.0.1:3030-3032:3030-3032 \
         -p 127.0.0.1:${DOCKER_PORT_OU:-3033}:${DOCKER_PORT_OU:-3033} \
         -p 127.0.0.1:4022:${DOCKER_PORT_SSH:-22} \
-        --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+        $caps \
         --tmpfs /tmpfs:exec,mode=1777 \
-        -v $HOME:/home/host \
+        -v $ENV_PATH:$hDir/env \
         -v $HOME/.runtime/docker.ubu:$hDir/.runtime \
-        -v $HOME/projects:$hDir/projects \
+        -v $HOME:/home/host \
         -v $dockerShare:$hDir/share \
+        $mounts \
         $(eval echo "$paramsEnv") \
         $paramsDefault \
         -w /home/tom \
@@ -213,13 +227,13 @@ _docker() { # {{{
         $dockerCmd exec -it $cName bash -c \
           "rm -rf $hDir/projects-my ; \
             mkdir -p $hDir/projects-my/ ; \
-            cp -r $MY_PROJ_PATH/scripts $hDir/projects-my/ ; \
-            cp -r $MY_PROJ_PATH/vim     $hDir/projects-my/ ; \
+            cp -r $ENV_PATH/scripts $hDir/projects-my/ ; \
+            cp -r $ENV_PATH/vim     $hDir/projects-my/ ; \
             ln -sf $hDir/projects-my/scripts/bash/inits/ubu-docker/docker-post.sh $hDir/tools/docker-post.sh ; \
             rm -rf $hDir/projects-my/scripts/bash/profiles/*"
         err=$?
       fi # }}}
-      [[ $err == 0 ]] && $dockerCmd exec -it $cName $hDir/tools/docker-post.sh --yes; err=$?
+      [[ $err == 0 ]] && $dockerCmd exec -it $cName $hDir/env/scripts/bin/oth/setup-env.sh -p -; err=$?
       ;; # }}}
     *) # {{{
       if declare -f doc_ext >/dev/null 2>&1; then
@@ -239,7 +253,7 @@ _docker() { # {{{
   start | s) # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     [[ -z $cName ]] && eval $(die "docker no container specified")
-    $dockerCmd container ls -a --format "{{.Names}}" | grep -q "^$cName$" || _docker run -ns $cName $iName
+    $dockerCmd container ls -a --format "{{.Names}}" | grep -q "^$cName$" || _docker run --no-start $cName $iName
     $dockerCmd start $cName
     local pidClip=
     case $cName in
@@ -267,4 +281,3 @@ _docker() { # {{{
   esac
 } # }}}
 _docker "$@"
-

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+if [[ $1 == "@@" ]]; then # {{{
+  echo "-m"
+  exit 0
+fi # }}}
+dir=$(git utils git-dir)
+[[ "$?" != "0" ]] && exit 1
+if git diff --cached --quiet; then
+  git diff --quiet && git ls-files -o --directory --exclude-standard | sed q1 >/dev/null 2>&1 && exit 0
+  git add -A
+fi
+msg=
+case $1 in
+-m)  msg="$2";;
+-m*) msg="${1/-m}";;
+*)   msg="[$(date +$DATE_FMT)] ${1:-"Fast commit"}";;
+esac
+template=$(git config --get utils.commit-fast)
+# e.g. git config --add user.commit-fast 'printf "%s%s" "$(date +"%Y%m%d")" "$( [[ ! -z $1 ]] && echo ": $@" || echo "")"'
+[[ ! -z $template ]] && msg="$(eval $template)"
+git commit --no-verify -q -m "$msg"

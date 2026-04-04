@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  ret="--all --all-all --env --remote -r --branch -b --skip-backup --do-backup --interactive --reset --no-dots . -"
+  args=("$@")
+  case ${args[$((${#args[*]}-1))]} in
+  -b|--branch) ret="$(git branch | sed 's/^..//')";;
+  -r|--remote) ret="$(git remote)";;
+  esac
+  echo $ret
+  exit 0
+fi # }}}
+add-spaces() { # {{{
+  local len=$1
+  local pos=${2:-"70"}
+  local spaces=""
+  while [[ $len -lt $pos ]]; do
+    spaces+=" "
+    len=$(($len + 1))
+  done
+  echo "$spaces"
+  return 0
+} # }}}
+do-sync() { # {{{
+  local params=$@ parRemote= parBranch= verbose=false quiet=false resetH=false interactive=true dots=true repoUpdateFile=$TMP_PATH/.repo-update skipSubmodules=false repo=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --remote) shift; parRemote+=" $1";;
+    --branch) shift; parBranch=$1;;
+    --reset)  resetH=true;;
+    --verbose|-v) verbose=true;;
+    --quiet) quiet=true; verbose=false;;
+    --no-dots) dots=false;;
+    --interactive)    interactive=true;;
+    --no-interactive) interactive=false;;
+    --skip-submodules) skipSubmodules=true;;
+    --repo) shift; repo=$1;;
+    esac
+    shift
+  done # }}}
+  [[ -z $repo ]] && repo="$(basename "$PWD")" && echo "Repo name not provided, getting it from dir name [$repo]" >/dev/stderr
+  $verbose && dots=false
+  if [[ -z $parBranch ]]; then # {{{
+    parBranch="$(git rev-parse --abbrev-ref HEAD)"
+    [[ $parBranch == 'HEAD' ]] && parBranch=
+  fi # }}}
+  local remotes="$parRemote origin local _backup-gl _backup-gw _backup-hdd _backup-usb tom _backup"
+  local done_remotes= remote
+  local cmd="git sync --do-sync $params --repo $repo --skip-submodules --skip-backup $(! $verbose && echo "--quiet")"
+  export cmd
+  local dir=${PWD/$HOME/~}
+  local tLastSync="tLastSync_${repo//-/_}" tLocal="$(git log -1 --format="%cd" --date=unix $parBranch)"
+  [[ -e $repoUpdateFile ]] && source $repoUpdateFile
+  tLastSync="${!tLastSync}"
+  [[ -z $tLastSync ]] && tLastSync=0
+  if ! $skipSubmodules; then
+    r="$(echo "$repo" | sed 's/[.,-]/_/g')"
+    if [[ -e $repoUpdateFile ]] && grep -q "^tLastSync_$r=" $repoUpdateFile; then
+      sed -i 's/^tLastSync_'$r'=.*/tLastSync_'$r'='$tLocal'/' $repoUpdateFile
+    else
+      echo "tLastSync_$r=$tLocal" >>$repoUpdateFile
+    fi
+  fi
+  local shaLocal="$(git log -1 --format="%H" $parBranch)" d=${dir/$HOME/\~}
+  if ! $quiet; then # {{{
+    if $dots; then
+      progress --mark --left --msg "${CBlue}${d}${COff}"
+    elif ! $verbose; then
+      echo -en "R: [${CBlue}${d}${COff}]$(add-spaces ${#d} 30)"
+    fi
+  fi # }}}
+  (
+    unset -f $(declare -F | awk '{print $3}')
+    git submodule --quiet foreach 'cd $PWD; $cmd || true'
+  )
+  $verbose && echo -en "R: [${CBlue}${d}${COff}]$(add-spaces ${#d} 30)"
+  for remote in $remotes; do
+    local remoteUrl=$(git config --get remote.$remote.url 2>/dev/null)
+    remoteUrl=${remoteUrl/\~/$HOME}
+    if [[ $remoteUrl == http* ]]; then # {{{
+      $verbose && echo "[${CGold}FOREIGN${COff}]"
+      return 0
+    fi # }}}
+    if [[ $done_remotes == *$remote* && $remote != "_backup" ]]; then # {{{
+      $verbose && echo "[${CGold}Skipping ($remote)${COff}]"
+      continue
+    fi # }}}
+    done_remotes+=" $remote"
+    [[ $(git remote) != *$remote* ]] && continue
+    ! $quiet && ! $dots && echo "[${CCyan}Syncing from $remote...${COff}]"
+    if git fetch --recurse-submodules=no $remote >/dev/null 2>&1; then
+      local shaRemote="$(git log -1 --format="%H" $remote/$parBranch 2>/dev/null)" shaBase="$(git merge-base $remote/$parBranch $parBranch 2>/dev/null)"
+      local stash=$(git status --short)
+      [[ -z $stash ]] && stash=false || stash=true
+      $stash && git stash -q
+      if [[ $shaBase != $shaRemote ]]; then
+        git tag-sync
+        if ! git rebase --rebase-merges -q $remote/$parBranch $parBranch >/dev/null 2>&1; then # {{{
+          if [[ $tLastSync -ge $tLocal ]] || $resetH; then # {{{
+            git rebase --abort >/dev/null 2>&1
+            git reset --hard $remote/$parBranch >/dev/null 2>&1
+            # }}}
+          elif $interactive; then # {{{
+            ! $quiet && $dots && { progress --unmark; dots=false; }
+            git rebase --abort
+            git reset --hard
+            echo "Resolve confilicts and exit shell..." >/dev/stderr
+            $SHELL </dev/tty >/dev/tty
+            progress --mark --left --msg "${CBlue}${d}${COff}"
+            # }}}
+          else # {{{
+            ! $quiet && $dots && { progress --unmark;  dots=false; }
+            echo "Rebase was aborted due to conflicts..." >/dev/stderr
+            git rebase --abort >/dev/null 2>&1
+            git reset --hard >/dev/null 2>&1
+          fi # }}}
+        fi # }}}
+      fi
+      $stash && git stash pop -q
+      break
+    fi
+  done
+  ! $quiet && $dots && progress --unmark
+} # }}}
+source $ALIASES_D/0.essentials
+remote= branch=
+repos=$PWD repo= r=
+params=
+GIT_REPOS=$(echo "$GIT_REPOS" | tr ' ' '\n' | awk '!($0 in a) {a[$0]; print}' | tr '\n' ' ')
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --do-sync)
+    do-sync $params --repo $repo --skip-submodules --skip-backup $(! $verbose && echo "--quiet")
+    exit;;
+  --all-all) repos=$GIT_REPOS;;
+  --all | --env | -) repos="$BASH_UPDATE_REPOS";;
+  -r|--remote) shift; remote+=" --remote $1";;
+  -b|--branch) shift; branch="--branch $1";;
+  .) repos=$PWD;;
+  *) params+=" $1";;
+  esac
+  shift
+done # }}}
+for repo in $repos; do # {{{
+  if [[ " $GIT_REPOS $BASH_UPDATE_REPOS " == *" $repo "* ]]; then
+    $SCRIPT_PATH/bin/oth/setup-updater.sh --saveTime
+    break
+  fi
+done # }}}
+for r in $repos; do # {{{
+  [[ $r == @* ]] && continue
+  r=${r/:*}
+  [[ ! -e $r ]] && continue
+  pushd $r >/dev/null
+  do-sync $params --repo $(basename $r) $remote $branch
+  popd >/dev/null
+done # }}}

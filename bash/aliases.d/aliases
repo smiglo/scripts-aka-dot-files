@@ -38,7 +38,7 @@ if is-installed -w cmatrix >/dev/null 2>&1; then # {{{
   alias cmatrix="cmatrix -u ${CMATRIX_SPEED:-5} -b -C "'${CMATRIX_COLORS[$(($RANDOM % ${#CMATRIX_COLORS[*]}))]}'
 fi # }}}
 # Enable color support of ls and also add handy aliases # {{{
-if [ -x /usr/bin/dircolors ] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
+if [[ -x /usr/bin/dircolors ]] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   export LS_COLORS="$LS_COLORS:di=36;40:ln=35;40:so=37;40:pi=33;40:ex=32;40:bd=0;43:cd=0;43:su=0;45:sg=0;45:tw=4;36:ow=4;36:"
   alias ls='ls --color=auto -B'
@@ -70,7 +70,7 @@ alias tp="tmux-popup" # @@
 export HISTIGNORE+=":rR"
 # docker-tools # {{{
 if ! $IS_DOCKER; then
-  alias doc="$ALIASES_SCRIPTS/docker-tools/docker.sh"
+  alias doc="$ALIASES_SCRIPTS/docker-tools/docker.sh" # @@
   alias ubu="doc start ubu"
   compl-add doc
 else
@@ -137,7 +137,8 @@ alias X1="xargs -r -n1"
 alias XI="xargs -r -I{}"
 alias ct="cat.sh -p" # @@
 alias bt="cat.sh -p" # @@
-export PHISTORY_IGNORED_COMMANDS+=":C:CP:CR:G:F:A:AA:S:X:XI:bt:ct" # }}}
+alias br="brun" # @@:new
+export PHISTORY_IGNORED_COMMANDS+=":C:CP:CR:G:F:A:AA:S:X:XI:bt:ct:br" # }}}
 # modules # {{{
 alias is-found="$ALIASES_D/modules/actions is-found" # @@
 alias do-action="$ALIASES_D/modules/actions do-action" # @@
@@ -179,16 +180,10 @@ alias chr='$SCRIPT_PATH/bin/misc/chroma-effects-wrapper.sh'
 alias cap="capture" # @-@
 export PHISTORY_IGNORED_COMMANDS+=":cap"
 alias mkdir='mkdir -pv'
-alias man="$ALIASES_SCRIPTS/small-utils/man.sh"
 alias reminder="$SCRIPT_PATH/bin/reminder.sh" # @@:new
 export PHISTORY_IGNORED_COMMANDS+=":reminder"
 type _man >/dev/null 2>&1 && complete -F _man man
 alias rmF="rmf-trash.sh" # @@
-if $IS_MAC; then
-  alias df='df -h'
-else
-  alias df='df -Th'
-fi
 alias rmf='rm -rf'
 rm-b() { # {{{
   local i
@@ -204,7 +199,7 @@ fi # }}}
 alias gg='git cba 1'
 alias gG='git cba --auto'
 alias gsar='git sync --reset'
-alias gitst='git-cmds.sh gitst'
+alias gitst='git utils gitst'
 alias g='git'
 alias gti='git'
 declare -F __git_wrap__git_main >/dev/null && export -f __git_wrap__git_main
@@ -221,10 +216,54 @@ else # {{{
 fi # }}}
 alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
 alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
-if ! $IS_MAC; then # {{{
-  alias fix_mouse='unclutter -idle 1 -root -grab -visible'
+
+if is-installed -w lolcat >/dev/null 2>&1; then # {{{
+  export LOLCAT_PARAMS="-F 0.2 -p 3"
+  export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
+  lc() {
+    local p="$@"
+    if [[ -z $p ]]; then
+      p="$LOLCAT_PARAMS"
+    elif [[ $p == '-a' ]]; then
+      p="$LOLCAT_PARAMS_A"
+    fi
+    lolcat $p
+  }
+  alias lll='ll | lc'
+fi # }}}
+if is-installed -w r2 >/dev/null 2>&1; then # {{{
+  alias r2help="r2 -q -c '?*~...' -"
 fi # }}}
 
+ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
+case $OS_KIND in # {{{
+mac | ubunt)
+  alias man="$ALIASES_SCRIPTS/small-utils/man.sh";;&
+arch | ubuntu)
+  alias df='df -Th';;&
+mac)
+  alias fix_mouse='unclutter -idle 1 -root -grab -visible'
+  alias df='df -h'
+  if (( UID )); then
+    alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
+    if is-installed -w htop >/dev/null 2>&1; then
+      alias htop="sudo htop"
+    fi
+  fi;;
+arch)
+  if (( UID )); then
+    alias pacman="$ALIASES_AUTO_SUDO_PROMPT && sudo pacman"
+  fi;;
+ubuntu)
+  if (( UID )); then
+    alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt -y"
+    alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get -y"
+    alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
+    alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
+    alias snap="$ALIASES_AUTO_SUDO_PROMPT && sudo snap"
+    complete -D apt apt-get dpkg service snap
+  fi;;
+esac # }}}
 if is-installed -w grc >/dev/null 2>&1; then # {{{
   grc_prgs=''
   grc_prgs+="traceroute ::google.pl\n"
@@ -235,12 +274,13 @@ if is-installed -w grc >/dev/null 2>&1; then # {{{
   GRC_ALIASES=false
   if [[ -e /etc/profile.d/grc.sh ]] && ${GRC_USE_DEFAULTS:-true}; then
     GRC="$(which grc)"
-    aliases_list="${!BASH_ALIASES[@]}"
+    aliases_list="$(echo "${!BASH_ALIASES[@]}" | sed '/\.[0-9]\+/d')"
     aliases_list="${aliases_list// /\\|}"
     [[ ! -z $aliases_list ]] && aliases_list="\|$aliases_list"
     source <(sed -n '/^\s*alias/p' /etc/profile.d/grc.sh | sed '/\(head\|tail'"$aliases_list"'\)=/d')
     alias diffc='colourify diff'
     alias df="colourify ${BASH_ALIASES[df]}"
+    alias du="colourify du -sh"
     is-installed -w lsof && alias lsof='colourify lsof'
     unset aliases_list
   else
@@ -273,38 +313,7 @@ if is-installed -w grc >/dev/null 2>&1; then # {{{
   done <<<"$(echo -e "$grc_prgs")"
   unset grc_prgs grc_prgs_cols grc_cmd grc_i grc_ii grc_sudo grc_def grc_code grc_params
 fi # }}}
-if is-installed -w lolcat >/dev/null 2>&1; then # {{{
-  export LOLCAT_PARAMS="-F 0.2 -p 3"
-  export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
-  lc() {
-    local p="$@"
-    if [[ -z $p ]]; then
-      p="$LOLCAT_PARAMS"
-    elif [[ $p == '-a' ]]; then
-      p="$LOLCAT_PARAMS_A"
-    fi
-    lolcat $p
-  }
-  alias lll='ll | lc'
-fi # }}}
-if is-installed -w r2 >/dev/null 2>&1; then # {{{
-  alias r2help="r2 -q -c '?*~...' -"
-fi # }}}
-if [[ $UID != 0 ]] ; then # {{{
-  ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
-  if $IS_MAC; then
-    alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
-    if is-installed -w htop >/dev/null 2>&1; then
-      alias htop="sudo htop"
-    fi
-  else
-    alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt -y"
-    alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get -y"
-    alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
-    alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
-    alias snap="$ALIASES_AUTO_SUDO_PROMPT && sudo snap"
-  fi
-fi # }}}
+
 is-installed -w rlwrap >/dev/null 2>&1 && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
 is-installed -w mc     >/dev/null 2>&1 && alias mc='mc -u'
 is-installed -w cal ncal >/dev/null 2>&1 && alias cal='ncal -M -b'
@@ -335,4 +344,3 @@ if $r_s_addCompl; then # {{{
   complete $COMPLETE_DEFAULT_PARAMS -W "y" shutdown
 fi # }}}
 unset r_s_addCompl # }}}
-

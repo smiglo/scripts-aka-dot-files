@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+if [[ $1 == @@ ]]; then # {{{
+  echo "--full -f --list -l --file"
+  exit 0
+fi # }}}
+do_full=false
+list_only=false
+put_in_file=false
+range="@~..@"
+cmd= cmd_diff=
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --full | -f ) do_full=true;;
+  --list | -l ) list_only=true;;
+  --file )      put_in_file=true;;
+  *)            range=$1;;
+  esac
+  shift
+done # }}}
+if [[ $range == *@* || $range == *HEAD* ]]; then # {{{
+  head=$(git describe --all --always | sed 's|^heads/||')
+  range=${range//@/$head}
+  range=${range//HEAD/$head}
+fi # }}}
+cmd_diff="git diff -w $range"
+cmd+="$cmd_diff --name-only"
+! $do_full   && cmd+=" | grep -v '/test/unit/'"
+$put_in_file && eval $cmd | sed "s/^/$cmd_diff -- /" > "$TMP_PATH/range-diff-files-$range.txt"
+! $list_only && cmd+=" | LESS=\"-diJRSwX -x4 -z-4 -+F -~ -c\" xargs -n1 $cmd_diff -- "
+eval $cmd

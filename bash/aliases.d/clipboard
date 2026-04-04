@@ -10,17 +10,21 @@ __xclip() { # {{{
     if $IS_VIRTUAL_OS; then # {{{
       mode='virtos'
       if $IS_WSL; then
-        CLIP_CMD_PUT="clip.exe"
-        CLIP_CMD_GET="powershell.exe -noprofile Get-Clipboar | sed 's/\s*$//d | sed -z 's/\s*\r\?\n$/\n/''"
+        CLIP_CMD_PUT="/mnt/c/Windows/System32/clip.exe"
+        CLIP_CMD_GET="/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -noprofile Get-Clipboard | sed 's/\\s*$//' | sed -z -e 's/\s*\r\?\n$/\n/' -s'/\n\+$/\n/'"
       fi # }}}
-    elif is-installed -w xclip >/dev/null 2>&1;then # {{{
+    elif $IS_ARCH && is-installed -w wl-copy; then
+      mode='wlclip'
+      CLIP_CMD_PUT="command wl-copy"
+      CLIP_CMD_GET="command wl-paste"
+    elif is-installed -w xclip;then # {{{
       mode='xclip'
       CLIP_CMD_PUT="command xclip -in -selection clipboard"
       CLIP_CMD_GET="command xclip -out -selection clipboard" # }}}
-    elif $IS_MAC && is-installed -w pbcopy >/dev/null 2>&1; then # {{{
+    elif $IS_MAC && is-installed -w pbcopy; then # {{{
       mode='pbcopy'
       export CLIP_REATTACH=
-      is-installed -w reattach-to-user-namespace >/dev/null 2>&1 && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
+      is-installed -w reattach-to-user-namespace && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
       CLIP_CMD_PUT="$CLIP_REATTACH pbcopy"
       CLIP_CMD_GET="$CLIP_REATTACH pbpaste" # }}}
     elif [[ -n $TMUX ]]; then # {{{
@@ -57,11 +61,17 @@ __xclip() { # {{{
       *) f=$1;;
       esac; shift
     done
-    command cat $f | sed 's/\s*$//' | sed -z 's/\n$//' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    command cat $f | sed 's/\s*$//' | sed -z 's/\n\+$/\n/' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
     tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
     $updateClipFileOnPut && command cat $CLIP_FILE.put >$CLIP_FILE
-    if $checkSsh && [[ -p $CLIP_FILE.ssh ]]; then
-      command cat $CLIP_FILE.put >$CLIP_FILE.ssh
+    local clipSsh=$HOME/.tmp/clip.ssh
+    if $checkSsh && [[ -p $clipSsh ]]; then
+      if is-installed timeout; then
+        timeout 0.5 cat $CLIP_FILE.put >$clipSsh
+        (( $? == 124 )) && rm -f $clipSsh
+      else
+        cat $CLIP_FILE.put >$clipSsh
+      fi
     fi;; # }}}
   --get) # {{{
     eval $CLIP_CMD_GET | tee >(tmux $tmuxP load-buffer -b clip /dev/stdin 2>/dev/null)
@@ -79,6 +89,7 @@ __xclip() { # {{{
     *) # {{{
       [[ $1 == '-' ]] && shift
       case $mode in
+      wlclip) wlclip "$@";;
       xclip) xclip "$@";;
       pbcopy) $CLIP_REATTACH pbcopy "$@";;
       *) return 1;;

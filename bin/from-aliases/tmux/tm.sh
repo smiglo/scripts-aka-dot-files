@@ -2,6 +2,28 @@
 # vim: fdl=0
 
 import-module echor
+getPanesPaths() { # {{{
+  local entriesList="$(\
+    tmux list-panes -t "$1" -F ':#{pane_current_path}:' \
+    | sed -e 's/::/~/g' -e 's/://g' \
+    | tr '\n' ':' \
+    | sed -e 's/:$//')"
+  declare -a entry
+  local e= k= m=
+  readarray -d':' -t entry < <(echo -n "$entriesList")
+  for e in ${!entry[*]}; do
+    k=
+    for m in ${!pathMap[*]}; do
+      (( ${#m} > ${#k} )) || continue
+      if [[ ( ${entry[$e]} == $m || ${entry[$e]} == $m/* ) ]]; then
+        k=$m
+      fi
+    done
+    [[ -n $k ]] || continue
+    entry[$e]=${pathMap[$k]}${entry[$e]#$k}
+  done
+  printf "%s:" "${entry[@]}" | sed 's/:$/\n/'
+} # }}}
 tm() { # @@ # {{{
   ! type tmux >/dev/null 2>&1 && return 1
   local buffers_path="$APPS_CFG_PATH/tmux/buffers" layouts_path="$APPS_CFG_PATH/tmux/layouts"
@@ -164,10 +186,10 @@ tm() { # @@ # {{{
     done
     local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
     if $IS_MAC; then
-      pstree -p $cpid | command grep -q ' sshd:\?\($\| \)'
+      pstree -p $cpid | grep -q ' sshd:\?\($\| \)'
     else
-      pstree -A -s $cpid | command grep -q -e '---sshd---'
-    fi && { $printPid && echo "$cpid"; return 0; }
+      pstree -A -s $cpid | grep -q -e '---sshd\(-session\)---'
+    fi && { $printPid && printf "%d" "$(ps -o ppid= $cpid)"; return 0; }
     return 1;; # }}}
   session) # {{{
     local dst="$TMUX_SESSION_PATH/windows.save"
@@ -356,18 +378,17 @@ tm() { # @@ # {{{
   l-dump) # {{{
     [[ -z $lFile && -e './.layout' ]] && lFile="./.layout"
     [[ -z $lFile ]] && lFile="$layouts_path/l.layout"
+    declare -A pathMap=( [$HOME]="~" )
+    for i in $TMUX_TM_PATH_MAP; do
+      pathMap[${i%%:*}]="${i#*:}"
+    done
     if $all; then # {{{
       local lFileOld="${lFile%.layout}.backup-$(date +"$DATE_FMT").layout" wId=
       [[ -e "$lFile" ]] && mv "$lFile" "$lFileOld"
       echo -e "# vim ft=conf\n" >"$lFile"
       [[ -e $lFileOld ]] && { awk '!/^#/ && /^[^:]* /' "$lFileOld"; echo ""; } >>"$lFile"
       tmux list-windows -a -F '#S:#W #S:#I #{window_layout}' | while read wName wId layout; do
-        echo "$wName $layout # $(\
-          tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
-          | sed -e 's/::/~/g' -e 's/://g' \
-          | tr '\n' ':' \
-          | sed -e 's/:$//' \
-          )" >>"$lFile"
+        echo "$wName $layout # $(getPanesPaths $wId)" >>"$lFile"
       done # }}}
     else # {{{
       if [[ "$lFile" != '/dev/stdout' ]]; then # {{{
@@ -382,13 +403,7 @@ tm() { # @@ # {{{
         fi # }}}
       fi # }}}
       if $real_paths; then # {{{
-        echo "$entry $lOrig # $( \
-          tmux list-panes -t "$wId" -F ':#{pane_current_path}:' \
-          | sed -e 's/::/~/g' -e 's/://g' \
-          | tr '\n' ':' \
-          | sed -e 's/:$//' \
-          )" >>"$lFile"
-          # }}}
+        echo "$entry $lOrig # $(getPanesPaths $wId)" >>"$lFile" # }}}
       else # {{{
         echo "$entry $lOrig # $( \
           tmux list-panes -t "$wId" -F '-' \
@@ -704,7 +719,8 @@ tm() { # @@ # {{{
         cmd="tmux switch-client -t \"$var\""
       fi
     else
-      cmd='tmux attach'
+      cmd="tmux attach"
+      $ALIASES_SCRIPTS/tmux/tm.sh --is-ssh && cmd="exec $cmd"
       [[ ! -z $var ]] && cmd+=" -t \"$var\""
     fi
     ;; # }}}

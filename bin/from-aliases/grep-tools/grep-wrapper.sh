@@ -25,6 +25,7 @@ grep-wrapper() { # @@ # {{{
     case $1 in
     --cmd-*) cmd=${1/"--cmd-"}
               case $cmd in
+              pgrep) cmd="grep"; args+=" -P";;
               zgrep) ignoreErr='--ignore-err';;
               esac;;
     +c=*)    color=${1/"+c="};;
@@ -87,8 +88,8 @@ grep-wrapper() { # @@ # {{{
     if [[ ! -t 1 ]]; then
       use_fzf=false
     else
-      use_fzf="$(echo ",$FZF_USAGE," | grep -o ',\s*GREP:[^,]\+,' | grep -o 'true\|false')"
-      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+      eval $FZF_USAGE
+      use_fzf=${fzfUsageA[grep]:-$FZF_INSTALLED}
     fi
   fi # }}}
   if [[ ! -z $use_colors ]]; then
@@ -100,7 +101,15 @@ grep-wrapper() { # @@ # {{{
   set - "$args"
   # echoe -w "$use_tee +fzf=$use_fzf $ignoreErr \"eval $cmd\" $params \"$@\" $exclude"
   [[ -z $fzf_prompt ]] && fzf_prompt="grep: $query> "
-  $ALIASES_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee $use_colors +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
+  if $use_tee || $use_fzf; then
+    $ALIASES_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee $use_colors +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
+  else
+    case $use_colors in
+    --colors) params+=" --color=yes";;
+    --no-colors)  params+=" --color=never";;
+    esac
+    eval $cmd $params "$@" $exclude
+  fi
   err=$?
   export GREP_COLORS=$oldColors
   $IS_MAC && ! $gnuGrep && export GREP_COLOR=$oldColors

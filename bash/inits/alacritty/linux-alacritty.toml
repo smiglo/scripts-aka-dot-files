@@ -1,8 +1,0 @@
-[general]
-import = [
-  "common.toml",
-  "linux-specific.toml",
-  "linux-bindings.toml",
-  "local-conf.toml",
-]
-

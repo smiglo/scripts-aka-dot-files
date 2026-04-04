@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-_matching-section() { # @@ # {{{
+_matching-sections() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
     -f | --f) echo "@@-f";;

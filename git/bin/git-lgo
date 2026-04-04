@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case ${@: -1} in
+  -b)
+    echo "-"
+    for o in $(git remote); do
+      git for-each-ref --sort=-committerdate refs/remotes/$o | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/remotes/||'
+    done;;
+  *)
+    echo "--fzf -l --this -b -m - -f"
+    git ls-files . | sed -e '/^.*\/.*\/.*/d' | sed -s 's|^|./|'
+    git for-each-ref refs/heads/ | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/heads/||'
+    for o in $(git remote); do
+      case $o in
+      local | origin);;
+      *) continue;;
+      esac
+      git for-each-ref --sort=-committerdate refs/remotes/$o | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/remotes/||' | tail -n 3
+    done;;
+  esac; exit 0
+fi # }}}
+logMethod= params= range= files= c= max=30 br=HEAD fzfUse=false d=
+fzfParams='--pretty=default'
+fzfThisDir=false
+fullSha=false
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --fzf)  fzfUse=true; [[ -z $logMethod ]] && logMethod=log; br=;;
+  -f)     fullSha=true;;
+  -l)     logMethod=$2; $fzfUse && fzfParams=; shift;;
+  --this) fzfThisDir=true;;
+  -b)     br=$2; [[ $br == '-' ]] && br=""; shift;;
+  -m)     max="$2"; shift;;
+  -)      max="-";;
+  -*)     params+="$1 ";;
+  *) # {{{
+    if [[ -e $1 ]]; then
+      files+="$1 "
+      max=100
+    elif git log --pretty='%h' --all | grep -q "\<$1\>"; then
+      for i; do
+        git info -p $i
+      done
+      exit 0
+    else
+      br=$1
+    fi
+    ;; # }}}
+  esac
+  shift
+done # }}}
+[[ -z $logMethod ]] && logMethod='log --pretty=default'
+if [[ ! -z $br ]]; then
+  c=$(($(git rev-list --count $br)-1))
+  [[ $max == '-' || $max == 0 ]] || [[ $c -le $max ]] || c=$max
+  [[ " $params " == *" --all "* ]] || range="-n $c $br"
+fi
+if $fzfUse && $FZF_INSTALLED; then # {{{
+  [[ ! -z $files ]] && files="-- $files"
+  get_sha() { # {{{
+    local line=
+    cat - | while read -r line; do
+      line="${line#\'}" && line="${line%\'}"
+      if [[ "$line" =~ ^[*\ \|/\\]+\ (.*) ]]; then
+        line="${BASH_REMATCH[1]}"
+      elif [[ "$line" =~ ^[0-9-]+:\ (.*) ]]; then
+        line="${BASH_REMATCH[1]}"
+      fi
+      echo "$line" | awk '{print $1}'
+    done
+  } # }}}
+  fzf_tools() { # {{{
+    show_change() { # {{{
+      sha=$1
+      git log --pretty=fuller --date=local -1 "$sha"
+      echo; echo '    ----'
+      git diff $sha~..$sha --name-status | sed -e 's/^/    /'
+      echo '    ----'; echo
+      git diff -w $sha~..$sha | \
+        if [[ $2 == '--as-diff' ]] && which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi
+    } # }}}
+    line="$2"
+    line="${line#\'}" && line="${line%\'}"
+    [[ ! -z $line ]] || exit 0
+    if [[ "$line" =~ ^[*\ \|/\\]+\ (.*) ]]; then
+      line="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ ^[0-9-]+:\ (.*) ]]; then
+      line="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ ^[0-9a-f]{5,}\  ]]; then
+      :
+    else
+      echo "cannot parse sha on line:"
+      echo "$line"
+      exit 1
+    fi
+    sha="$(echo "$line" | get_sha)"
+    [[ -z $sha ]] || ! git log --pretty='%h' --all | grep -q "\<$sha\>" && exit 1
+    case $1 in
+    --preview) # {{{
+      show_change $sha --as-diff
+      ;; # }}}
+    --send | --view) # {{{
+      list= l=
+      while read l; do
+        [[ -d "$l" ]] && continue
+        list+="$l "
+      done < <(git diff $sha~..$sha --name-status | awk '{print $2}')
+      case $1 in
+      --view) # {{{
+        vim --Fast <(show_change $sha) $list </dev/tty >/dev/tty 2>>$HOME/l.tmp;; # }}}
+      --send) # {{{
+        i=
+        list="$(echo "$list" | sed 's|^|'$PWD'/|')"
+        for i in $list; do
+          [[ ! -d $i ]] && $ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f $i
+          sleep 1
+        done;; # }}}
+      esac;; # }}}
+    esac
+  } # }}}
+  export -f get_sha fzf_tools
+  shas= prompt=""
+  if [[ ! -z "$files" ]]; then # {{{
+    f="$(echo $files)" suffix=
+    [[ "$f" == *\ * ]] && suffix=" ... "
+    f="${f%% *}"
+    if [[ -e "$f" ]]; then
+      f="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
+      [[ -d "$f" ]] && suffix="/$suffix" && f="${f%/}"
+      f="${f#$PWD/}"
+      if [[ ${#f} -gt 15 ]]; then
+        fTmp=".../$(basename "$(dirname "$f")")/$(basename "$f")"
+        [[ ${#fTmp} -lt ${#f} ]] && f="$fTmp"
+      fi
+      prompt+="$f$suffix"
+    else
+      prompt+="$f"
+    fi
+  fi # }}}
+  prompt+="> "
+  shas="$(eval git $logMethod $params $fzfParams --color $range $br -- $files \
+    | fzf -m +s --ansi  --height 90% \
+      --prompt  "$prompt" \
+      --preview 'fzf_tools --preview "{}"' \
+      --preview-window=right,nohidden \
+      --bind    'f2:execute(fzf_tools --view "{}")' \
+      --bind    'f3:execute(fzf_tools --send "{}")' \
+    | sed 's/\([^:]*: \)?\([0-9a-z]\{5,\}\) - .*/\2/')"
+  if [[ $? == 0 && ! -z "$shas" ]]; then # {{{
+    shas="$(echo "$shas" | get_sha)"
+    $fullSha && shas="$(while read sha; do git log --format=%H -1 $sha; done <<<"$shas")"
+    if [[ -t 1 ]]; then
+      echo -n "$shas" | tr '\n' ' ' | xclip --put
+    else
+      echo "$shas"
+    fi
+  fi # }}}
+  # }}}
+else # {{{
+  [[ ! -z $files ]] && files="-- $files"
+  eval git $logMethod $params $range $files
+fi # }}}
+exit 0

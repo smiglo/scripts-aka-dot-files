@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  echo "1 -1 -b -s " {-,+}{15,30,100}
+  echo "master"
+  _git_sha_compl -n 30 --cur "$cur" +branches
+  exit 0
+fi # }}}
+source $ALIASES_D/0.essentials
+d= c= first="HEAD" fzf_p= gitlog= firstRun=true stashed=false changed=false pattern='-------' cnt=${GIT_CBA_MAX:-30}
+backup=false use_smart=true useFirst=false autoQuit=false askQuit=true autoMode=false curHead=
+# Submodules # {{{
+(
+  sm= err=0
+  while read i; do
+    case $i in
+    Entering\ *) # {{{
+      sm=$(echo $i | awk '{print $2}' | sed "s/'//g");; # }}}
+    \?\?\ *) # {{{
+      continue;; # }}}
+    *) # {{{
+      [[ -z $sm ]] && continue
+      cd $sm
+      git cba $@ +b </dev/tty >/dev/tty
+      err=$?
+      cd ->/dev/null 2>&1
+      [[ $err != 0 ]] && exit $err
+      sm=;; # }}}
+    esac
+  done < <(git submodule foreach --recursive git status --short)
+) # }}}
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -1 | 1)  useFirst=true; autoQuit=true; [[ $1 == '-1' ]] && askQuit=false;;
+  --auto)  useFirst=true; autoQuit=true; autoMode=true;;
+  -[0-9]*) cnt=${1#-};;
+  -b)      backup=true;;
+  +b)      backup=false;;
+  -s)      use_smart=false;;
+  +*)      cnt="${1#+}";;
+  *) # {{{
+    if [[ -e $1 ]]; then
+      d="-- $1"
+    elif git branch --all | grep -q "$1"; then
+      first="$1"
+      cnt="$(( $(git log $first.. | wc -l) + 1 ))"
+    else
+      c="$1"
+    fi;; # }}}
+  esac
+  shift
+done # }}}
+[[ $(git rev-list HEAD --count --first-parent) -lt $cnt ]] && cnt=$(($(git rev-list HEAD --count --first-parent)-1))
+curHead="$(git log -1 --pretty=%h)"
+fzf_p="--height=80% --layout=reverse-list --no-sort +m --ansi -1 -0 \
+    --prompt='Fix-Up> ' \
+    --preview='git sh {2}' --preview-window=down:hidden"
+gitlog="log --pretty=default --color=always"
+[[ ! -z $GIT_CBA_QUERY ]] && fzf_p+=" --query='$GIT_CBA_QUERY '"
+if [[ -z $c ]]; then # {{{
+  while ! git diff --quiet $d || ! git diff --cached --quiet $d; do
+    firstRun=false
+    if git diff --cached --quiet $d; then
+      if git diff --quiet $([[ ! -z $d ]] && echo "-- $d"); then
+        $firstRun && echo "Nothing to commit" >/dev/stderr && exit 0
+        break
+      fi
+      if ! $autoMode; then
+        git add -p $d
+      else
+        git add -p $d < <(echo "a")
+      fi
+    fi
+    if git diff --cached --quiet; then
+      break
+    fi
+    c="$( \
+      { $useFirst || echo "$pattern"
+        commits=
+        if $use_smart; then
+          $autoQuit && [[ $(git status --short | wc -l) -gt 1 ]] && autoQuit=false
+          commits="$(eval git $gitlog $(git merge-base $first HEAD~$cnt).. $GIT_CBA_LOG_PARAMS -- $(git status --short | awk '/^M/ {print $2}'))"
+        fi
+        if [[ ! -z "$commits" ]]; then
+          echo "$commits" | { $useFirst && head -n1 || cat -; }
+        else
+          eval git $gitlog $(git merge-base $first HEAD~$cnt).. $GIT_CBA_LOG_PARAMS $commits
+        fi
+      } \
+      | eval fzf $fzf_p  \
+      | awk '{print $1}' \
+    )"
+    [[ $? == 0 ]] || exit 1
+    [[ ! -z $c ]] || break
+    if [[ "$c" == "$pattern" ]]; then
+      first="$(git merge-base $first HEAD~$cnt)"
+      git commit --no-verify || exit 1
+    else
+      first="$(git merge-base $first ${c}~)"
+      git commit --fixup=$c --no-verify || exit 1
+      $useFirst && echo -e "\n---\n"
+    fi
+    changed=true
+  done
+  $firstRun && first="$(git merge-base $first HEAD~$cnt)" && changed=true
+  $changed || exit 0 # }}}
+else # {{{
+  first="${c}~"
+  [[ $c == HEAD* ]] && first+='~'
+  git commit --fixup=$c --no-verify || exit 1
+fi # }}}
+! git diff --quiet && git stash >/dev/null 2>&1 && stashed=true
+if $autoQuit; then # {{{
+  git log --graph --color=always $curHead~.. | sed -e '$s/^\*/ /'
+  if $askQuit || $autoMode; then # {{{
+    echo
+    k="$(progress --wait 5s --msg "ok?" --no-err --keys "qn")"
+    if [[ $? == 0 ]]; then
+      export VIM_ENV="+:quit"
+    elif [[ ${k,,} == 'q' ]]; then
+      exit
+    fi
+  else
+    echo
+  fi # }}}
+fi # }}}
+git rebase -i --rebase-merges --autosquash $first~
+
+# # could be use to open editor silently
+#   GIT_EDITOR=/bin/ed git rebase -i --rebase-merges --autosquash $first <<-EOF
+# 			wq
+# 		EOF
+
+! $stashed || git stash pop >/dev/null 2>&1
+! $backup || git backup

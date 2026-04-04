@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -n) echo "5 10 15";;
+  -r) echo "REV";;
+  -p) echo "PRE";;
+  *) echo "-n -r -p NAME";;
+  esac; exit 0
+fi # }}}
+n= pre="tmp/sync" rev="HEAD"
+n=$(git config --get utils.tag-sync-n)
+[[ -z $n ]] && n=${GIT_TAG_SYNC_N:-10}
+while [[ ! -z $1 ]]; do
+  case $1 in
+  -n) n=$2; shift;;
+  -r) rev="$2"; shift;;
+  -p) pre="$2"; shift;;
+  *)  break;
+  esac; shift
+done
+ts=$EPOCHSECONDS last="/last"
+[[ -z $1 ]] || { ts=$1; last=; }
+(
+  git tag | grep "^$pre/*" | sort -r | tail -n +$((n+1)) | xargs -r git tag -d
+  git tag -d $pre/$ts
+  git tag $pre/$ts $rev
+  [[ ! -z $last ]] && { git tag -d $pre$last; git tag $pre$last $pre/$ts; }
+) >/dev/null 2>&1

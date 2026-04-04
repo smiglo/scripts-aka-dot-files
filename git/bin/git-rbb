@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -d)
+    git branch | cut -c3-;;
+  *)
+    [[ $2 == 1 ]] && echo "-v 1 2 3 -d"
+    git branch | cut -c3-
+  esac
+  exit 0
+fi # }}}
+source $ALIASES_D/0.essentials
+cnt= dst= branch= verbose=false
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -v) verbose=true;;
+  -d) dst="$2"; shift;;
+  *) break;;
+  esac; shift
+done # }}}
+if [[ -z $dst ]]; then
+  dst=$(git branch --show-current)
+  branch=$1; shift
+else
+  branch=$(git branch --show-current)
+fi
+if [[ $1 =~ ^[0-9]+$ ]]; then
+  cnt=$1 && shift
+  base="$branch~$cnt"
+else
+  base=$(git merge-base $dst $branch)
+  [[ -n $base ]] || die "base not found"
+fi
+[[ -n $branch ]] || die "branch not set"
+[[ $? == 0 && ! -z $dst ]] || die "not at any branch"
+echoe $verbose "git rebase --rebase-merges -q --onto $dst $base $branch"
+git rebase --rebase-merges -q --onto $dst $base $branch

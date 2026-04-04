@@ -3,7 +3,7 @@
 
 # INIT # {{{
 if [[ $1 == '@@' ]]; then
-  echo "--fix --start --start-if"
+  echo "--fix --start --start-if --start-iff -f --force"
   exit 0
 fi
 
@@ -11,12 +11,12 @@ if [[ "$BASH_SOURCE" == "$0" ]]; then
   echoe -w "Script has to be sourced!"
   echoe
   echoe -w "Usage:"
-  echoe -w "  source $0 [--start-if | --fix]"
+  echoe -w "  source $0 [-f | --force] [--start-if | --start-iff | --fix]"
   echoe
   exit 0
 fi
 
-SSH_PATH="$BASHRC_RUNTIME_PATH/ssh/$(hostname)"
+SSH_PATH="$BASHRC_RUNTIME_PATH/ssh/$HOSTNAME"
 SSH_ENV="$SSH_PATH/environment"
 LINK_PATH="$SSH_PATH/ssh_auth_sock"
 # }}}
@@ -49,7 +49,9 @@ start-agent() { # {{{
 } # }}}
 start-if-needed() { # {{{
   [[ -n "$SSH_CLIENT" ]] && ! w | grep -q ${SSH_CLIENT%% *} && unset SSH_CLIENT SSH_TTY
-  [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]] && { echoe "remote session, nothing to do"; return 0; }
+  if ! $force; then
+    [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]] && { echoe "remote session, nothing to do"; return 0; }
+  fi
   local start_ssh=true
   if [[ -f $SSH_ENV ]]; then
     source $SSH_ENV
@@ -62,16 +64,22 @@ start-if-needed() { # {{{
 } # }}}
 # }}}
 # MAIN # {{{
-cmd="$1" && shift
+force=${SSH_AGENT_FIX_FORCE:-false} cmd="fix"
+while [[ -n $1 ]]; do
+  case $1 in
+  -f | --force) force=true;;
+  *) cmd=$1; shift; break;;
+  esac; shift
+done
 case $cmd in
---start-if) start-if-needed "$@";;
---fix)      fix-ssh-agent "$@";;
+start-if)   start-if-needed "$@";;
+start-iff)  force=true; start-if-needed "$@";;
+fix)        fix-ssh-agent "$@";;
 esac
 __fsa_err=$?
 # }}}
 # Cleaning # {{{
-unset cmd SSH_PATH SSH_ENV LINK_PATH
+unset force cmd SSH_PATH SSH_ENV LINK_PATH
 unset -f fix-ssh-agent start-if-needed start-agent
 # }}}
 return $__fsa_err
-

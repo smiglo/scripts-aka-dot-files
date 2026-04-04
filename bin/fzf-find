@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+correctDepth() { # {{{
+  local depth="$1"
+  case $PWD in
+  / | /mnt | /mount | /home | /proc | /sys | /Users ) depth=2;;
+  $HOME) depth=2;;
+  $HOME/Library) depth=2;;
+  /usr | /proc | /sys) depth=3;;
+  *)
+    local dirLvl="${PWD//[^\/]/}"
+    (( ${#dirLvl} == 1 )) && depth=1;;
+  esac
+  echo "$depth"
+} # }}}
+mode="all"
+checkGit=true
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -d) mode="dirs";;
+  --no-git) checkGit=false;;
+  esac; shift
+done # }}}
+isGit=
+$checkGit && isGit=$(git rev-parse --is-inside-work-tree 2>/dev/null)
+if ${isGit:-false}; then # {{{
+  git ls-files --recurse-submodules \
+  | case $mode in
+    all) cat -;;
+    dirs) sed -n '/\//s|\(.*/\).*|\1|p' | sort -u;;
+  esac
+  exit 0
+fi # }}}
+
+fdfindCmd="fdfind"
+is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
+is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
+if [[ ! -z $fdfindCmd ]]; then # {{{
+  depth="$(correctDepth "${FZF_MAX_DEPTH:-12}")"
+  exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
+  if $useFdFind; then # {{{
+    if $IS_MAC || $IS_DOCKER; then # {{{
+      exclude_list+=" Applications Library"
+    fi # }}}
+    if $IS_VIRTUAL_OS; then # {{{
+      exclude_list+=" host"
+    fi # }}}
+    for i in $exclude_list; do
+      exclude+=" -E \"$i/*\" -E \"**/$i/*\""
+    done
+  fi # }}}
+  case $mode in
+  all)  eval $fdfindCmd -Ld $depth $($hidden && echo "--hidden") --no-ignore-vcs $exclude;;
+  dirs) eval $fdfindCmd -Ld $depth $($hidden && echo "--hidden") --type d --type l --no-ignore-vcs $exclude;;
+  esac | sort # }}}
+elif is-installed -w ag >/dev/null 2>&1; then # {{{
+  case $mode in
+  all)  ag $AG_OPTIONS --follow -g "";;
+  dirs) ag $AG_OPTIONS --follow -g "" | sed -n '/\//s|\(.*/\).*|\1|p';;
+  esac | sort # }}}
+else # {{{
+  depth="$(correctDepth "${FZF_MAX_DEPTH:-5}")"
+  case $mode in
+  all)  find . -maxdepth $depth;;
+  dirs) find . -maxdepth $depth -type d;;
+  esac | sed 's|^\./||' | sort
+fi # }}}
+

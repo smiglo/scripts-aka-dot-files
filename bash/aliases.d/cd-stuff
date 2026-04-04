@@ -443,10 +443,10 @@ __cd_util_mode_interactive() { # {{{
   local empty=false hidden=false
   local fzf_key_show_hidden='ctrl-f' fzf_key_upper="ctrl-u" fzf_key_into="ctrl-e" fzf_key_orig="ctrl-o" fzf_key_refresh="ctrl-r" fzf_key_last="ctrl-l"
   local orgDst="$PWD" lastDst=
-  local exclude_list=$CD_INTERACTIVE_EXCLUDE_LIST exclude=$CD_INTERACTIVE_EXCLUDE
+  local exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
   if $useFdFind; then # {{{
     if $IS_MAC || $IS_DOCKER; then # {{{
-      exclude_list+=" Applications Library node_modules .venv* build tmp"
+      exclude_list+=" Applications Library"
     fi # }}}
     if $IS_VIRTUAL_OS; then # {{{
       exclude_list+=" host"
@@ -721,11 +721,16 @@ cd_wrapper() { # @@ # {{{
   fi # }}}
   [[ ! -t 1 ]] && in_pipe=true
   local colors= COff=
+  if [[ ! -e "$dst" ]]; then
+    case $dst in
+    *,*) set -- -i -8 --loop --stored-none --fzf-params "-e -x --query=" "$@";;
+    esac
+  fi
   if [[ ! -e "$dst" || $1 == '.' || $1 == '--' ]]; then # {{{
     dst=
     [[ $1 == '--' ]] && shift
-    local use_fzf="$(echo ",$FZF_USAGE," | grep -o ',\s*CD-WRAPPER:[^,]\+,' | grep -o 'true\|false')"
-    [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+    eval $FZF_USAGE
+    local use_fzf=${fzfUsageA[cd]:-$FZF_INSTALLED}
     local fzf_key_step_in='ctrl-d'
     local fzf_common_params="--exit-0 --select-1 --expect $fzf_key_step_in --sort --no-multi"
     [[ -z $1 ]] && set -- -i -
@@ -764,6 +769,7 @@ cd_wrapper() { # @@ # {{{
       -i | -[0-9]*) # Interactive # {{{
         if [[ -z "$dst" && "$@" =~ "--query="\ *.+$ ]]; then
           local dstConv=$(__cd_util --tilde-conv "${@: -1}")
+          [[ $dstConv == '-' ]] && dstConv=$OLDPWD
           [[ -d "$dstConv" || ( -h "$dstConv" && -d "$(readlink -f "$dstConv")" ) ]] && dst="$dstConv"
         fi
         [[ -z "$dst" ]] && dst="$(__cd_util_mode_interactive "$@")"

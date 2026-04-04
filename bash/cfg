@@ -7,23 +7,6 @@ ${RCSTUFF_CFG_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 export RCSTUFF_CFG_INSTALLED=true
 # }}}
 # Exports # {{{
-export PATH=$SCRIPT_PATH/bin:$PATH
-# Term # {{{
-if ! ${TERM_ALREADY_SET:-false}; then
-  [[ -z $TERM_ORIG ]] && export TERM_ORIG="$TERM"
-  if [[ -e $MEM_KEEP/alacritty-is ]] || ( pidof 'alacritty' && infocmp 'alacritty' )>/dev/null 2>&1; then
-    TERM="alacritty"
-    [[ -e $MEM_KEEP/alacritty-is ]] || touch $MEM_KEEP/alacritty-is
-  else
-    case $TERM_ORIG in
-    *) [[ ! -n $TMUX ]] && export TERM="xterm" || export TERM="screen" ;;&
-    linux) export TERM+="-16color";;
-    *)     export TERM+="-256color";;
-    esac
-  fi
-  export TERM_ALREADY_SET=true
-fi
-# }}}
 # Git # {{{
 export GIT_PS1_SHOWDIRTYSTATE=true
 export GIT_PS1_SHOWSTASHSTATE=true
@@ -67,41 +50,8 @@ fi
 # }}}
 # FZF # {{{
 if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
-  fdfindCmd="fdfind"
-  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
-  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
-  if [[ ! -z $fdfindCmd ]]; then # {{{
-    ignored="-E 'build' -E 'node_modules' -E '.venv*'"
-    if [[ -v FZF_DEFAULT_IGNORE && -z $FZF_DEFAULT_IGNORE ]]; then
-      ignored=""
-    else
-      ignored+=" $FZF_DEFAULT_IGNORE"
-    fi
-    export FZF_DEFAULT_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type f --type l -L --no-ignore-vcs $ignored | sed 's|^\./||' | sort"
-    export FZF_ALT_C_COMMAND="command $fdfindCmd -d ${FZF_MAX_DEPTH:-12} --type d --type l -L --no-ignore-vcs | sed 's|^\./||' | sort"
-    unset ignored
-    # }}}
-  elif is-installed -w ag >/dev/null 2>&1; then # {{{
-    export FZF_DEFAULT_COMMAND='command ag $AG_OPTIONS --follow -g "" | sort' # }}}
-  else # {{{
-    if [[ -e $BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env ]]; then # {{{
-      export FZF_ALT_C_COMMAND="$(cat $BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env)"
-    else
-      export FZF_ALT_C_COMMAND="$(cat <<-EOF
-					command find \${dir:-.}
-						-mindepth 1
-						-maxdepth 4
-						-type d
-						-a \(
-							\( -name .\* $( [[ -e ~/.agignore ]] && cat ~/.agignore | command grep -v '^\s*#\|^\s*$' | sed -e 's/^/-o -name /' -e 's/\*/\\\*/g' | tr '\n' ' ') \) -prune -o
-						-print \)
-						2>/dev/null | sed 's#^\./##'
-				EOF
-      )"
-      export FZF_ALT_C_COMMAND="$(echo $FZF_ALT_C_COMMAND)"
-      echo "$FZF_ALT_C_COMMAND" >$BASHRC_RUNTIME_PATH/fzf.alt-c-cmd.env
-    fi # }}}
-  fi # }}}
+  export FZF_DEFAULT_COMMAND="fzf-find"
+  export FZF_ALT_C_COMMAND="fzf-find -d"
   fzf_exe="$ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
   if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
@@ -129,8 +79,9 @@ if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
   export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
   export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
   export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
-  unset fzf_exe fdfindCmd
-  export FZF_USAGE="ACK-AG-WRAPPER:true, MG:true, GREP:false, OUTPUT-TO-FILE:true, LAST-GREP:false, PHIST:true, CD-WRAPPER:true"
+  declare -A +x fzfUsageA=([ack-ag]=true [mg]=true [grep]=false [out2file]=true [last-grep]=false [phist]=true [cd]=true)
+  export FZF_USAGE="$(declare -p fzfUsageA)"
+  unset fzf_exe fdfindCmd fzfUsageA
 elif ! $FZF_INSTALLED; then
   [[ ! -z "$PS1" ]] && echoe -s "FZF not found"
 fi
@@ -156,9 +107,6 @@ export TMUX_STATUS_RIGHT_EXTRA+=" 001:tmux_info 002:cpu 003:net 005:ssh 008:remi
 export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
 [[ ! -z $TMUX_VERSION ]] || export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 [[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
-export DATE_FMT="%Y%m%d-%H%M%S"
-export TIME_FMT="%H:%M:%S"
-export DATE2_FMT="%Y%m%d"
 export CD_LAST_DIRS=($PWD)
 [[ -e $HOME/Downloads ]] && export CD_LAST_DIRS_STORED+=":Dw@$HOME/Downloads"
 [[ -e $HOME/Desktop   ]] && export CD_LAST_DIRS_STORED+=":De@$HOME/Desktop"
@@ -175,6 +123,7 @@ fi
 # }}}
 # }}}
 # Shell setup # {{{
+export QUOTING_STYLE='literal'
 export HISTCONTROL="erasedups:ignoreboth"
 export HISTFILESIZE=1000
 export HISTFILE=$HOME/.bash_history
@@ -219,7 +168,7 @@ if [[ ! -z $PS1 ]]; then
   fi
   for i in {emacs,vi-command,vi-insert}; do
     bind "set keymap $i"
-    bind -r '\C-k'    # k for utils
+    # bind -r '\C-k'    # k for utils
     bind -x '"\C-kj":    READLINE_LINE="# $(eval "$READLINE_LINE")";READLINE_POINT=${#READLINE_LINE}'
     pre=
     case $i in
@@ -300,40 +249,37 @@ export LESS_TERMCAP_ue="$COff"
 # }}}
 # PS1 # {{{
 if ${SET_TITLE_USE_SIMPLE_MODE:-true}; then
-  export PROMPT_COMMAND="set-title-pane;"
+  export PROMPT_COMMAND="set-title-pane"
 else
-  export PROMPT_COMMAND="set-title --set-terminal --tmux-session;"
+  export PROMPT_COMMAND="set-title --set-terminal --tmux-session"
 fi
-export PROMPT_COMMAND+=" bash_phistory; history -a;"
+export PROMPT_COMMAND+="; bash_phistory; history -a"
 export PROMPT_DIRTRIM=3
 
 ${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set-title; $PROMPT_COMMAND"
-${PS1_CHECK_ENV:-false} && export PROMPT_COMMAND+=" PS1_envUpdater;"
+${PS1_CHECK_ENV:-false} && export PROMPT_COMMAND+="; PS1_envUpdater"
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 
 if [[ ! -z $EPOCHREALTIME ]]; then
   export PS0='\[${PWD:$((PS0_time=${EPOCHREALTIME/[,.]}, 0)):0}\]'
 fi
+PS1_STATUS=
 if $IS_VSCODE; then # {{{
   export PS1_CFG_ADD_GIT=true
   export PS1_CFG_ADD_SEPARATOR=false
   export PS1_CFG_ADD_SPLIT=false
-  export PS1_SSH_CHANGE=false
+  export PS1_SSH_CHANGE=false # }}}
+elif $IS_DOCKER; then # {{{
+  [[ -z $TMUX ]] && export PS1_STATUS="short_git_ssh:default"
+  [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3} # }}}
+elif [[ " $PERS_USERS " != *\ $USER\ * && $USER != 'root' ]]; then # {{{
+  export PS1_STATUS="usuper_full:short_git"
 fi # }}}
-if [[ -z $PS1_STATUS ]] || ( ! $IS_DOCKER && ! ${PS1_STATUS_KEEP_IT:-false} ); then
-  export PS1_STATUS="short_git:default"
-  if $IS_DOCKER; then
-    ! $IS_VSCODE && export PS1_STATUS="short_git_ssh:default"
-    [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3}
-  elif [[ " $PERS_USERS " != *\ $USER\ * && $USER != 'root' ]]; then
-    export PS1_STATUS="usuper_full:short_git"
-  fi
-  if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
-    ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"
-  fi
+if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
+  ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"
 fi
-[[ $USER == 'root' ]] && PS1_CURSOR_COLOR="#ff5f00" && PS1_CURSORS_TYPE="1"
+[[ -z $PS1_STATUS ]] && export PS1_STATUS="short_git:default"
 # }}}
 # CapsLock <-> Ctrl # {{{
 if false && ! $IS_MAC && [[ -n $DISPLAY ]]; then
@@ -355,7 +301,9 @@ done
 export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
 # }}}
 # Setup PROMPT_COMMAND # {{{
-export PROMPT_COMMAND="PS1_setter; $PROMPT_COMMAND"
-export PROMPT_COMMAND_ORIG=$PROMPT_COMMAND
+export PROMPT_COMMAND="PS1_env --save; PS1_setter; $PROMPT_COMMAND; PS1_env --restore"
+# rid of systemd osc
+export PROMPT_COMMAND_ORIG="${PROMPT_COMMAND[0]}"
+unset PROMPT_COMMAND
+export PROMPT_COMMAND="$PROMPT_COMMAND_ORIG"
 # }}}
-

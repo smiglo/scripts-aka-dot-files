@@ -28,8 +28,8 @@ _last-grep() { # @@ # {{{
   local show_file=false
   local show_greps=false
   local follow_link=false
-  local use_fzf="$(echo ",$FZF_USAGE," | grep -o ',\s*LAST-GREP:[^,]\+,' | grep -o 'true\|false')"
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+  eval $FZF_USAGE
+  local use_fzf=${fzfUsageA[last-grep]:-$FZF_INSTALLED}
   if [[ ! -z $1 ]]; then
     while [[ ! -z $1 ]]; do
       case $1 in

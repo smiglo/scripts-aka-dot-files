@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  echo "1 5 10"
+  git branch | cut -c3-
+  exit 0
+fi # }}}
+params=
+[[ $1 =~ ^[0-9]+$ ]] && params="@~$1" && shift
+git rebase -i --autosquash --rebase-merges $params "$@"

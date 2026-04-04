@@ -6,7 +6,7 @@ encryptor() { # @@ # {{{
   local cipher="aes-256-cbc" params= encode="-e" use_base64="-a" use_hash_pass=true pass= edit=false persistent=false make_link=false key=
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
-    --key)  which keep-pass.sh >/dev/null 2>&1 && keep-pass.sh --list-all-keys;;
+    --key)  keep-pass --list-all-keys;;
     *) # {{{
       if [[ " $@ " == *\ -d\ * || " $@ " == *\ --edit\ * ]]; then
         get-file-list '*.enc' | sed -e 's|^|./|'
@@ -25,7 +25,7 @@ encryptor() { # @@ # {{{
     --hash-pass) use_hash_pass=true;;
     --no-hash-pass) use_hash_pass=false;;
     --pass) pass="$2"; shift;;
-    --key)  pass="$(keep-pass.sh --key "$2")"; key="$2"; shift;;
+    --key)  pass="$(keep-pass --key "$2")"; key="$2"; shift;;
     --edit) edit=true; encode="-d";;
     --pers) persistent=true;;
     --bin)  use_base64=;;
@@ -47,8 +47,8 @@ encryptor() { # @@ # {{{
   if [[ ! -z $src ]]; then # {{{
     if [[ -z $pass && $src =~ ^.*\.k@([^.]*)(\..*){0,1}$ ]]; then
       if [[ ! -z ${BASH_REMATCH[1]} ]]; then
-        if keep-pass.sh --has-key "${BASH_REMATCH[1]}"; then
-          pass="$(keep-pass.sh --key "${BASH_REMATCH[1]}")"
+        if keep-pass --has-key "${BASH_REMATCH[1]}"; then
+          pass="$(keep-pass --key "${BASH_REMATCH[1]}")"
         else
           echo "No key '${BASH_REMATCH[1]}' in keep-pass journals" >/dev/stderr
           return 1

@@ -15,7 +15,7 @@ if os.environ.get("GDB_USE_DASHBOARD") == 'true':
 if usePwnDbg:
     pwnDbgConf = os.environ.get("GDB_PWNDBG_INIT")
     if not pwnDbgConf:
-        pwnDbgConf = os.environ["SCRIPT_PATH"] + '/bash/inits/gdb/pwn-dbg/gdbinit.py'
+        pwnDbgConf = '/usr/share/pwndbg/gdbinit.py'
     if not os.path.exists(pwnDbgConf):
         usePwnDbg = False
     if usePwnDbg:

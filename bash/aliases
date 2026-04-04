@@ -36,7 +36,7 @@ install-function() { # START: install-function # {{{
   local tool="$1"
   local add_completion="$2"
   local add_completion_old="$3"
-  ! $doCheck || [[ $TO_INSTALL == *\ $tool\ * ]] || return 1
+  ! $doCheck || [[ $toInstall == *\ $tool\ * ]] || return 1
   [[ ! -z $add_completion ]] && export COMPLETION_GENERIC_FUNCTIONS+=" ${add_completion//:/ }"
   [[ ! -z $add_completion_old ]] && export COMPLETION_GENERIC_FUNCTIONS_OLD+=" ${add_completion_old//:/ }"
   return 0
@@ -120,7 +120,7 @@ install-extensions() { # START: install-extensions # {{{
 export -f install-extensions
 # END: install-extensions # }}}
 # Check ALIASES_MAP # {{{
-TO_INSTALL=''
+toInstall=''
 if [[ $ALIASES_MAP == 'NONE' ]]; then
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 0 || return 0
 fi
@@ -131,14 +131,14 @@ if [[ ! -z $ALIASES_MAP ]]; then # {{{
   fi
   for i in $a_map; do
     case $i in
-    -*) TO_INSTALL="${TO_INSTALL// ${i#-} / }";;
-    *)  TO_INSTALL+=" $i ";;
+    -*) toInstall="${toInstall// ${i#-} / }";;
+    *)  toInstall+=" $i ";;
     esac
   done
   unset a_map
 fi # }}}
-TO_INSTALL=" $TO_INSTALL "
-# echoe -m aliases "To alias: [$TO_INSTALL]"
+toInstall=" $toInstall "
+# echoe -m aliases "To alias: [$toInstall]"
 # }}}
 # }}}
 # Functions # {{{
@@ -196,5 +196,5 @@ else # {{{
 fi # }}} # }}}
 # }}}
 # Cleaning # {{{
-unset TO_INSTALL i BASH_ALIASES_FROM_CMD ALIASES_AUTO_SUDO_PROMPT
+unset toInstall i BASH_ALIASES_FROM_CMD ALIASES_AUTO_SUDO_PROMPT
 # }}}

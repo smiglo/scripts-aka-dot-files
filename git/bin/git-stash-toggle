@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+if [[ $1 == @@ ]]; then # {{{
+  echo "k --keep-index -m pop push list show drop s sp"
+  exit 0
+fi # }}}
+if [[ ! -z $1 ]]; then # {{{
+  p=
+  case $1 in
+  push) # {{{
+    if [[ -z "$(git status --short)" ]]; then
+      [[ $2 == '-s' ]] || echo "false"
+      exit 1
+    fi
+    git stash -q
+    [[ $2 == '-s' ]] || echo "true"
+    exit 0;; # }}}
+  pop) # {{{
+    if [[ -z "$2" || "$2" == 'true' ]]; then
+      git stash pop -q
+    fi
+    exit;; # }}}
+  esac
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    s) p+=" show";;
+    sp) p+=" show -p";;
+    k) p+=" --keep-index";;
+    *) p+=" $1";;
+    esac; shift
+  done
+  git stash $p
+  exit
+fi # }}}
+stash=$(git status --short) isOnStash=false
+[[ -z $stash ]] && stash=false || stash=true
+[[ ! -z $(git stash list) ]] && isOnStash=true
+if $stash; then
+  git stash -q
+elif $isOnStash; then
+  git stash pop -q
+fi

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  ret="-d --default -f --full"
+  case $2 in
+  -d|--default) ret="$(echo ${!GIT_USER_*} | sed 's/GIT_USER_//g')";;
+  -f|--full) ret="";;
+  esac
+  echo $ret
+  exit 0
+fi # }}}
+user= name= email= value=
+[[ -z $@ ]] && set -- -d default
+while [[ ! -z $1 ]]; do
+  case $1 in
+  -f|--full)
+    shift; name="$1"
+    shift; email="$1";;
+  *)
+    case $1 in
+    -d|--default) shift;;
+    esac
+    user=$1
+    [[ -z $user ]] && exit 1
+    user="GIT_USER_${user^^}"
+    value="${!user}"
+    [[ -z $value ]] && exit 1
+    name="${value/:*}"
+    email="${value/*:}";;
+  esac
+  shift
+done
+[[ -z "$name" || -z "$email" ]] && echo "GIT user not fully specified ($name <$email>)" && exit 1
+git config user.name  "$name"
+git config user.email "$email"
+echo "User set to ($name <$email>)"
