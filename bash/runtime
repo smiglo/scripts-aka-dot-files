@@ -41,6 +41,7 @@ if [[ -z ${UNICODE_EXTRA_CHARS[bell]} ]] || $RCSTUFF_FORCE; then
   UNICODE_EXTRA_CHARS[home]="🏡"
   UNICODE_EXTRA_CHARS[icon-ok]="✓"
   UNICODE_EXTRA_CHARS[icon-err]="✗"
+  UNICODE_EXTRA_CHARS[laptop]="💻"
   UNICODE_EXTRA_CHARS[link]="🔗"
   UNICODE_EXTRA_CHARS[ll-pni]="⛏ "
   UNICODE_EXTRA_CHARS[localhost]="🤠"
@@ -55,11 +56,13 @@ if [[ -z ${UNICODE_EXTRA_CHARS[bell]} ]] || $RCSTUFF_FORCE; then
   UNICODE_EXTRA_CHARS[progress-dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
   UNICODE_EXTRA_CHARS[romb]="✦"
   UNICODE_EXTRA_CHARS[root]="☢ "
+  UNICODE_EXTRA_CHARS[satellite]="📡"
   UNICODE_EXTRA_CHARS[sep-dot]="·"
   UNICODE_EXTRA_CHARS[sep-x]="×"
   UNICODE_EXTRA_CHARS[smart]="ⓢ "
   UNICODE_EXTRA_CHARS[snake]="🐍"
   UNICODE_EXTRA_CHARS[ssh]="🚀"
+  UNICODE_EXTRA_CHARS[tmux_env]="🌋"
   UNICODE_EXTRA_CHARS[tmux-main]="🌅"
   UNICODE_EXTRA_CHARS[zoom-left]="🔍"
   UNICODE_EXTRA_CHARS[zoom-right]="🔎"
@@ -96,8 +99,11 @@ ${INPUTRC_MODE_CHAR_USE:-true} && export INPUTRC_MODE_CHAR="☯ "
 # Static completions # {{{
 if [[ -z ${COMPLETION_STATIC[_placeholder]} ]] || $RCSTUFF_FORCE; then
   declare -Ag COMPLETION_STATIC
-  COMPLETION_STATIC[npm]="run test install i"
-  COMPLETION_STATIC[npx_semantic-release]="--dry-run"
+  COMPLETION_STATIC[_placeholder]="_defined"
+  COMPLETION_STATIC[npm]="run test install ci i audit ls exec"
+  COMPLETION_STATIC[npm:audit]="fix"
+  COMPLETION_STATIC[npm:audit:fix]="--force"
+  COMPLETION_STATIC[npx:semantic-release]="--dry-run"
 fi # }}}
 # Personalities # {{{
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
@@ -105,34 +111,48 @@ fi # }}}
 # }}}
 # Path # {{{
 export PATH=@END@:$PATH
-if $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ ]]; then
-  PATH=/usr/local/opt/coreutils/libexec/gnubin/:$PATH
-fi
-export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$BIN_PATH/misc:$PATH
+export PATH=$SCRIPT_PATH/bin:$PATH
 export PATH=$SCRIPT_PATH/git/bin:$PATH
-export PATH=$HOME/.bin-tools/bin:$PATH
+export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$PATH
 # }}}
 # FZF Runtime # {{{
-export FZF_PATH
-[[ -e $TOOLS_PATH/fzf/bin/fzf ]] && export FZF_PATH="$TOOLS_PATH/fzf/bin"
-export FZF_INSTALLED=false
-if [[ -z $FZF_PATH ]]; then
-  if [[ -e /usr/local/bin/fzf ]]; then
-    FZF_PATH="/usr/local/bin"
-  elif [[ -e $SCRIPT_PATH/bash/inits/fzf/bin/fzf ]]; then
-    FZF_PATH="$SCRIPT_PATH/bash/inits/fzf/bin"
+fzfPath=$FZF_PATH
+if [[ -z $FZF_INSTALLED ]]; then
+  export FZF_INSTALLED=false
+  if [[ -z $fzfPath ]]; then # {{{
+    if [[ -e $TOOLS_PATH/fzf/bin/fzf ]]; then
+      fzfPath="$TOOLS_PATH/fzf/bin"
+    elif [[ -e /usr/bin/fzf ]]; then
+      fzfPath="/usr/bin"
+    elif [[ -e /usr/local/bin/fzf ]]; then
+      fzfPath="/usr/local/bin"
+    elif [[ -e $SCRIPT_PATH/bash/inits/fzf/bin/fzf ]]; then
+      fzfPath="$SCRIPT_PATH/bash/inits/fzf/bin"
+    fi
+  fi # }}}
+  if [[ ! -z $fzfPath  ]]; then
+    FZF_INSTALLED=true
+    [[ :$PATH: == *:$fzfPath:* ]] || PATH=$fzfPath:$PATH
+  elif is-installed fzf; then
+    FZF_INSTALLED=true
   fi
 fi
-if [[ ! -z $FZF_PATH && -e $FZF_PATH/fzf ]]; then
-  FZF_INSTALLED=true
-  [[ :$PATH: == *:$FZF_PATH:* ]] || PATH=$FZF_PATH:$PATH
-elif which fzf >/dev/null 2>&1; then
-  FZF_INSTALLED=true
-elif $BASHRC_FULL_START; then
-  echoe -m runtime "! FZF not found"
-fi # }}}
+unset fzfPath # }}}
+# tools # {{{
+# ChtSh # {{{
+CHTSH_QUERY_OPTIONS="style=paraiso-light" # }}}
+# CMake # {{{
+if [[ -z $CMAKE_BUILD_PARALLEL_LEVEL ]] && is-installed nproc; then
+  export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
+fi
+if is-installed ccache; then
+  export CMAKE_ARGS+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache"
+  export CMAKE_ARGS+=" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+fi
+# export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
+# # }}}
 # AIder # {{{
-if is-installed -w aider; then
+if false && is-installed -w aider; then
   export AIDER_DARK_MODE=true
   export AIDER_CODE_THEME="solarized-dark"
   export AIDER_MODEL="gemini/gemini-2.0-flash"
@@ -142,52 +162,70 @@ if is-installed -w aider; then
   export AIDER_CHAT_LANGUAGE="English"
   export AIDER_EDITOR="vim --fast -cl"
 fi # }}}
-# CMake # {{{
-if [[ -z $CMAKE_BUILD_PARALLEL_LEVEL ]] && is-installed nproc; then
-  export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
-fi
-if is-installed ccache; then
-  export CMAKE_ARGS+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache"
-  export CMAKE_ARGS+=" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
-fi # }}}
 # Tmux - local # {{{
-if [[ ! -e $HOME/.bin/tmux-local-bin && -e $HOME/.config/tmux-local/.use-local && -e $HOME/.config/tmux-local/local/bin/tmux ]]; then
-  ln -sf $HOME/.config/tmux-local/local/bin $HOME/.bin/tmux-local-bin
-fi
-if [[ -e $HOME/.bin/tmux-local-bin ]]; then
-  export PATH="$HOME/.bin/tmux-local-bin:$PATH"
-  tmux -V 2>&1 | command grep -q "no version information available" && export LD_LIBRARY_PATH="$HOME/.config/tmux-local/local/lib:$LD_LIBRARY_PATH"
-  [[ -e $HOME/.config/tmux-local/local/share/terminfo ]] && export TERMINFO=$HOME/.config/tmux-local/local/share/terminfo
-  [[ -e $HOME/.config/tmux-local/local/share/man/man1/tmux.1 ]] && export MANPATH="$HOME/.config/tmux-local/local/share/man:$MANPATH"
+if false; then
+  if [[ ! -e $HOME/.bin/tmux-local-bin && -e $HOME/.config/tmux-local/.use-local && -e $HOME/.config/tmux-local/local/bin/tmux ]]; then
+    ln -sf $HOME/.config/tmux-local/local/bin $HOME/.bin/tmux-local-bin
+  fi
+  if [[ -e $HOME/.bin/tmux-local-bin ]]; then
+    export PATH="$HOME/.bin/tmux-local-bin:$PATH"
+    tmux -V 2>&1 | command grep -q "no version information available" && export LD_LIBRARY_PATH="$HOME/.config/tmux-local/local/lib:$LD_LIBRARY_PATH"
+    [[ -e $HOME/.config/tmux-local/local/share/terminfo ]] && export TERMINFO=$HOME/.config/tmux-local/local/share/terminfo
+    [[ -e $HOME/.config/tmux-local/local/share/man/man1/tmux.1 ]] && export MANPATH="$HOME/.config/tmux-local/local/share/man:$MANPATH"
+  fi
 fi # }}}
-# Env - not grouped # {{{
-if [[ -z $COMPLETION_BASH ]]; then # {{{
-  f="/usr/share/bash-completion/bash_completion"
-  $IS_MAC && f="/usr/local/share/bash-completion/bash_completion"
-  [[ -e $f ]] && export COMPLETION_BASH="$f"
-  unset f
-fi # }}}
-export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
-[[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
-export REMINDER_PATH="$APPS_CFG_PATH/reminders"
 export _RR_TRACE_DIR="./.rr"
-[[ -e "$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh" ]] && export TMUX_SB_WORKER="$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh"
-if ${REMINDER_MONITOR_AUTOSTART:-true} && [[ -z $REMINDER_MONITOR_CMD &&  -e "$SCRIPT_PATH/bin/reminder.sh" ]]; then
-  export REMINDER_MONITOR_CMD="$SCRIPT_PATH/bin/reminder.sh monitor --tmux"
-fi
-export TMUX_SB_INTERVAL=15
 export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
 [[ -e $RLWRAP_HOME ]] || mkdir -p $RLWRAP_HOME &>/dev/null
 export RLWRAP_OPTS="-A -b '' -e '' -D 2"
+# # }}}
+# Env - not grouped # {{{
+export DATE_FMT="%Y%m%d-%H%M%S"
+export TIME_FMT="%H:%M:%S"
+export DATE2_FMT="%Y%m%d"
+if [[ -z $COMPLETION_BASH_PATH ]]; then # {{{
+  f="/usr/share/bash-completion"
+  if $IS_MAC; then
+    f="/usr/local/share/bash-completion"
+    [[ ! -e $f/bash_completion && -e /usr/local/etc/bash_completion ]] && ln -sf /usr/local/etc/bash_completion $f/
+  fi
+  [[ -e $f/bash_completion ]] && export COMPLETION_BASH_PATH="$f"
+  unset f
+fi # }}}
+[[ -e $BIN_PATH/ticket-tool ]] && export TICKET_TOOL_PATH=$BIN_PATH/ticket-tool
+export REMINDER_PATH="$APPS_CFG_PATH/reminders"
+[[ -e "$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh" ]] && export TMUX_SB_WORKER="$SCRIPT_PATH/bin/oth/tmux-sb-worker.sh"
+if ${REMINDER_MONITOR_AUTOSTART:-true} && [[ -z $REMINDER_MONITOR_CMD && -e "$SCRIPT_PATH/bin/reminder.sh" ]]; then
+  export REMINDER_MONITOR_CMD="$SCRIPT_PATH/bin/reminder.sh"
+fi
+export TMUX_SB_INTERVAL=15
 [[ -e $TOOLS_PATH/pwndbg/gdbinit.py ]] && export GDB_PWNDBG_INIT="$TOOLS_PATH/pwndbg/gdbinit.py"
 export LC_COLLATE=C
 export GOBIN="$HOME/.local/bin"
 [[ -z $NODE_USE_NVM && -e $HOME/.nvm ]] && export NODE_USE_NVM=true
+if [[ -z $PRJ_PATH ]]; then
+  if [[ -e $HOME/w ]]; then
+    export PRJ_PATH="$HOME/w"
+  else
+    export PRJ_PATH="$HOME/projects"
+    mkdir -p "$PRJ_PATH"
+  fi
+fi
+[[ -z $WORKSPACE ]] && export WORKSPACE="$PRJ_PATH"
+export W=$WORKSPACE
 # vim - cpp # {{{
 if [[ -z $VIM_YCM_PATH ]]; then
-  if [[ ! -z $(shopt -s nullglob; echo $MY_PROJ_PATH/vim/git-plugins/YouCompleteMe/third_party/ycmd/ycm_core.*.so) ]]; then
-    export VIM_YCM_PATH="$MY_PROJ_PATH/vim/git-plugins/YouCompleteMe"
-    export VIM_CLANG_PATH='-'
+  if $IS_DOCKER; then
+    if [[ ! -z $(shopt -s nullglob; echo $ENV_PATH/vim/git-plugins/YouCompleteMe.docker/third_party/ycmd/ycm_core.*.so) ]]; then
+      export VIM_YCM_PATH="$ENV_PATH/vim/git-plugins/YouCompleteMe.docker"
+      export VIM_CLANG_PATH='-'
+    fi
+  fi
+  if [[ -z $VIM_YCM_PATH ]]; then
+    if [[ ! -z $(shopt -s nullglob; echo $ENV_PATH/vim/git-plugins/YouCompleteMe/third_party/ycmd/ycm_core.*.so) ]]; then
+      export VIM_YCM_PATH="$ENV_PATH/vim/git-plugins/YouCompleteMe"
+      export VIM_CLANG_PATH='-'
+    fi
   fi
 fi
 if [[ -z $VIM_CLANG_PATH ]]; then
@@ -489,6 +527,19 @@ fi
 export PATH="$HOME/.cargo/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 [[ -e $TOOLS_PATH/.runtime.bash ]] && source $TOOLS_PATH/.runtime.bash
+if $IS_MAC && is-installed -w brew; then # {{{
+  pathFile="$BASHRC_RUNTIME_PATH/brew.paths"
+  if [[ ! -e $pathFile ]]; then
+    brewPaths="$( \
+      find $(brew --prefix)/Cellar -type d -path '*/libexec/gnubin' \
+      | grep -v "${BREW_LIBEXEC_EXCLUDE:-@@@}" \
+      | tr '\n' ':')"
+    echo "${brewPaths%:}" >>$pathFile
+    unset brewPaths
+  fi
+  [[ -s $pathFile ]] && PATH="$(< $pathFile):$PATH"
+  unset pathFile
+fi # }}}
 # }}}
 # Runtime file # {{{
 if [[ -e $RUNTIME_PATH/runtime-common.bash ]]; then
@@ -512,4 +563,3 @@ for profi in $BASH_PROFILES_FULL; do
 done
 true
 # }}}
-

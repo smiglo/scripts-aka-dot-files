@@ -13,6 +13,13 @@ ask() { # {{{
   fi
   [[ $k == 'Y' ]] || return 1
 } # }}}
+IS_DOCKER=false
+IS_WSL=false
+if [[ -e /.dockerenv ]]; then
+  IS_DOCKER=true
+elif [[ -e /mnt/wsl ]]; then
+  IS_WSL=true
+fi
 case $c in
 -H | --help | help) # {{{
   ret+=" $(awk -F ')' '/^-.*).*#\s*\{{3}$/{print $1}' "$0" | sed -e '/($/d' -e 's/|//g' -e "s/''//g")" ;& # }}}
@@ -26,7 +33,7 @@ resolv) # {{{
 reboot) # @@: -y # {{{
   if ask $1 'Reboot'; then
     if $IS_WSL; then
-      shutdown.exe /r /t 0 /f
+      /mnt/c/Windows/System32/shutdown.exe /r /t 0 /f
     elif [[ -e /usr/sbin/reboot.ask ]]; then
       /usr/sbin/reboot.ask
     elif [[ -e /usr/sbin/reboot ]]; then 
@@ -39,14 +46,16 @@ reboot) # @@: -y # {{{
   fi;; # }}}
 suspend) # {{{
   if $IS_WSL; then
-    shutdown.exe /h /f
+    /mnt/c/Windows/System32/shutdown.exe /h /f
+  elif ${UTILS_SUSPEND_USE_PWR_MGR:-false} && [[ -e /usr/local/bin/power-manager.sh ]]; then
+    sudo /usr/local/bin/power-manager.sh --now
   else
     systemctl suspend
   fi ;; # }}}
 shutdown) # @@: -y # {{{
   if ask $1 'Shutdown'; then
     if $IS_WSL; then
-      shutdown.exe /s /hybrid /t 0 /f
+      /mnt/c/Windows/System32/shutdown.exe /s /hybrid /t 0 /f
     elif [[ -e /usr/sbin/shutdown.ask ]]; then
       /usr/sbin/shutdown.ask now
     elif [[ -e /usr/sbin/shutdown ]]; then

@@ -36,17 +36,20 @@ __ps1_load_defaults() { # {{{
   PS1_COLOR_JOBS_R="${PS1_COLOR_JOBS_R:-$(echo "\[$CIGreen\]")}"
   PS1_COLOR_JOBS_S="${PS1_COLOR_JOBS_S:-$(echo "\[$CGold\]")}"
   PS1_COLOR_NL="${PS1_COLOR_NL:-$(echo "\[$CGray\]")}"
-  if [[ -z $PS1_COLOR_CURSOR ]] && ${PS1_CURSORS_CUSTOM:-true}; then
+  PS1_CURSOR= PS1_CURSOR_ROOT=
+  if ${PS1_CURSORS_CUSTOM:-true}; then
     if [[ $PS1_CURSOR_COLOR != 'false' ]]; then
-      PS1_COLOR_CURSOR_C="${PS1_COLOR_CURSOR_C:-$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")}" # Set color to blue (#005e5d)
-      PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR:-$(echo "$PS1_COLOR_CURSOR_C")}
+      PS1_CURSOR+="$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")" # Set color to blue (#005e5d)
     fi
-    if [[ $PS1_CURSORS_TYPE != 'false' ]]; then
-      PS1_COLOR_CURSOR_T="${PS1_COLOR_CURSOR_T:-$(echo "\[\e[${PS1_CURSORS_TYPE:-2} q\]")}" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
-      PS1_COLOR_CURSOR+=${PS1_COLOR_CURSOR:-$(echo "$PS1_COLOR_CURSOR_T")}
+    if [[ $PS1_CURSOR_TYPE != 'false' ]]; then
+      PS1_CURSOR+="$(echo "\[\e[${PS1_CURSOR_TYPE:-2} q\]")" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
     fi
-  else
-    PS1_COLOR_CURSOR=
+    if [[ $PS1_CURSOR_ROOT_COLOR != 'false' ]]; then
+      PS1_CURSOR_ROOT+="$(echo "\[\e]12;${PS1_CURSOR_ROOT_COLOR:-#ff5f00}\a\]")" # Set color to blue (#005e5d)
+    fi
+    if [[ $PS1_CURSOR_ROOT_TYPE != 'false' ]]; then
+      PS1_CURSOR_ROOT+="$(echo "\[\e[${PS1_CURSOR_ROOT_TYPE:-1} q\]")" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
+    fi
   fi
 } # }}}
 PS1_getColor() { # {{{
@@ -71,7 +74,11 @@ PS1_getColor() { # {{{
   j-r)      echo -en "$PS1_COLOR_JOBS_R";;
   j-s)      echo -en "$PS1_COLOR_JOBS_S";;
   new-line) echo -en "$PS1_COLOR_NL";;
-  cursor)   echo -en "$PS1_COLOR_CURSOR";;
+  cursor)   if [[ $UID != 0 ]]; then
+              echo -en "$PS1_CURSOR"
+            else
+              echo -en "$PS1_CURSOR_ROOT"
+            fi;;
   time)     echo -en "$PS1_COLOR_TIME";;
   *)        printf "%s" $(get-color $1);;
   esac
@@ -136,8 +143,6 @@ PS1_colorFormat() { # {{{
   $updateDummy && ps1_dummy+="$2$3"
 } # }}}
 PS1_setter() { # {{{
-  BASH_LAST_ERR=$?
-  set +xv
   local cTime=${EPOCHREALTIME/[,.]}
   if [[ -e "$PWD" ]] && ${PS1_CONVERTER_CHECK_INODE:-true}; then # {{{
     local ino="$(command ls -id "$PWD" 2>/dev/null)"
@@ -167,8 +172,8 @@ PS1_setter() { # {{{
     if [[ ! -z $PS1_LAST_EMPTY && $PS1_CFG_CLR_TIMEOUT != 0 ]]; then
       [[ $((cTime - PS1_LAST_EMPTY)) -lt ${PS1_CFG_CLR_TIMEOUT:-750000} ]] && clr
     fi
-    [[ $BASH_LAST_ERR == 0 || $PS1_LAST_EMPTY_STRIKE -ge 1 ]] && PS1_LAST_EMPTY=${EPOCHREALTIME/[,.]}
-    BASH_LAST_ERR=0
+    [[ $__save_BASH_LAST_ERR == 0 || $PS1_LAST_EMPTY_STRIKE -ge 1 ]] && PS1_LAST_EMPTY=${EPOCHREALTIME/[,.]}
+    __save_BASH_LAST_ERR=0
     PS0_time=
   else
     PS1_LAST_EMPTY_STRIKE=0
@@ -177,6 +182,10 @@ PS1_setter() { # {{{
   [[ -z $PS1_CONVERTER_ADD_SEPARATOR ]] && PS1_CONVERTER_ADD_SEPARATOR=${PS1_CFG_ADD_SEPARATOR:-true}
   local cOff="$(PS1_getColor 'off')"
   local v= ps1_dummy=
+  if [[ -z $PS1_STATUS ]]; then
+    export PS1_STATUS="short_git:default"
+    [[ -n "$SSH_CLIENT" && ! -n $TMUX ]] && export PS1_STATUS="short_git_ssh:default_ssh"
+  fi
   local pwdMode="$(PS1_getPwdMode "${PS1_STATUS/:*}")"
   ! $spaceForTime && [[ $pwdMode == 'pwd-short' && $COLUMNS -gt 90 ]] && spaceForTime=true
   local modes="time env env-switches user host pwd git jobs split-line hist prompt cursor"
@@ -363,7 +372,7 @@ PS1_setter() { # {{{
         PS1_PSTREE_INSTALLED=true
         which pstree >/dev/null 2>&1 || PS1_PSTREE_INSTALLED=false
       fi
-      if [[ ( ! -n $TMUX && $SHLVL -gt 1 ) || $SHLVL -gt 3 ]]; then
+      if [[ ( ! -n $TMUX && $SHLVL -gt ${PS1_PROMPT_SHLVL_BASE:-1} ) || $SHLVL -gt 3 ]]; then
         local -n vSign="PS1_SIGN_$$"
         if [[ -z $vSign ]]; then
           vSign="$"
@@ -410,31 +419,50 @@ PS1_setter() { # {{{
         sign="$vSign"
       fi
       # ${PS1_DEBUG:-false} && set +xv
-      PS1_colorFormat PS1 - "err-$BASH_LAST_ERR" "$sign" " ";; # }}}
+      PS1_colorFormat PS1 - "err-$__save_BASH_LAST_ERR" "$sign" " ";; # }}}
     cursor) # {{{
-      if [[ ! -n $TMUX ]]; then
-        PS1+="$(PS1_getColor 'cursor')"
-      fi;; # }}}
+      PS1+="$(PS1_getColor 'cursor')";; # }}}
     esac; break; done
     PS0_time=0
     ${PS1_PROFILER:-false} && tt=$((${EPOCHREALTIME/[,.]} - $tt)) && echo "step: $v: $tt" >/dev/stderr
   done
   PS1+="$cOff"
 } # }}}
+PS1_env() { # {{{
+  local lastErr=$?
+  set +xv
+  case $1 in
+  --save)
+    __save_BASH_LAST_ERR=$lastErr
+    __save_BASH_REMATCH=( "${BASH_REMATCH[@]}" );;
+  --restore)
+    lastErr=$__save_BASH_LAST_ERR
+    BASH_REMATCH=( "${__save_BASH_REMATCH[@]}" )
+    unset __save_BASH_REMATCH __save_BASH_LAST_ERR
+    return $lastErr;;
+  esac
+} # }}}
 ps1_toggle() { # @@ # {{{
   local i=
   local fullName=, shortName=
   local oldIFS=$IFS
   if [[ $1 == '@@' ]]; then # {{{
-    local ret="next"
-    ret+=" hl hn hr ht $(echo hist-{local,no,no-pers,restore,stat})"
-    ret+=" split nl gt"
-    ret+=" time-delta time-start time-curr td ts tc t-on t-off time t"
-    for i in ${PS1_MODES[*]}; do
-      IFS=':' read fullName shortName <<<"$i"
-      ret+=" $fullName"
-    done
-    echo "$ret"
+    case $3 in
+    time | oneline | oneline-short)
+      echo "on off";;
+    *)
+      local ret="next"
+      ret+=" hl hn hr ht $(echo hist-{local,no,no-pers,restore,stat})"
+      ret+=" split nl gt"
+      ret+=" time-delta time-start time-curr td ts tc t-on t-off time t"
+      ret+=" oneline oneline-short"
+      for i in ${PS1_MODES[*]}; do
+        IFS=':' read fullName shortName <<<"$i"
+        ret+=" $fullName"
+      done
+      echo "$ret"
+      ;;
+    esac
     IFS=$oldIFS
     return 0
   fi # }}}
@@ -447,7 +475,14 @@ ps1_toggle() { # @@ # {{{
   time-* | td | tc | ts | t-on | t-off | time | t) # {{{
     case $1 in
     time | t)
-      __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT' true
+      if [[ -z $2 ]]; then
+        __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT' true
+      else
+        case $2 in
+        false | off | 0) PS1_CFG_ADD_TIME_CURRENT=false;;
+        true  | on  | 1) PS1_CFG_ADD_TIME_CURRENT=true;;
+        esac
+      fi
       if ! $PS1_CFG_ADD_TIME_CURRENT; then
         PS1_CFG_ORIG_ADD_TIME_DELTA=$PS1_CFG_ADD_TIME_DELTA
         PS1_CFG_ORIG_ADD_TIME_START=$PS1_CFG_ADD_TIME_START
@@ -465,6 +500,33 @@ ps1_toggle() { # @@ # {{{
     time-start | ts) __ps1_var_toggle 'PS1_CFG_ADD_TIME_START';;
     time-curr  | tc) __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT';;
     esac
+    return 0;; # }}}
+  oneline | oneline-short) # {{{
+    if [[ -z $2 ]]; then
+      __ps1_var_toggle 'PS1_CFG_ADD_SPLIT' true
+    else
+      case $2 in
+      false | off | 0) PS1_CFG_ADD_SPLIT=true;;
+      true  | on  | 1) PS1_CFG_ADD_SPLIT=false;;
+      esac
+    fi
+    if ${PS1_CFG_ADD_SPLIT:-true}; then
+      ps1_toggle time ${PS1_CFG_ORIG_ADD_TIME_CURRENT:-true}
+      case $1 in
+      oneline-short)
+        PS1_STATUS=${PS1_CFG_ORIG_STATUS:-short_git:default};;
+      *)
+        [[ -n $PS1_CFG_ORIG_STATUS ]] && PS1_STATUS=$PS1_CFG_ORIG_STATUS;;
+      esac
+    else
+      PS1_CFG_ORIG_ADD_TIME_CURRENT=${PS1_CFG_ADD_TIME_CURRENT:-true}
+      ps1_toggle time false
+      case $1 in
+      oneline-short)
+        PS1_CFG_ORIG_STATUS=$PS1_STATUS
+        PS1_STATUS="very_short:${PS1_STATUS#*:}";;
+      esac
+    fi
     return 0;; # }}}
   split) # {{{
     __ps1_var_toggle 'PS1_CFG_ADD_SPLIT' true
@@ -543,15 +605,18 @@ ps1_toggle() { # @@ # {{{
         break
       fi
     done
-    import-module echor
-    echormf -C 0 "Changing PS1 to %yellow:{$next}"
+    (
+      import-module echor
+      echormf -C 0 "Changing PS1 to %yellow:{$next}"
+    )
   fi # }}}
   unset ${!PS1_CACHE_*}
   PS1_STATUS="$next:$current"
   IFS=$oldIFS
 } # }}}
 ps1_fix() { # {{{
-  local current=$PROMPT_COMMAND
+  local current=${PROMPT_COMMAND[0]}
+  unset PROMPT_COMMAND
   PROMPT_COMMAND=$PROMPT_COMMAND_ORIG
   [[ $current != PS1_setter* ]] && PROMPT_COMMAND+="; $current"
   PROMPT_COMMAND
@@ -560,4 +625,3 @@ ps1_fix() { # {{{
 alias pt='ps1_toggle' # @@
 alias gt='ps1_toggle gt'
 alias pth='ps1_toggle ht'
-

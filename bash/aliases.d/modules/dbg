@@ -10,8 +10,6 @@ dbgF() { # @@ # {{{
     case $3 in # {{{
     -v) # {{{
       echo "F E W I D T";; # }}}
-    --reset) # {{{
-      echo "---";; # }}}
     *) # {{{
       if [[ " $@ " == *" --set "* || " $@ " == *" --init "* ]]; then # {{{
         echo "--out --out=FILE -o1 -o2 -v --name="
@@ -27,7 +25,7 @@ dbgF() { # @@ # {{{
           echo "-f=$f"
         done # }}}
       else
-        echo "--unset --set --init --deinit --reset"
+        echo "--unset --set --init --deinit --reset --reset-zero --reset-now"
         echo "F E W I D T"
         echo "-f -f=FILE -? - --"
         echo "-o1 -o2 --out=FILE"
@@ -172,7 +170,8 @@ dbgF() { # @@ # {{{
     -\?) # {{{
       vGet --all $__dbg_prefixVar
       return 0;; # }}}
-    --reset) vSet $__dbg_prefixVar ts_zero;;
+    --reset-zero) vSet $__dbg_prefixVar ts_zero;;
+    --reset | --reset-now) vSet $__dbg_prefixVar ts_zero ${EPOCHSECONDS:-$(epochSeconds)};;
     --) __dbg_printEmpty=true; shift; break;;
     -)  __dbg_level="$((-${__dbg_level#-}))";;
     -o1)     __dbg_out="/dev/stdout";;
@@ -244,8 +243,12 @@ dbgF() { # @@ # {{{
   # ts # {{{
   local ts=$(vGet $__dbg_prefixVar ts true) ts_diff=
   if $ts; then
-    local ts0=$(vGet $__dbg_prefixVar ts_zero -z ${EPOCHSECONDS:-$(epochSeconds)}) tsFirst=false
-    vIsSet $__dbg_prefixVar ts_zero || { vSet $__dbg_prefixVar ts_zero $ts0; tsFirst=true; }
+    local ts0=$(vGet $__dbg_prefixVar ts_zero) tsFirst=false
+    if [[ -z $ts0 ]]; then
+      ts0=$EPOCHSECONDS
+      vSet $__dbg_prefixVar ts_zero "$ts0"
+      tsFirst=true
+    fi
   fi # }}}
   # formatting  # {{{
   if $colorsOn; then
@@ -256,17 +259,11 @@ dbgF() { # @@ # {{{
     [[ ! -z $__dbg_id ]] && __dbg_id+=" "
   fi # }}}
   local str=
-  if [[ ! -t 0 && -z $@ ]] && $__dbg_printEmpty; then
-    command cat -
-  else
-    echo "${@@Q}"
-  fi \
-  | while IFS= read -r str; do
-    str="$(eval set -- $str; eval printfc "${str@Q}")"
-    str="${str#$}"
-    str="${str#\'}" && str="${str%\'}"
+  while IFS= read -r str; do
+    str="$(eval printfc "${str@Q}")"
     if $ts; then # {{{
       if $tsFirst || $(vGet $__dbg_prefixVar ts_abs false); then
+        tsFirst=false
         ts_diff="$(time2s --to-HMS)"
       else
         ts_diff="$(time2s --diff-HMS @$ts0)"
@@ -279,7 +276,12 @@ dbgF() { # @@ # {{{
     fi # }}}
     local outStr="$prefix$__dbg_id$ts_diff$str"
     echo "${outStr% }" >>$__dbg_out
-  done
+  done < <( \
+    if [[ ! -t 0 && -z $@ ]] && $__dbg_printEmpty; then
+      command cat -
+    else
+      echo -e "$@"
+    fi)
   if [[ ! -z $__dbg_flagsOut ]]; then set -$__dbg_flagsOut; fi
 } # }}}
 # Level wrappers # {{{

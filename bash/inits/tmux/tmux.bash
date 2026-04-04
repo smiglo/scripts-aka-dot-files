@@ -250,7 +250,7 @@ status_git() { # @@ # {{{
   # TMUX_STATUS_RIGHT_GIT_BRANCH_MAP+=' feature/(.*):F/${BASH_REMATCH[1]}'
   # TMUX_STATUS_RIGHT_GIT_BRANCH_MAP+=' fix/(.*):F/${BASH_REMATCH[1]}'
   # TMUX_STATUS_RIGHT_GIT_BRANCH_MAP+=' test/(.*):T/${BASH_REMATCH[1]}'
-  TMUX_STATUS_RIGHT_GIT_BRANCH_MAP+=" master:m main:m home-work:hw next:n devel:d"
+  TMUX_STATUS_RIGHT_GIT_BRANCH_MAP+=" master:m main:m home-work:hw next:n devel:d trunk:t"
   local changed=false
   for i in $TMUX_STATUS_RIGHT_GIT_BRANCH_MAP; do # {{{
     [[ $b =~ ^${i%%:*}$ ]] || continue
@@ -268,7 +268,7 @@ status_git() { # @@ # {{{
           bShort+="${BASH_REMATCH[1]:0:1}-${BASH_REMATCH[2]}/"
         else
           IFS='-' read -ra p2 <<< "${p1[i]}"
-          for p in ${p2[*]}; do bShort+="${p:0:1}-"; done
+          for p in ${p2[*]}; do bShort+="${p:0:1}"; done
           bShort="${bShort%-}/"
         fi
       done
@@ -322,6 +322,7 @@ status_right_extra() { # @@ # {{{
   local tm_info="$1" tm_time="$2"
   [[ -e $TMP_MEM_PATH/.tz.changed ]] && tm_time= # force to use current TZ
   [[ -z $tm_info ]] && tm_info="$(tmux display-message -pF '#S:#I.#P#D')"
+  [[ -e $RUNTIME_PATH/date.tz ]] && tm_time="$(TZ=$(cat $RUNTIME_PATH/date.tz) date +"%H:%M")"
   [[ -z $tm_time ]] && tm_time="$(date +'%H:%M')"
   local session="${tm_info%%:*}" l= ret= pane_id="%${tm_info##*%}"
   tm_info="${tm_info%\%*}"
@@ -361,13 +362,13 @@ status_right_extra() { # @@ # {{{
       logtime) # {{{
         ${TMUX_STATUS_BAR_USE_LOGLAST:-false} || continue
         [[ $logtime_params == 'false' ]] && continue
-        [[ ! -e $BIN_PATH/misc/log-last.sh ]] && continue
+        [[ ! -e log-last.sh ]] && continue
         if [[ $logtime_params == 'hidden' ]]; then # {{{
           local delta="$((10 * 60))" time_params="$(tmux show-environment -g "TMUX_SB_TIME_PARAMS" 2>/dev/null)"
           time_params="${time_params#*=}"
           [[ ! -z $time_params ]] && eval "$time_params"
           if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]] || $testing; then
-            value=$($BIN_PATH/misc/log-last.sh --tmux %)
+            value=$(log-last.sh --tmux %)
             value="${value/*\#\[fg=/\#\[fg=}"
             value=${value/]*/]}
             tmux set-environment -g "TMUX_SB_TIME_PARAMS" "update_time=$cur_time;value=\"$value\""
@@ -382,7 +383,7 @@ status_right_extra() { # @@ # {{{
             [[ $params == *%* ]] && delta=$((5*60))
             eval "${logtime_params%%|*}"
             if [[ $cur_time -ge $(( $update_time + $delta )) || -z "$value" ]] || $testing; then
-              value=$($BIN_PATH/misc/log-last.sh --tmux --passed --store $params)
+              value=$(log-last.sh --tmux --passed --store $params)
             else
               do_update=false
             fi
@@ -714,7 +715,7 @@ scratch_pane() { # @@ # {{{
 } # }}}
 pasteKey_worker() { # @@ # {{{
   source ~/.bashrc --do-basic
-  local buff="$1" query="$2" v= keys="$(keep-pass.sh --list-all-keys)"
+  local buff="$1" query="$2" v= keys="$(keep-pass --list-all-keys)"
   if [[ ! -z $query ]]; then
     local m="$(echo "$keys" | grep "$query")"
     [[ $(echo "$m" | wc -l) == 1 ]] && v="$m"
@@ -723,14 +724,14 @@ pasteKey_worker() { # @@ # {{{
     v="$( \
       echo "$keys" \
       | eval fzf \
-        --preview="\"keep-pass.sh --key '{1}' --no-intr\"" \
+        --preview="\"keep-pass --key '{1}' --no-intr\"" \
         +m --prompt="\"Key> \"" $([[ ! -z $query ]] && echo "--query=\"$query\"") -0 \
     )"
     [[ $? == 0 && ! -z "$v" ]] || return 1
   fi
-  v="$(keep-pass.sh --key "$v")"
+  v="$(keep-pass --key "$v")"
   [[ ! -z $v ]] || return 1
-  [[ $v == *'..' ]] && v="${v%..}" || v+=""
+  [[ $v == *'..' ]] && v="${v%..}"
   tmux set-buffer -b $buff "$v"
 } # }}}
 pasteKey() { # @@ # {{{
@@ -793,8 +794,13 @@ pasteKey() { # @@ # {{{
     [[ -z $res ]] && break
     sleep 0.5
   done
-  tmux list-buffers -F '#{buffer_name}' | grep -q "^$buff$" \
-    && tmux paste-buffer -d -b "$buff"
+  if tmux list-buffers -F '#{buffer_name}' | grep -q "^$buff$"; then
+    local pane_src_cmd="$(tmux display-message -t %$pane_src -pF '#{pane_current_command}')"
+    tmux save-buffer -b "$buff" $HOME/tmux.buff
+    [[ -z $pane_src_cmd ]] && tmux send-keys "C-k" E
+    tmux paste-buffer -db "$buff"
+    [[ -z $pane_src_cmd ]] && tmux send-keys "C-k" V
+  fi
   return 0
 } # }}}
 preserve_zoom() { # @@ # {{{
@@ -809,7 +815,7 @@ preserve_zoom() { # @@ # {{{
 } # }}}
 new_window() { # {{{
   local currPaneId=$1 path="$2" doSplit=${3:-false}
-  local env_src="$(tmux display-message -p -t $currPaneId -F '#{s/^\$//:#{session_id}}.#{window_id}')"
+  local env_src="$(tmux display-message -p -t $currPaneId -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
   if $doSplit; then
     tmux new-window -a -e ENV_SNAPSHOT_SRC=$ENV_SNAPSHOT_PRE.$env_src -c "$path" \; \
       split-window -v -l 20% -d -c "$path"

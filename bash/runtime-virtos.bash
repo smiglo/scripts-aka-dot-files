@@ -13,7 +13,7 @@ if $IS_DOCKER; then # {{{
     [[ -e $HOME/.ssh ]] || mkdir -p $HOME/.ssh >/dev/null
     [[ ! -e /home/host/.ssh/authorized_keys || -e $HOME/.ssh/authorized_keys ]] || ln -sf /home/host/.ssh/authorized_keys $HOME/.ssh/
     if [[ ! -s $KEEP_PASS_MASTER_KEY ]] && ${KEEP_PASS_MASTER_KEY_SET:-false}; then # {{{
-      $HOME/.bin/misc/keep-pass.sh --set-master-key
+      keep-pass --set-master-key
     fi # }}}
     if [[ -z $HOST_IP ]]; then # {{{
       export HOST_IP="$(ip addr show eth0 2>/dev/null | sed -n '/inet /s/.*inet \([^/]\+\).*/\1/p')"

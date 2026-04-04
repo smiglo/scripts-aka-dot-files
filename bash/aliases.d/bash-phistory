@@ -53,9 +53,9 @@ bash_phistory() { # {{{
 # }}}
 phist () { # @@ # {{{
   local auto_paste= use_colors=true in_pipe=false igncase= use_rem=${BASH_PHIST_USE_REM:-true} tail_n="5000"
-  local use_fzf="$(echo ",$FZF_USAGE," | command grep -o ',\s*PHIST:[^,]\+,' | command grep -o 'true\|false')"
+  eval $FZF_USAGE
+  local use_fzf=${fzfUsageA[phist]:-$FZF_INSTALLED}
   $use_rem && ! type rem >/dev/null 2>&1 && use_rem=false
-  [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
   if [[ $1 == '@@' ]]; then
     case $3 in
     -n) echo "- 100 1000 5000 10000";;

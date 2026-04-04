@@ -1,0 +1,17 @@
+# alt_send_esc = false
+
+[font]
+size = 15
+
+[window]
+option_as_alt = "OnlyRight"
+
+[window.padding]
+x = 2
+y = 2
+
+[colors.primary]
+background = "#101212"
+
+[colors.normal]
+black = "#101212"

@@ -35,8 +35,8 @@ output-to-file() { # @@ # {{{
     if [[ ! -t 1 ]]; then
       use_fzf=false
     else
-      use_fzf="$(echo ",$FZF_USAGE," | grep -o ',\s*OUTPUT-TO-FILE:[^,]\+,' | grep -o 'true\|false')"
-      [[ -z $use_fzf ]] && use_fzf=$FZF_INSTALLED
+      eval $FZF_USAGE
+      use_fzf=${fzfUsageA[out2file]:-$FZF_INSTALLED}
     fi
   fi # }}}
   local use_eval=

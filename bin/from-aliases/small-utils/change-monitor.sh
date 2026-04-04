@@ -30,17 +30,7 @@ _change-monitor() { # @@ # {{{
   local i= k= list= shaLast= sha=
   for i in $toMonitor; do # {{{
     if [[ -d $i ]]; then
-      list+=" $(find "$i" \
-          -name '*.tmp' -prune \
-          -o -name '*.out' -prune \
-          -o -name '*.o'   -prune \
-          -o -name 'Session*.vim'   -prune \
-          -o \( -path '*/.vim/*' \)   -prune \
-          -o \( -path '*/.git/*' \)   -prune \
-          -o \( -path '*/.venv*/*' \) -prune \
-          -o \( -path '*/.tmp/*' \)   -prune \
-          -o -name "$(basename $dst)" -prune \
-          -o -type f -print)"
+      list+=" $(fdfind . --type f "$i/" | grep -v "/$(basename $dst)$")"
     elif [[ -f $i ]]; then
       list+=" $i"
     fi

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  _git_sha_compl -n 30 --cur "$cur" +branches +remote-branches
+  exit 0
+fi # }}}
 rev="HEAD"
 [[ -n $1 && $1 != -* ]] && rev=$1 && shift
 git vimdiff $rev~..$rev "$@"

@@ -336,7 +336,7 @@ _progress() { # @@ # {{{
   cleanChars() { unset charIdx chars; unset -f genChars getChar getLastChar nextChar setCursor; }
   genChars
   local i=0 chpid=
-  trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cvvis || reset; fi; echo >$out; return 0;" INT
+  trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cnorm || reset; fi; echo >$out; return 0;" INT
   if $onRight; then
     [[ ! -z $msg ]] && echo -n "$msg " >>$out
     $useTput && tput sc && tput civis
@@ -441,7 +441,7 @@ _progress() { # @@ # {{{
     esac
   fi # }}}
   if $useTput; then
-    ${TPUT_USE_CVVIS:-true} && tput cvvis || reset
+    ${TPUT_USE_CVVIS:-true} && tput cnorm || reset
   fi
   trap - INT
   $tmux_progress && tmux-progress $tmux_entry end $retVal

@@ -1,2 +1,2 @@
-recomplete ./tmux.bash
+compl-add -o ./tmux.bash
 

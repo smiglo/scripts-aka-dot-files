@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  *)
+    echo "-v --vim"
+    echo "-q --check"
+    echo "-V"
+    ls *.json 2>/dev/null;;
+  esac
+  exit 0
+fi # }}}
+
+mode="diff"
+openVim=false
+verbose=false
+
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -q | --check) mode="check";;
+  -v | --vim) mode="vim";;
+  -V) verbose=true;;
+  *) break;;
+  esac; shift
+done # }}}
+
+f1= f2= fTmp=$TMP_MEM_PATH/diff-$$.json
+if [[ ! -t 0 ]]; then # {{{
+  f2="$1"; shift
+  cat - >"$fTmp"
+  f1="$fTmp" # }}}
+else # {{{
+  f1="$1" f2="$2"
+  shift 2
+fi # }}}
+
+[[ -e $f1 && -e $f2 ]] || die "no such file, $f1, $f2"
+
+case $mode in
+check) # {{{
+  if diff -q <(jq --sort-keys . "$f1") <(jq --sort-keys . "$f2") >/dev/null 2>&1; then
+    echoe $verbose "files the same"
+    exit 0
+  else
+    echoe $verbose "files differ"
+    exit 1
+  fi;; # }}}
+vim) # {{{
+  f1Tmp="f1-${f1#./}"
+  f2Tmp="f2-${f2#./}"
+  f1Tmp="$TMP_MEM_PATH/${f1Tmp//\//%}"
+  f2Tmp="$TMP_MEM_PATH/${f2Tmp//\//%}"
+  jq --sort-keys . "$f1" >"$f1Tmp"
+  jq --sort-keys . "$f2" >"$f2Tmp"
+  diff -q "$f1Tmp" "$f2Tmp" >/dev/null 2>&1 && echoe "files the same" && exit 0
+  sha_f1="$(sha1sum "$f1Tmp")"
+  sha_f2="$(sha1sum "$f2Tmp")"
+  if ! vimdiff "$f1Tmp" "$f2Tmp"; then
+    rm -f "$f1Tmp" "$f2Tmp" "$fTmp"
+    exit 0
+  fi
+  if [[ $f1 != $fTmp ]]; then
+    [[ $(sha1sum "$f1Tmp") == "$sha_f1" ]] || { cp "$f1Tmp" "$f1"; echoe "file $f1 reformatted and updated"; }
+  fi
+  [[ $(sha1sum "$f2Tmp") == "$sha_f2" ]] || { cp "$f2Tmp" "$f2"; echoe "file $f2 reformatted and updated"; }
+  rm -f "$f1Tmp" "$f2Tmp" "$fTmp";; # }}}
+diff) # {{{
+  cmd="colordiff"
+  [[ -t 1 ]] || cmd="diff"
+  $cmd -u <(jq --sort-keys . "$f1") <(jq --sort-keys . "$f2");; # }}}
+esac

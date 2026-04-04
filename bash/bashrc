@@ -19,7 +19,7 @@ export BASHRC_SHELL_START=true
 # Check arguments and do really basics # {{{
 __bashrc_exit() { # {{{
   ${BASHRC_PROFILER:-false} && time-measure -v bashrc_exit
-  local addInstalling=true addReturn=true retVal=0 keep=false
+  local addInstalling=true addReturn=true retVal=0 keep=false attach=false
   local v="unset -f __bashrc_exit;"
   v+=" unset i profi what_to_do RCSTUFF_FORCE RCSTUFF_IN_BASHRC RCSTUFF_ORIG_TERM TIME_MEASURE_PREFIX"
   local vars="${!BASHRC_*}"
@@ -30,6 +30,7 @@ __bashrc_exit() { # {{{
   while [[ ! -z $1 ]]; do
     case $1 in
     -)       addInstalling=false;;
+    --attach) attach=true; addReturn=false;;
     --nr)    addReturn=false;;
     -[0-9])  addReturn=true; retVal="${1#-}";;
     --keep) # {{{
@@ -52,7 +53,18 @@ __bashrc_exit() { # {{{
       unset BASH_XTRACEFD
     fi
   fi # }}}
-  echo "$v"
+  if ! $attach; then
+    echo "$v"
+  else
+    eval "$v" >/dev/null
+    local lastSession=
+    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && lastSession="$(cat $TMP_PATH/.tmux_last_session.$USER)"
+    tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=${TMUX_SESSION_DEFAULT:-'MAIN'}
+    tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=
+    [[ -n $lastSession ]] && lastSession="-t $lastSession"
+    tmux attach $lastSession >/dev/null
+    echo "return 0"
+  fi
 } # }}}
 if [[ -z $BASHRC_PLAIN_INSTALL ]]; then # {{{
   export BASHRC_PLAIN_INSTALL=false
@@ -74,7 +86,6 @@ if $BASHRC_PLAIN_INSTALL; then # {{{
   [[ -e $HOME/.bashrc.nice ]] && eval $(__bashrc_exit)
 fi # }}}
 # Arguments # {{{
-RCSTUFF_ORIG_TERM=$TERM
 RCSTUFF_FORCE=${RCSTUFF_FORCE:-false}
 BASHRC_PARAMS_RUNTIME= BASHRC_PARAMS_COLORS= BASHRC_PARAMS_CFG= BASHRC_PARAMS_ALIASES= BASHRC_PARAMS_COMPLETION=
 what_to_do='basic'
@@ -155,7 +166,6 @@ if $RCSTUFF_FORCE; then # {{{
   if [[ ! -z $BASHRC_RUNTIME_PATH ]]; then
     rm -rf \
       $BASHRC_RUNTIME_PATH/aliases* \
-      $BASHRC_RUNTIME_PATH/completion-list \
       $BASHRC_RUNTIME_PATH/fzf.def* \
       $BASHRC_RUNTIME_PATH/net.status \
       $BASHRC_RUNTIME_PATH/unicode-extra.conf
@@ -174,8 +184,21 @@ elif $BASHRC_USE_FAST_ENV; then # {{{
       bash | '' | reattach-to-user-namespace) set-title --set-window --unlock-force;;
       esac
     fi
-    [[ -n $COMPLETION_BASH ]] && source $COMPLETION_BASH
-    eval $(__bashrc_exit) >/dev/null
+    for iEnvPost in "${ENV_POST_INVOKE[@]}"; do
+      $iEnvPost
+    done
+    unset iEnvPost ENV_POST_INVOKE
+    if [[ -e $COMPLETION_BASH_PATH/bash_completion ]]; then # {{{
+      source $COMPLETION_BASH_PATH/bash_completion
+      if ${BASHRC_GIT_COMPLETION_FIX:-true}; then
+        [[ -e "$COMPLETION_BASH_PATH/completions/git" ]] && source "$COMPLETION_BASH_PATH/completions/git"
+      fi
+    fi # }}}
+    if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1) && ! $IS_VSCODE; then
+      eval $(__bashrc_exit --attach) >/dev/null
+    else
+      eval $(__bashrc_exit) >/dev/null
+    fi
   fi
 fi # }}}
 $BASHRC_DBG && echoe -m bashrc "wtd=[$what_to_do], args=[$@]"
@@ -213,19 +236,6 @@ $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'cfg'
 [[ -e $ALIASES ]] && source $BASH_PATH/aliases $BASHRC_PARAMS_ALIASES
 $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'aliases'
 $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'exports'
-# ZFZ # {{{
-if $FZF_INSTALLED && ! ${RCSTUFF_FZF_INSTALLED:-false}; then
-  case $what_to_do in
-  full | basic)
-    set -o vi
-    if $FZF_INSTALLED; then
-      [[ -e $HOME/.fzf.bash ]] && source $HOME/.fzf.bash ''
-      export RCSTUFF_FZF_INSTALLED=true
-    fi;;
-  esac
-  type _fzf_path_completion >/dev/null 2>&1 || source "$SCRIPT_PATH/bash/inits/fzf/shell/completion.bash" 2>/dev/null
-fi # }}}
-$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'fzf'
 [[ -e $BASH_PATH/runtime-post ]] && source $BASH_PATH/runtime-post $BASHRC_PARAMS_RUNTIME
 $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'r-post'
 [[ -e $BASH_PATH/completion ]] && source $BASH_PATH/completion $BASHRC_PARAMS_COMPLETION
@@ -250,6 +260,7 @@ export PATH="${PATH//:.:/:}"
 export PATH="${PATH//::/:}"
 export PATH="${PATH%:}"
 export PATH="$(remove-dups ".:$PATH" ":")"
+$IS_WSL && export PATH="$(printf "%s" "$PATH" | awk -v RS=':' -v ORS=':' '!/\/mnt/ {print}')"
 export HISTIGNORE="$(remove-dups "$HISTIGNORE" ":")"
 export PHISTORY_IGNORED_COMMANDS="$(remove-dups "$PHISTORY_IGNORED_COMMANDS" ":")"
 # }}}
@@ -277,7 +288,7 @@ if [[ "$what_to_do" == 'full' ]]; then # {{{
     isStartAllowed() { # {{{
       $RCSTUFF_FORCE && return 0
       local prefix='skip' onEnd=0 onFound=1 i=
-      if [[ $RCSTUFF_ORIG_TERM == 'linux' ]]; then
+      if [[ $TERM == 'linux' ]]; then
         prefix='do' onEnd=1 onFound=0
       fi
       set -- all $@
@@ -294,17 +305,17 @@ if [[ "$what_to_do" == 'full' ]]; then # {{{
             [[ $(who | command grep -v "(:" | sort -k5,5 -u | wc -l) == 0 ]] && unset SSH_CLIENT SSH_TTY
           fi
           if [[ ! -n "$SSH_CLIENT" ]]; then
-            source $SCRIPT_PATH/bin/fix-ssh-agent.sh --start-if
+            source $SCRIPT_PATH/bin/fix-ssh-agent.sh start-if
           else
-            source $SCRIPT_PATH/bin/fix-ssh-agent.sh --fix
+            source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
           fi
         else
-          source $SCRIPT_PATH/bin/fix-ssh-agent.sh --fix
+          source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
         fi
       fi # }}}
       # Update repo # {{{
       if $BASHRC_PLAIN_INSTALL && [[ $BASH_EXTRA_FEATURES == *update-repo* ]] && isStartAllowed 'update'; then
-        $SCRIPT_PATH/bin/setup_updater.sh && unset isStartAllowed && exec bash
+        $SCRIPT_PATH/bin/oth/setup-updater.sh && unset isStartAllowed && exec bash
       fi # }}}
       # Messages # {{{
       if [[ $BASH_EXTRA_FEATURES == *messages* && -e "$BASH_PATH/messages.sh" ]]; then
@@ -314,20 +325,22 @@ if [[ "$what_to_do" == 'full' ]]; then # {{{
         fi
         source $BASH_PATH/messages.sh
       fi # }}}
+      if [[ -n $TMUX_SB_WORKER && -x $TMUX_SB_WORKER ]]; then # {{{
+        pgrep -f "$(basename "$TMUX_SB_WORKER")" >/dev/null 2>&1 || $TMUX_SB_WORKER --tmux
+      fi # }}}
+      if [[ -n $REMINDER_MONITOR_CMD && -x $REMINDER_MONITOR_CMD ]]; then # {{{
+        pgrep -f "$(basename "$REMINDER_MONITOR_CMD")" >/dev/null 2>&1 || $REMINDER_MONITOR_CMD monitor --tmux
+      fi # }}}
       # Start TMUX # {{{
       if ${BASHRC_START_TMUX:-true}; then
         # Start tmux if not started or not attached # {{{
-        if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]] && isStartAllowed 'tmux' && ! $IS_VSCODE; then
-          if ! $BASHRC_PLAIN_INSTALL; then
-            ${BASHRC_TMUX_ATTACH:-false} && tmux attach
+        if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]] && isStartAllowed 'tmux' && ! $IS_VSCODE && ! $RCSTUFF_FORCE; then
+          if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1) && ! $IS_VSCODE; then
+            eval $(__bashrc_exit --attach) >/dev/null
+          elif ! $BASHRC_PLAIN_INSTALL; then
+            ${BASHRC_TMUX_ATTACH:-false} && eval $(__bashrc_exit --attach) >/dev/null
           elif ! tmux ls 2>/dev/null | command grep -q "attached"; then
-            if [[ ! -z $TMUX_SB_WORKER && -x $TMUX_SB_WORKER ]]; then # {{{
-              pgrep -f "$(basename "$TMUX_SB_WORKER")" >/dev/null 2>&1 || $TMUX_SB_WORKER --tmux
-            fi # }}}
-            if [[ ! -z $REMINDER_MONITOR_CMD ]]; then # {{{
-              pgrep -f "$(basename "$REMINDER_MONITOR_CMD")" >/dev/null 2>&1 || $REMINDER_MONITOR_CMD
-            fi # }}}
-            unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING isStartAllowed RCSTUFF_ORIG_TERM RCSTUFF_FORCE
+            unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING isStartAllowed RCSTUFF_FORCE
             if [[ ${LINES:-0} -lt 35 || ${COLUMNS:-0} -lt 100 ]] && ${BASHRC_TMUX_WAIT_TO_MAXIMIXE:-true} && $BASHRC_FULL_START && ! $IS_DOCKER && [[ -z $SSH_CONNECTION ]]; then
               read -t ${BASHRC_TMUX_WAIT_TO_MAXIMIXE_TIMEOUT:-2} -s -n1 -p  "Sleeping for a while to give time to maxime window" >/dev/stderr </dev/tty
               echo >/dev/stderr
@@ -336,7 +349,8 @@ if [[ "$what_to_do" == 'full' ]]; then # {{{
             eval $(__bashrc_exit --nr --keep) >/dev/null
             export BASHRC_PLAIN_INSTALL=false
             progress --clean
-            $SCRIPT_PATH/bin/tmux-startup.sh --lock --attach
+            $SCRIPT_PATH/bin/tmux-startup.sh --lock
+            eval $(__bashrc_exit --attach) >/dev/null
           fi
         fi # }}}
       else
@@ -353,7 +367,7 @@ if [[ "$what_to_do" == 'full' ]]; then # {{{
     # }}}
     unset isStartAllowed
   fi # }}}
-  [[ ! -z $BASHRC_RUNTIME_PATH/completion-list ]] && complete | command grep -v "_minimal" >$BASHRC_RUNTIME_PATH/completion-list # }}}
+  # }}}
 elif [[ "$what_to_do" == 'basic' ]]; then # {{{
   if ! $J2_USE_J2_WRAPPER && [[ -d $TICKET_TOOL_PATH ]]; then # {{{
     source $TICKET_TOOL_PATH/ticket-helper-j
@@ -377,4 +391,3 @@ $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'all' -0
 $BASHRC_PROFILER && time-measure -v bashrc_full --msg 'bashrc-full' && time-measure --end
 eval $(__bashrc_exit --nr) >/dev/null
 true
-

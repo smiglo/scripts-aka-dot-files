@@ -105,7 +105,7 @@ _share() { # @@ # {{{
     toExcludeA["$i"]=""
   done < <(echo "$toExclude $toExcludeStored $toExcludeOrig")
   toExclude="${!toExcludeA[*]}" # }}}
-  local hostName="$(hostname | sha1sum | cut -c1-6)"
+  local hostName="$(echo "$HOSTNAME" | sha1sum | cut -c1-6)"
   path[$hostName]="$(echo "${PWD/$HOME/\~}" | base64)"
   rm $cfgFile
   echo "name=\"$name\"" >>$cfgFile

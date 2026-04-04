@@ -3,11 +3,12 @@
 [user] # {{{
   useConfigOnly = true # }}}
 [core] # {{{
+  fsmonitor = false
   editor = vim --fast-save
   pager = less -RXx4
   excludesfile = ~/.gitignore
   autocrlf = input
-  safecrlf = true
+  safecrlf = warn
   whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2 # }}}
 [init] # {{{
   templatedir = ~/.git_template
@@ -25,86 +26,60 @@
   ff = false # }}}
 [alias] # {{{
   adp = add -p
-  backup = !"git-cmds.sh backup"
-  bash-switches = !"git-cmds.sh bash-switches"
+  backup = utils backup
   br = branch
-  cba = !"git-cmds.sh cba"
   c = commit
-  ci = !"git-cmds.sh commit"
-  ci-fast = !"git-cmds.sh commit-fast"
   cia  = commit --all --no-verify
   ciaa = commit --all --amend --reuse-message=HEAD --no-verify
   ciam  = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify"
-  ciamb = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git backup"
   ciamp = !"git diff --cached --exit-code && git add .; git commit --amend --reuse-message=HEAD --no-verify && git push -f --no-verify"
   ciamm = commit --amend --no-verify
-  cim = commit -m
   cf = clang-format
-  clone-bare = !"git-cmds.sh clone-bare"
   co = checkout
   d = diff
   dff = diff --relative
-  dffc = !"git diffc --relative"
-  dffp = !"git diffp --relative"
+  dffc = diffc --relative
+  dffp = diffp --relative
   dffw = diff --relative --word-diff
   diffc = diff --cached
-  dc    = !"git diffc"
+  dc    = diffc
   dl    = diff tmp/sync/last
-  dp    = !"git diffp"
+  dp    = diffp
   f      = fetch
   fr     = fetchr
   felo   = "!git fetch local && git fetch origin"
-  fetchr = !"git-cmds.sh tag_sync fetchr; git fetch && git rreset"
   i    = info -p
-  info = log --pretty=fuller     --date=local    -1
-  init-repo = !"git-cmds.sh init-repo"
-  ll   = log --pretty=date-first --date=relative
-  l    = !"git-cmds.sh log --fzf -l 'log --pretty=date-first --date=relative' --this"
-  lf   = !"git-cmds.sh log --fzf"
-  l2   = log --pretty=l2         --date=local
-  lg   = log --pretty=date-first --date=short --graph --decorate-refs-exclude=refs/tags/tmp/sync/*
-  lga  = log --pretty=date-first --date=short --graph --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes
-  lgaa = log --pretty=date-first --date=short --graph --all
-  ld   = log --pretty=date-first --date=format:'%Y-%m-%d-%H%M%S'
-  lgo   = !"git-cmds.sh log"
-  lgf   = !"git lgo --fzf -m -      -l 'log --pretty=tb --graph --decorate-refs-exclude=refs/tags/tmp/sync/*'"
-  lgfa  = !"git lgo --fzf -m - -b - -l 'log --pretty=tb --graph --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes'"
-  lgfaa = !"git lgo --fzf -m - -b - -l 'log --pretty=tb --graph --all'"
+  info = log --pretty=fuller --date=local -1
+  ll   = log --pretty=date-first --date=relative --graph
+  l    = lgo --fzf -l 'log --pretty=default --date=relative' --this
+  lf   = lgo --fzf
+  l2   = log --pretty=l2 --date=local
+  lg   = log --pretty=default --date=short --graph --decorate-refs-exclude=refs/tags/tmp/sync/*
+  lga  = log --pretty=default --date=short --graph --exclude=refs/remotes/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes
+  lgaa = log --pretty=default --date=short --graph --all
+  ld   = log --pretty=date-first --date=short
+  lgf   = lgo --fzf -m -      -l 'log --pretty=default --graph --decorate-refs-exclude=refs/tags/tmp/sync/*'
+  lgfa  = lgo --fzf -m - -b - -l 'log --pretty=default --graph --exclude=refs/remotes/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes'
+  lgfaa = lgo --fzf -m - -b - -l 'log --pretty=default --graph --all'
+  log-hide-tags = config --add log.excludeDecoration "refs/tags/*"
+  log-show-tags = config --unset-all log.excludeDecoration "refs/tags/*"
   melddiff = difftool -y -t meld
   m  = merge
-  m-a = merge --abort
-  m-c = merge --continue
   me = merge
   mt = mergetool
-  ps = push --recurse-submodules=check
   pul = push -f local
   pulo = "!git push -f local && git push origin"
-  range-diff2 = !"git-cmds.sh range-diff"
   r = reset
   rb = rebase
-  rba = rebase -i --autosquash --rebase-merges
-  rb-a = rebase --abort
-  rb-c = rebase --continue
-  rb-s = rebase --skip
-  rbb = !"git-cmds.sh rbb"
-  re = reset
-  rH = !"git-cmds.sh tag_sync resetH && git reset --hard"
-  reho = "!stash=$(git s push) && git-cmds.sh tag_sync resetH && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD) && git s pop $stash"
-  remote-backup = !"git-cmds.sh remote-backup $@"
-  restash = !"git stash pop && git stash"
-  rreset = !"git-cmds.sh rreset"
+  root = rev-parse --show-toplevel
+  rH = !"git tag-sync resetH && git reset --hard"
   s = stash-toggle
-  stash-toggle = !"git-cmds.sh stash_toggle"
   sh = show -w
-  sr = sync --reset
   st = status --short -b
-  sync = !"git-cmds.sh sync"
-  userset = !"git-cmds.sh userset"
-  wt = worktree
   vimdiff = difftool -y -t vimdiff --trust-exit-code
   vd = vimdiff
   vdp = vimdiff-p
-  wipe = !"git-cmds.sh commit-fast 'WIPE SavePoint' >/dev/null 2>&1 && git reset HEAD~1 --hard >/dev/null 2>&1"
+  wt = worktree
   # }}}
 [bash] # {{{
   showDirtyState = true
@@ -116,12 +91,13 @@
   autosetuprebase = always
   sort = -committerdate # }}}
 [format] # {{{
-  pretty = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%ad)%C(reset) %C(blue)<%an>%C(reset) # }}}
+  pretty = default # }}}
 [pretty] # {{{
-  tb = %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(dim green)(%ad)%C(reset) %C(blue)<%an>%C(reset)
-  short2 = %h %s
-  l2 = %C(auto)%h,%C(reset)%C(auto)%d%C(reset) %C(green)%cs,%C(reset) %C(dim green)%cr%C(reset)%n  %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
-  date-first = %C(dim green)%ad:%C(reset) %C(auto)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset) # }}}
+  default = %C(172)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
+  default-date = %C(172)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(65)(%ad)%C(reset) %C(blue)<%an>%C(reset)
+  short2 = %C(172)%h%C(reset) %C(white)%s%C(reset)
+  l2 = %C(172)%h,%C(reset)%C(auto)%d%C(reset) %C(green)%cs,%C(reset) %C(65)%cr%C(reset)%n  %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
+  date-first = %C(65)%ad:%C(reset) %C(172)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset) # }}}
 [push] # {{{
   default = current # }}}
 [fetch] # {{{
@@ -151,6 +127,8 @@
   insteadOf = git://github # }}}
 # tools # {{{
 # diff tools # {{{
+[diff "json"] # {{{
+  textconv = jq --sort-keys . # }}}
 [diff "zip"] # {{{
   textconv = unzip -v # }}}
 [diff "pdf"] # {{{

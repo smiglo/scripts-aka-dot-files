@@ -1,13 +1,95 @@
 #!/usr/bin/env bash
 
-ups=
-if [[ -z $1 ]]; then
-  ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
-elif [[ $1 == */* ]]; then
-  ups="$1"
-else
-  ups="$1/$(git rev-parse --abbrev-ref HEAD)"
-fi
-[[ -n $ups ]] || exit 1
-git-cmds.sh tag_sync -r $ups
-git push -f ${ups/\// }
+is-remote() { # {{{
+  local remote="$1" remotes="${2:-$(git remote)}"
+  echo "$remotes" | grep -q "^$remote$"
+} # }}}
+if [[ $1 == '@@' ]]; then # {{{
+  filter-branches() { # {{{
+    local remote="$1" all_branches="${2:-$(git branch --all | cut -c3- | sed -n -e '/HEAD/d' -e '/^remotes\//s/remotes\///p')}"
+    echo "$all_branches" | sed -n -e '/^'"$remote"'\//s/[^/]*\///p'
+  } # }}}
+  case $2 in
+  -b) # {{{
+    shift 2
+    all_branches="$(git branch --all | cut -c3- | sed -n -e '/HEAD/d' -e '/^remotes\//s/remotes\///p')"
+    remotes="$(git remote)"
+    for r; do
+      is-remote $r "$remotes" || continue
+      all_branches="$(filter-branches "$r" "$all_branches")"
+      break
+    done
+    echo "topic/"
+    echo "$all_branches";; # }}}
+  -r) # {{{
+    git remote;; # }}}
+  *) # {{{
+    if is-remote "$2"; then
+      filter-branches "$2"
+      echo "topic/"
+    else
+      echo "-b -r -n -f"
+      git remote
+    fi;; # }}}
+  esac
+  exit 0
+fi # }}}
+remote=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+remote=${remote%%/*}
+branch=$(git rev-parse --abbrev-ref HEAD)
+remote_branch=
+params=
+showCmd=false
+subm=false
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -b) # {{{
+    remote="${2%%/*}"
+    remote_branch="${2#*/}";; # }}}
+  -f) # {{{
+    subm=true;; # }}}
+  -r) # {{{
+    remote="$2"; shift;; # }}}
+  -n) # {{{
+    params+="-n"; showCmd=true;; # }}}
+  -*) # {{{
+    params+=" $1";; # }}}
+  */*) # {{{
+    r="${1%%/*}"
+    if is-remote "$r"; then
+      remote="$r"
+      remote_branch="${1#*/}"
+    else
+      remote_branch="$1"
+    fi
+    break;; # }}}
+  *) # {{{
+    remote="$1"; shift
+    [[ ! -z "$1" ]] && remote_branch="$1"
+    break;; # }}}
+  esac; shift
+done # }}}
+[[ -z $remote_branch ]] || branch="$branch:$remote_branch"
+( $showCmd && set -xv
+  git push -f $params $remote $branch
+) || exit $?
+if $subm && [[ $(git rev-parse --show-toplevel) == "$SCRIPT_PATH" ]]; then # {{{
+  shopt -s nullglob
+  for p in $PROFILES_PATH/*; do
+    p=$(readlink -f $p)
+    [[ $p == $SCRIPT_PATH/* ]] || continue
+    (
+      cd $p
+      remote=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+      remote=${remote%%/*}
+      branch=$(git rev-parse --abbrev-ref HEAD)
+      shaR="$(git log -1 --format=%H $remote/$branch)"
+      shaL="$(git log -1 --format=%H $branch)"
+      [[ $shaR == $shaL ]] && exit
+      echoe "${p##*/}: pushing to $remote"
+      git tag-sync puf -r $shaR
+      $showCmd && set -xv
+      git push -f $params $remote $branch
+    )
+  done
+fi # }}}

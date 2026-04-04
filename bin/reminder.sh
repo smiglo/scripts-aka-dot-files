@@ -29,7 +29,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
     case $mode in
     add) # {{{
       case $((num - i)) in
-      1) echo "TIME DATE.TIME DATE_FMT 10:00";;
+      1) echo "TIME DATE.TIME DATE_FMT 10:00 MMDD.HHMM DD.HHMM";;
       2) echo "INFO DESCRIPTION";;
       esac;; # }}}
     clean) # {{{
@@ -131,6 +131,8 @@ reminderLauncher="$REMINDER_LAUNCHER"
 narrowToMinutes=${REMINDER_NARROW_TO_MINUTES:-true}
 mode=
 now=$EPOCHSECONDS
+tzOrig=$TZ
+[[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(cat $RUNTIME_PATH/date.tz)
 
 case $1 in # {{{
 lfe) shift; set -- list -fe "$@";;
@@ -229,7 +231,7 @@ countdown) # {{{
   keyPressed=false
   IFS=$'\t' read -r ts info < <(getNext)
   (( $? == 0 )) || exit 0
-  trap "tput rc; tput cvvis; echo; exit 0;" INT
+  trap "tput rc; tput cnorm; echo; exit 0;" INT
   tput sc; tput civis
   declare -Ax colorMap=( ["step1"]="ok" ["step2"]="info" ["step3"]="imp" ["step4"]="red" ["at"]="gray" ["cancelled"]="gray")
   for ((now = EPOCHSECONDS, diff = ts - now; diff >= 0; now = EPOCHSECONDS, diff = ts - now)); do # {{{
@@ -269,7 +271,7 @@ countdown) # {{{
       nextUpdateTS=$now
     fi # }}}
   done # }}}
-  tput rc; tput cvvis; echo
+  tput rc; tput cnorm; echo
   $errOnKey && $keyPressed && exit 1
   exit 0;; # }}}
 CountDown) # {{{
@@ -279,7 +281,7 @@ CountDown) # {{{
   tput sc; tput civis
   while true; do # {{{
     if read ts info < <(getNext); then # {{{
-      tput rc; tput cvvis; tput el
+      tput rc; tput cnorm; tput el
       $0 countdown --loop infinity --err-on-key || break
       tput sc; tput civis
       continue
@@ -289,7 +291,7 @@ CountDown) # {{{
       read -s -n1 -t${waitTime#*x} key && case ${key,,} in q) break 2;; '') continue 2;; esac
     done # }}}
   done # }}}
-  tput rc; tput cvvis; echo
+  tput rc; tput cnorm; echo
   $0 clean;; # }}}
 edit) # {{{
   rm -f $tmpFile
@@ -384,13 +386,15 @@ load) # {{{
           .time,
           (.days | if type == "array" then join(",") else . end),
           .description // "-",
-          .condition // "-"
+          .condition // "-",
+          .disabled // false
         ] | @tsv' $scheduleFile
     else
       sed -e '/^#/d' -e '/^\s*$/d' $scheduleFile
     fi \
-  | while IFS=$'\t' read -r time days info cond; do
-    echoe $verbose -c "parsing entry: '$time' on '$days' with '$info', '$cond'"
+  | while IFS=$'\t' read -r time days info cond disabled; do
+    $disabled && continue
+    echoe $verbose -c "parsing entry: '$time' on '$days' with '$info', '$cond', $disabled"
     info="${info:--}"
     cond="${cond:--}"
     daysFor=
@@ -465,6 +469,8 @@ monitor) # {{{
     sleep-precise -s
     now=$EPOCHSECONDS timeout=1
     (( now - heartbeatTS < heartbeatInterval )) || { DBG - "heartbeat after $((now - heartbeatTS))s"; heartbeatTS=$now; }
+    TZ=$tzOrig
+    [[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(cat $RUNTIME_PATH/date.tz)
     while true; do # {{{
       [[ -e $reminderFile ]] || { DBG "no-file"; timeout=${Sleeps[no-file]}; break; }
       IFS=$'\t' read ts info < <(getNext)

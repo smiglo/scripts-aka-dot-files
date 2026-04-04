@@ -173,8 +173,10 @@ _sshh-add() { # @@ # {{{
       done
     fi
     ret+=" $(ssh-add --help 2>&1 | grep  ^"  -" | cut -d' ' -f3)"
-    ret+=" --lock -v --keys --tmux-lock --tmux-unlock"
-    ret+=" -l -d -D"
+    if [[ $cur == -* ]]; then
+      ret+=" --lock -v --keys --tmux-lock --tmux-unlock"
+      ret+=" -l -d -D"
+    fi
     echo $ret
     return 0
   fi # }}}
@@ -240,7 +242,7 @@ _sshh-add() { # @@ # {{{
     [[ " $keys " != *" $key "* ]] && keys+=" $key"
   done # }}}
   local fSshAsk=$TMP_MEM_PATH/ssh-ask.sh pList=
-  which keep-pass.sh >/dev/null 2>&1 && pList="$(keep-pass.sh --list-all-keys)"
+  pList="$(keep-pass --list-all-keys)"
   local kList="$(ssh-add -l | awk '{print $2}')"
   for k in $keys; do # {{{
     [[ $k == -* ]] && continue
@@ -255,16 +257,16 @@ _sshh-add() { # @@ # {{{
       local kpName=$kName
       echo "$pList" | grep -q "^$kpName$" || kpName=$kDir/$kName
       echo "$pList" | grep -q "^$kpName$" || kpName=
-      if [[ ! -z $kpName ]] && keep-pass.sh --get --key $kName --no-intr >/dev/null 2>&1; then
+      if [[ ! -z $kpName ]] && keep-pass --get --key $kpName --no-intr >/dev/null 2>&1; then
         if [[ ! -e $fSshAsk ]]; then
           cat >$fSshAsk <<-'EOF'
 						#!/usr/bin/env bash
 						read k
-						keep-pass.sh --get --key $k --no-intr
+						keep-pass --get --key $k --no-intr
 					EOF
           chmod +x $fSshAsk
         fi
-        cmd="SSH_ASKPASS_REQUIRE=force SSH_ASKPASS=$fSshAsk $cmd <<<$kName"
+        cmd="SSH_ASKPASS_REQUIRE=force SSH_ASKPASS=$fSshAsk $cmd <<<$kpName"
       fi
     fi
     echormf -f? && echorv -M 1 cmd

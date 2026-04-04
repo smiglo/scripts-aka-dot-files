@@ -2,7 +2,7 @@
 
 # Followings have to be set in env:
 # export ARDUINO_DIR=$HOME/Applications/Arduino.app/Contents/Java
-# export ARDMK_DIR=$MY_PROJ_PATH/oth/Arduino-Makefile
+# export ARDMK_DIR=$ENV_PATH/oth/Arduino-Makefile
 
 # Common:
 CTAGS_PATH    = $(ARDUINO_DIR)/tools-builder/ctags/5.8-arduino11/ctags

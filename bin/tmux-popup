@@ -35,7 +35,7 @@ _tmux-popup() { # @@ # {{{
   if [[ ! -z $cmd ]]; then # {{{
     declare -A TMUX_POPUP_CMD
     TMUX_POPUP_CMD[gb]="git backup"
-    TMUX_POPUP_CMD[gst]="git-cmds.sh gitst --all -v; true # @W"
+    TMUX_POPUP_CMD[gst]="git utils gitst --all -v; true # @W"
     if which htop >/dev/null 2>&1; then
       TMUX_POPUP_CMD[h]="htop # @NC @NW"
     fi

@@ -24,8 +24,8 @@ if [[ -z $TMUX_STATUS_RIGHT_EXTRA_SORTED ]]; then
   done < <(echo -e "$TMUX_STATUS_RIGHT_EXTRA" | tr ' ' '\n' | command grep -v '^#' | sort -ut ':' -k2,2 | sort -nt ':' -k1,1)
   unset l TMUX_STATUS_RIGHT_EXTRA
 fi # }}}
-if is-installed -w keep-pass.sh && ! is-installed --no-cache -t pp; then # {{{
-  source "$(dirname $(readlink -f $(which keep-pass.sh)))/keep-pass-pp.sh"
+if ! is-installed --no-cache -t kp-pp; then # {{{
+  source "$SCRIPT_PATH/bash/inits/keep-pass/keep-pass-env.sh"
 fi # }}}
 # Source profiles' runtimes # {{{
 for profi in $BASH_PROFILES_FULL; do
@@ -111,82 +111,157 @@ if [[ ! -z "$UNICODE_EXTRA_CHARS_FILE" && ! -e "$UNICODE_EXTRA_CHARS_FILE" ]]; t
   unset i
 fi # }}}
 # fzf override # {{{
-__fzf_select__() { # {{{
-  local walker="file,dir,follow,hidden" dirMode=false
-  FZF_DEFAULT_COMMAND=${FZF_CTRL_T_COMMAND:-}
-  local opts="${FZF_CTRL_T_OPTS-}"
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --cmd) # {{{
-      FZF_DEFAULT_COMMAND="$2"; shift;; # }}}
-    --dir) # {{{
-      dirMode=true
-      walker="dir,follow,hidden"
-      FZF_DEFAULT_COMMAND=${FZF_ALT_C_COMMAND:-}
-      opts="${FZF_ALT_C_OPTS-}";; # }}}
-    *) break;;
-    esac; shift
-  done # }}}
-  FZF_DEFAULT_OPTS=$(__fzf_defaults "--reverse --walker=$walker --scheme=path" "$opts -m")
-  (
-    FZF_DEFAULT_COMMAND="$FZF_DEFAULT_COMMAND | sed 's|^\./||'"
-    p="$PWD"; origPath="$PWD"
-    while true; do
+if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
+  eval "$(fzf --bash)"
+  __fzf_handler_git() { # {{{
+    mode=$1; shift
+    case $mode in
+    init) # {{{
+      p="$PWD"; origPath="$PWD"
+      prompt="> "
+      expectList="";; # }}}
+    loop) # {{{
+      ;; # }}}
+    expect) # {{{
+      local key=$1
+      case $key in
+      esac;; # }}}
+    result) # {{{
+      cat - | while read -r item; do
+        [[ "$item" =~ .*\|([0-9a-f]{5,})\|.* ]] || continue
+        printf "%s\n" "${BASH_REMATCH[1]}"
+      done;; # }}}
+    preview) # {{{
+      local line="$1"
+      [[ "$line" =~ .*\|([0-9a-f]{5,})\|.* ]] || return
+      local sha=${BASH_REMATCH[1]}
+      git log --pretty=fuller --date=local -1 "$sha"
+      echo; echo '    ----'
+      git diff $sha~..$sha --name-status | sed -e 's/^/    /'
+      echo '    ----'; echo
+      git diff -w $sha~..$sha \
+      | if which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi;; # }}}
+    esac
+  } # }}}
+  __fzf_handler_fs() { # {{{
+    local mode=$1; shift
+    local key_upper="ctrl-u" key_home="ctrl-h" key_into="ctrl-e" key_orig="ctrl-o"
+    case $mode in
+    init) # {{{
+      p="$PWD"; origPath="$PWD"
+      expectList="--expect $key_upper --expect $key_home --expect $key_into --expect $key_orig";; # }}}
+    loop) # {{{
       command cd "$p"
       prompt="> "
-      [[ $PWD != $origPath ]] && prompt="${PWD/$HOME/\~}> "
-      key_upper="ctrl-u" key_home="ctrl-h" key_into="ctrl-e" key_orig="ctrl-o"
-      list="$(FZF_DEFAULT_OPTS_FILE='' $(__fzfcmd) "$@" --prompt "$prompt" --expect $key_upper --expect $key_home --expect $key_into --expect $key_orig)"
-      case $(echo "$list" | sed -n '1p') in
-      $key_upper) p="$(cd ..; pwd)"; continue;;
-      $key_home)  p="$HOME"; continue;;
-      $key_orig)  p="$origPath"; continue;;
-      $key_into)  # {{{
+      [[ $PWD != $origPath ]] && prompt="${PWD/$HOME/\~}> ";; # }}}
+    expect) # {{{
+      local key=$1
+      case $key in
+      $key_upper) p="$(cd ..; pwd)";;
+      $key_home)  p="$HOME";;
+      $key_orig)  p="$origPath";;
+      $key_into)
         p="$(echo "$list" | sed -n '2p')"
         $dirMode || p="$(dirname "$p")"
-        p="$PWD/$p"
-        continue;; # }}}
-      esac
-      echo "$list" | sed '1d' |
-      while read -r item; do # {{{
-        printf '%q\n' "$PWD/$item"  # escape special chars
-      done # }}}
-      break
-    done
-  ) | sed -e 's|'"$PWD/"'||' | tr '\n' ' '
-} # }}}
-__fzf-dir-widget() { # {{{
-  local selected="$(__fzf_select__ --dir "$@")"
-  READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
-  READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
-} # }}}
-__fzf_cd__() { # {{{
-  __fzf-dir-widget "$@"
-} # }}}
-__fzf-history() { # {{{
-  local rlPoint=$READLINE_POINT
-  READLINE_POINT=
-  READLINE_LINE="$( history -r; __fzf_history__)"
-  READLINE_POINT=$rlP
-} # }}}
-if $FZF_INSTALLED && ! [[ -z $PS1 ]]; then # {{{
-  bind -m vi-command -x '"\C-r": __fzf-history'
-  bind -m vi-insert  -x '"\C-r": __fzf-history'
-  bind -m vi-command -x '"\C-t": "__fzf-dir-widget"'
-  bind -m vi-insert  -x '"\C-t": "__fzf-dir-widget"'
-  bind -m vi-insert     '"\ec": "\C-gcd\C-m"'
-  bind -m vi-command -x '"\ed": __fzf_cd__'
-  bind -m vi-insert  -x '"\ed": __fzf_cd__'
-fi # }}}
+        p="$PWD/$p";;
+      esac;; # }}}
+    result) # {{{
+      cat - | while read -r item; do
+        printf '%q\n' "$PWD/$item"
+      done \
+      | sed -e 's|'"$PWD/"'||';; # }}}
+    preview) # {{{
+      local f="$1"
+      [[ -e $f || ( -h $f && -f $(readlink -f $f) ) ]] || return
+      cat.sh -p $f;; # }}}
+    esac
+  } # }}}
+  __fzf_select__() { # {{{
+    local dirMode=false
+    FZF_DEFAULT_COMMAND="${FZF_CTRL_T_COMMAND:-} | sed 's|^\./||'"
+    local optsDef="--reverse ${FZF_CTRL_T_OPTS-}" opts="-m --ansi" optsWalker="--walker=file,dir,follow,hidden --scheme=path"
+    local handler="__fzf_handler_fs"
+    while [[ ! -z $1 ]]; do # {{{
+      case $1 in
+      --cmd) # {{{
+        FZF_DEFAULT_COMMAND="$2"; shift
+        handler="";; # }}}
+      --dir) # {{{
+        dirMode=true
+        optsWalker="--walker=dir,follow,hidden --scheme=path"
+        FZF_DEFAULT_COMMAND="${FZF_ALT_C_COMMAND:-} | sed 's|^\./||'"
+        optsDef="${FZF_ALT_C_OPTS-}";; # }}}
+      --opts-walker) # {{{
+        optsWalker="$2"; shift;; # }}}
+      --opts) # {{{
+        opts="$s"; shift;; # }}}
+      --handler) # {{{
+        handler="$2"; shift;; # }}}
+      *) break;;
+      esac; shift
+    done # }}}
+    FZF_DEFAULT_OPTS=$(__fzf_defaults "$optsWalker" "$optsDef $opts")
+    (
+      export -f $handler
+      expectList= prompt=
+      $handler init
+      fzfCmd="$(__fzfcmd)"
+      while true; do
+        $handler loop
+        list="$(FZF_DEFAULT_OPTS_FILE='' $fzfCmd "$@" --prompt "$prompt" --preview "$handler preview {}" $expectList)"
+        if [[ -n $expectList ]]; then
+          local expectKey=$(echo "$list" | sed -n '1p')
+          if [[ -n $expectKey ]]; then
+            $handler expect $expectKey
+            continue
+          fi
+          list="$(echo "$list" | sed '1d')"
+        fi
+        [[ -n $list ]] && echo "$list"
+        break
+      done
+    ) | $handler result | tr '\n' ' '
+  } # }}}
+  __fzf-file-widget() { # {{{
+    local selected="$(__fzf_select__ "$@")"
+    [[ -n $selected ]] || return 0
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
+  } # }}}
+  __fzf-dir-widget() { # {{{
+    local selected="$(__fzf_select__ --dir "$@")"
+    [[ -n $selected ]] || return 0
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
+  } # }}}
+  __fzf-cd-widget() { # {{{
+    __fzf-dir-widget "$@"
+  } # }}}
+  __fzf-git-widget() { # {{{
+    local selected="$(__fzf_select__ --cmd "git log --graph --oneline --decorate --color --format='%C(240)|%C(172)%h%C(240)|%C(reset)%C(auto)%d %C(dim white)%s%C(reset)' --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes" --handler "__fzf_handler_git")"
+    [[ -n $selected ]] || return 0
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
+  } # }}}
+  __fzf-history() { # {{{
+    local rlPoint=$READLINE_POINT
+    READLINE_POINT=
+    READLINE_LINE="$( history -r; __fzf_history__)"
+    READLINE_POINT=$rlP
+  } # }}}
+  bind -m vi-command -r "\C-r"
+  bind -m vi-insert  -r "\C-r"
+  bind -m vi-command -x '"\C-w\C-e": "__fzf-git-widget"'
+  bind -m vi-insert  -x '"\C-w\C-e": "__fzf-git-widget"'
+  bind -m vi-command -x '"\C-w\C-r": "__fzf-history"'
+  bind -m vi-insert  -x '"\C-w\C-r": "__fzf-history"'
+  bind -m vi-command -x '"\C-t"    : "__fzf-file-widget"'
+  bind -m vi-insert  -x '"\C-t"    : "__fzf-file-widget"'
+  bind -m vi-insert     '"\ec"     : "\C-gcd\C-m"'
+  bind -m vi-command -x '"\ed"     : "__fzf-cd-widget"'
+  bind -m vi-insert  -x '"\ed"     : "__fzf-cd-widget"'
+fi 2>/dev/null # }}}
 # }}}
-if ${BASHRC_GIT_COMPLETION_FIX:-true} && ! is-installed -t __git_wrap__git_main; then # {{{
-  __git_compl_f="${BASHRC_GIT_COMPLETION:-/usr/share/bash-completion/completions/git}"
-  [[ -e $__git_compl_f ]] && source $__git_compl_f
-  unset __git_compl_f
-fi # }}}
-if $IS_MAC; then # {{{
-  [[ -z $PS1_CURSOR_COLOR ]] && PS1_CURSOR_COLOR=false
-fi # }}}
 if ${TMUX_POPUP:-false}; then # {{{
   if ! $TMUX_POPUP_SILENT; then
     echoe -m popup "s=[$s]"

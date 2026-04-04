@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 
+if [[ $1 == '@@' ]]; then # {{{
+  _git_sha_compl -n 30 --cur "$cur" +branches
+  exit 0
+fi # }}}
 git shst "$@" | vim --Fast -

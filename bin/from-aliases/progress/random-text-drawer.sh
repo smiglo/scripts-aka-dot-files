@@ -64,7 +64,7 @@ _random-text-drawer() { # @@ # {{{
     if [[ $s =~ ^'0x'[0-9A-F]+$ || $s =~ ^'0x'[0-9a-f]+$ ]]; then
       isHex=true
     fi
-    trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cvvis || reset; fi; echo >$out; return 0;" INT
+    trap "if $useTput; then  ${TPUT_USE_CVVIS:-true} && tput cnorm || reset; fi; echo >$out; return 0;" INT
     $useTput && tput sc && tput civis
     # }}}
   else # {{{
@@ -129,7 +129,7 @@ _random-text-drawer() { # @@ # {{{
   else
     printf "\n"
     if $useTput; then
-      ${TPUT_USE_CVVIS:-true} && tput cvvis || reset
+      ${TPUT_USE_CVVIS:-true} && tput cnorm || reset
     fi
     trap - INT
   fi # }}}

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -f | --format)
+    echo "%h %H %s %b %B";;
+  *)
+    echo "h H s b B %h %H"
+    echo "-f --format"
+    echo "--pretty=full --pretty=fuller --full --fuller"
+    echo "sha sha-full t title s subject d descr td title+descr"
+    _git_sha_compl +branches;;
+  esac
+  exit 0
+fi # }}}
+
+format="%H" sha="@" params=
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  h | H | s | b | B) format="%$1";;
+  %*) format="$1";;
+  sha) format="%h";;
+  sha-full) format="%H";;
+  s | t | title | subject) format="%s";;
+  d | descr) format="%b";;
+  td | title+descr) format="%B";;
+  -f | --format) format="%2"; shift;;
+  --full | --fuller) params+=" --pretty=${1#--}";;
+  -*) params+=" $1";;
+  *) sha="$1";;
+  esac; shift
+done # }}}
+[[ -z $params ]] && params="--format=$format"
+git log $params -1 $sha | \
+if [[ -t 1 ]]; then
+  tee >(xclip --put)
+else
+  cat -
+fi

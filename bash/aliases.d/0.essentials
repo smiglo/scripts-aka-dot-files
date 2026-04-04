@@ -156,7 +156,7 @@ die() { # {{{
 } # }}}
 remove-dups() { # {{{
   local sep="${2:-:}"
-  printf "%s" "$1" | /usr/bin/awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
+  printf "%s" "$1" | awk -v RS=$sep -v ORS=$sep '!($0 in a) {a[$0]; print}'
 } # }}}
 # epochSeconds() # {{{
 if [[ -z $EPOCHSECONDS ]]; then
@@ -194,11 +194,15 @@ env-snapshot() { # @@ # {{{
       source $ENV_SNAPSHOT/$snap_i 2>$errOut
     done
     if [[ $- == *i* ]]; then
-      [[ -e $ENV_SNAPSHOT/bind.glob ]] && source  $ENV_SNAPSHOT/bind.glob
+      [[ -e $ENV_SNAPSHOT/bind.glob ]] && source $ENV_SNAPSHOT/bind.glob
     fi
+    local __promptCommand="${PROMPT_COMMAND[0]}"
+    unset PROMPT_COMMAND
+    export PROMPT_COMMAND="$__promptCommand"
     history -r
     return 0;; # }}}
   save) # {{{
+    command mkdir -p $ENV_SNAPSHOT
     command mkdir $ENV_SNAPSHOT/setting >/dev/null 2>&1 || return 1
     if [[ ! -e $ENV_SNAPSHOT/set ]] || $force; then
       shopt | awk '/on$/ {print "shopt -s", $1} /off$/ {print "shopt -u", $1 }' >$ENV_SNAPSHOT/bash
@@ -208,11 +212,15 @@ env-snapshot() { # @@ # {{{
       v="i profi what_to_do RCSTUFF_FORCE RCSTUFF_IN_BASHRC RCSTUFF_ORIG_TERM TIME_MEASURE_PREFIX $vars"
       v+=" snap_i errOut force p pp v vars"
       v="${v// /\\|}"
+      local __promptCommand="${PROMPT_COMMAND[0]}"
+      unset PROMPT_COMMAND
+      export PROMPT_COMMAND="$__promptCommand"
+      unset __promptCommand
       declare -p | \
         sed \
           -e '/^declare -[^ ]\?r/d' \
           -e '/^declare -[^ ]\? BASH_\(ALIASES\|ARGC\|ARGV\|ARGV0\|CMDS\|COMMAND\|COMPAT\|COMPLETION_VERSINFO\|LAST_ERR\|LINENO\|REMATCH\|SOURCE\|SUBSHELL\|VERSION\)=/d' \
-          -e '/^declare -[^ ]\? \(BASHPID\|PPID\|\|_\|PS0_time\|PS1\|PWD\|OLDPWD\|EPOCHSECONDS\|EPOCHREALTIME\|TMUX_PANE\)=/d' \
+          -e '/^declare -[^ ]\? \(BASHPID\|PPID\|\|_\|PS0_time\|PS1\|PWD\|OLDPWD\|EPOCHSECONDS\|EPOCHREALTIME\|TMUX_PANE\|TERM\)=/d' \
           -e '/^declare -[^ ]\? \(BASHRC_PROFILER\|BASHRC_DBG\|ENV_SNAPSHOT\)=/d' \
           -e '/^declare -[^ ]\? \(BASH\|FUNCNAME\|DIRSTACK\|DIRS\|LINENO\|LINES\|COLUMNS\|PIPESTATUS\|RANDOM\|ROWS\|SHELL\|SHLVL\|SRANDOM\)=/d' \
           -e '/^declare -[^ ]\? BASHRC_TRACE[^=]*=/d' \
@@ -220,13 +228,26 @@ env-snapshot() { # @@ # {{{
           -e '/^declare -[^ ]\? READLINE_[^=]*=/d' \
           -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\)[^=]*=/d' \
           -e '/^declare -[^ ]\? BASH_PHISTORY_\(LAST\|TODAY\|TODAY_LINE\)=/d' \
+          -e '/^declare -[^ ]\? SSH_\(CLIENT\|CONNECTION\)=/d' \
           -e '/^declare -[^ ]\? \('"$v"'\)="/d' \
           -e 's/^declare /declare -g /' \
           >$ENV_SNAPSHOT/env
-      declare -f  >$ENV_SNAPSHOT/func
-      complete -p >$ENV_SNAPSHOT/compl
-      alias       >$ENV_SNAPSHOT/alias
-      for snap_i in vi vi-command vi-insert; do
+      if [[ $ENV_SNAPSHOT == *.main ]]; then
+        sed -i '/^declare -[^ ]\? PS1_STATUS=/d' $ENV_SNAPSHOT/env
+      fi
+      declare -f |
+        sed \
+          -e '/^__bashrc_exit ()/s/__bashrc_exit/__bashrc_exit_tmp/' \
+          >$ENV_SNAPSHOT/func
+      complete -p | while read line; do
+        if [[ "$line" =~ .*\ -F\ +(_.*)\ +(.*)$ ]]; then
+          local f=${BASH_REMATCH[1]} cmd=${BASH_REMATCH[2]}
+          [[ $f == _$cmd ]] && continue
+        fi
+        echo "$line"
+      done >$ENV_SNAPSHOT/compl
+      alias >$ENV_SNAPSHOT/alias
+      for snap_i in vi vi-command vi-insert emacs; do
         (
           bind -m $snap_i -p | sed '/^#\|self-insert/d'
           bind -m $snap_i -s

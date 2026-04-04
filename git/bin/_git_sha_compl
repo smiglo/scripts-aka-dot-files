@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  exit 0
+fi # }}}
+
+cur= n= branches=false branches_remote=false tags=false refs=
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  --cur) cur="$2"; shift;;
+  -n) n="$2";;
+  +branches) branches=true;;
+  +remote-branches) branches_remote=true;;
+  +tags) tags=true;;
+  esac; shift
+done # }}}
+if [[ -n $cur && $cur =~ ^[0-9a-f]{2,}$ ]]; then # {{{
+  refs="$(git log --all --format=%h | grep "^$cur")"
+  [[ -n $refs ]] && echo "$refs"
+fi # }}}
+if [[ -n $n && -z $refs ]]; then # {{{
+  git log -n $n --pretty='%h'
+fi # }}}
+if $branches; then # {{{
+  git branch | cut -c3-
+  # git for-each-ref refs/heads/ | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/heads/||'
+fi # }}}
+if $branches_remote; then # {{{
+  for o in $(git remote); do
+    case $o in
+    local | origin);;
+    *) continue;;
+    esac
+    git for-each-ref --sort=-committerdate refs/remotes/$o | awk '{print $3}' | sed -e '/HEAD/d' -e 's|refs/remotes/||' | tail -n 3
+  done
+fi # }}}
+if $tags; then # {{{
+  git tag
+fi # }}}

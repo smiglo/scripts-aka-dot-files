@@ -2,32 +2,103 @@
 # vim: fdl=0
 
 import-module echor
-import-module compl-short
+import-module time2s time-tools
 
-_brun() { # @@ # {{{
+exec-verbose() { # {{{
+  declare -a hide=()
+  local verbose=${verbose:-$BRUN_VERBOSE} dry=${dry:-$BRUN_DRY} dumpOutput=${BRUN_DUMP:-false}
+  local dumpFile=${BRUN_DUMP_FILE:-$TMP_MEM_PATH/brun.dump} dumpLastLine=
+  local foldIn="# {{" foldOu="# }}"; foldIn+="{"; foldOu+="}" addFold=false
+  while [[ -n $1 ]]; do # {{{
+    case $1 in
+    true | false) verbose=$1;;
+    --dry=*) dry=${1#--dry=};;
+    -h=*) hide+=( ${1#-h=} );;
+    --add-fold) addFold=true;;
+    --dump) dumpOutput=true;;
+    --no-dump) dumpOutput=false;;
+    --put-header)
+      shift
+      local tStart=$EPOCHSECONDS
+      echo "${PWD/$HOME/\~}$ $@$($addFold && echo " $foldIn")" >>$BRUN_LOG_FILE
+      if $dumpOutput; then
+        echo "${PWD/$HOME/\~}$ $@ # at $(date +$DATE_FMT -d @$tStart) $foldIn" >>$dumpFile
+      fi
+      echo $tStart
+      return 0;;
+    --put-return)
+      shift
+      local now=$EPOCHSECONDS msg= err=${1:-?} tStart=${2:-$now}
+      shift 2
+      if $dumpOutput; then
+        local lastLine=$1
+        echo "# ret: $err, took: $(time2s --to-hms $((now - tStart))) $foldOu" >>$dumpFile
+        msg=", dumped to $dumpFile$([[ -n $lastLine ]] && echo ":$lastLine")"
+      fi
+      echo "# ret: $err, took: $(time2s --to-hms $((now - tStart))) since $(date +$DATE_FMT -d @$tStart)$msg$($addFold && echo " $foldOu")" >>$BRUN_LOG_FILE
+      return 0;;
+    --) shift; break;;
+    *) break;;
+    esac; shift
+  done # }}}
+  declare -a cmd=( "$@" ) cmdDisp=()
+  if (( ${#hide[*]} )); then # {{{
+    for c in ${!cmd[*]}; do
+      for i in ${!hide[*]}; do
+        cmdDisp+=( "${cmd[$c]//${hide[$i]}/***}" )
+      done
+    done # }}}
+  else # {{{
+    cmdDisp=( "${cmd[@]}" )
+  fi # }}}
+  $dry && verbose=true
+  echoe $verbose "${cmdDisp[@]}"
+  $dry && return
+  (
+    local err=0 tStart="$(exec-verbose --put-header "${cmdDisp[@]}")"
+    trap "exec-verbose --put-return CANCELED \$tStart \$dumpLastLine; exit 1;" INT
+    if ! $dumpOutput; then
+      "${cmd[@]}"
+      err=$?
+    else
+      dumpLastLine=$(wc -l $dumpFile)
+      "${cmd[@]}" 2>&1 | tee -a $dumpFile
+      err=${PIPESTATUS[0]}
+    fi
+    exec-verbose --put-return $err $tStart $dumpLastLine
+    return $err
+  )
+  return
+}
+export -f exec-verbose # }}}
+load-env() { # must be in eval $(load-env) # {{{
+  if [[ -e $BRUN_ENV_FILE ]]; then
+    cat $BRUN_ENV_FILE
+  fi
+}
+export -f load-env # }}}
+brun-brun() { # @@:new # {{{
+  local isOk=${BRUN_ENABLED[brun]:-true}
   if [[ $1 == '@@' ]]; then # {{{
-    if [[ $2 == --shorts ]]; then # {{{
-      local f=$(get-file-list -t -1 '*.cpp')
-      [[ -z $f ]] && f=$(get-file-list -t -1 '*.c')
-      [[ ! -z $f ]] && echo "lo --loop -lpthread $f"
-      return 0
-    fi # }}}
-    case $3 in
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    case $2 in
     --conf) echo "${!BRUN_CONF_*}" | sed 's/BRUN_CONF_//g' | tr 'A-Z' 'a-z' ;;
     --check-files) echo "@@-f";;
     *)
-      echo "-- -V -G -R -r -l --conf -c --run --no-run --loop --check-files -s -v --clang --no-clear"
-      echo "-lpthread"
+      if [[ $cur == -* ]]; then
+        echo "-- -V -G -R -r -l --conf -c --run --no-run --loop --check-files -s -v --clang --no-clear"
+        echo "-lpthread"
+      fi
       echo "$(get-file-list '*.c') $(get-file-list '*.cpp') $(get-file-list '*.sh')"
-      [[ $2 != -- ]] && compl-short --shorts
       ;;
     esac
     return 0
   fi # }}}
+  $isOk || eval $(die "no brun support")
   local f= p= o= clangCmd="clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W" run=true compile=true new_params= args= s= loop=false loop_delay=${BRUN_LOOP_DELAY:-2} key= modTime= sum= err= autoClear=true
   local valgrind=false gdb=false
   local filesToCheck="$BRUN_CHECK_FILES"
-  eval set -- $(compl-short --shorts --args "$@")
   case $@ in # {{{
   --\ *) set -- --run ${BRUN_PARAMS%% -- *} $@;;
   -c | --no-run) set -- -c ${BRUN_PARAMS%% -- *};;
@@ -155,7 +226,7 @@ _brun() { # @@ # {{{
       echormf "# Compiling as"
       echormf "\$ $(echo "${clangCmd/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
       rm -f $o
-      $clangCmd $f $p
+      exec-verbose $clangCmd $f $p
       err=$?
     fi # }}}
     if $run && [[ $err == 0 ]]; then # {{{
@@ -169,7 +240,7 @@ _brun() { # @@ # {{{
       fi
       echormf "# Running as"
       echormf "\$ $cmd ${args:-\b}"
-      $cmd $args
+      exec-verbose $cmd $args
       err_run=$?
       err=$err_run
     fi # }}}
@@ -205,5 +276,449 @@ _brun() { # @@ # {{{
   [[ ! -z $state ]] && eval $(echo export $state)
   return $err
 } # }}}
-_brun "$@"
+brun-env() { # @@:new # {{{
+  local isOk=${BRUN_ENABLED[env]:-true}
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    echo "${!BRUN_ENV[*]:----}"
+    return 0
+  fi # }}}
+  $isOk || eval $(die "no env support")
+  local i=
+  for i in ${@:-${!BRUN_ENV[*]}}; do
+    echo "export ${i//[-:]/_}=\"${BRUN_ENV[$i]}\""
+  done
+} # }}}
+brun-cmake() { # @@:new # {{{
+  local isOk=${BRUN_ENABLED[cmake]:-true} # {{{
+  if ! is-installed -w cmake; then
+    isOk=false
+  elif [[ ! -e ./CMakeLists.txt ]]; then
+    isOk=false
+  fi # }}}
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    case $2 in
+    -b | --build-dir)
+      echo "build build-dev"
+      find . -maxdepth 1  -type d -name 'build*';;
+    -j)
+      echo "1 2 $(nproc)";;
+    *)
+      if [[ $cur == -* ]]; then
+        echo "-b --build-dir -v -vv --release - --regen -j -J --dry -IINIT-PARAM -RRUN-PARAM"
+        ${BRUN_CMAKE_CLEAN:-true} && echo "-c --clean"
+        ${BRUN_CMAKE_INSTALL:-true} && echo "-i --install"
+        for o in $BRUN_CMAKE_INIT_DEFAULT; do
+          echo "${o%%=*}="
+        done
+        echo "$BRUN_CMAKE_INIT_EXTRA"
+      fi
+      echo "${!BRUN_CMAKE_ARG_MAP[*]}"
+      (( ${#BRUN_CMAKE_INIT_OPT[*]} > 0 )) && printf "+%s " "${!BRUN_CMAKE_INIT_OPT[@]}";;
+    esac
+    return
+  fi # }}}
+  $isOk || eval $(die "no cmake project")
+  local clean=false install=false bdir= buildType="${BRUN_CMAKE_BUILD_TYPE:-Debug}" regenerate=false
+  local verbose=${BRUN_VERBOSE:-false} dry=${BRUN_DRY:-false} verb2=false
+  local paramsInit= paramsRun=${BRUN_CMAKE_RUN:---parallel}
+  [[ $paramsRun == "-" ]] && paramsRun=
+  is-installed -w ccache && paramsInit+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+  paramsInit+=" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  while [[ -n $1 ]]; do # {{{
+    for arg in ${BRUN_CMAKE_ARG_MAP[$1]:-$1}; do
+      case $arg in
+      -b | --build-dir) bdir="$2"; shift;;
+      -b=* | --build-dir=*) bdir="${1#*=}"; shift;;
+      -c | --clean) clean=${BRUN_CMAKE_CLEAN:-true};;
+      -i | --install) install=true;;
+      -j) paramsRun+=" -j $2"; shift;;
+      -J) paramsRun+=" -j $(nproc)";;
+      -v) verbose=true;;
+      -vv) verbose=true; verb2=true;;
+      --dry) dry=true; verbose=true;;
+      --release) regenerate=true; buildType="Release";;
+      --regen) regenerate=true;;
+      -I*) paramsInit+=" ${1#-I}"; regenerate=true;;
+      -R*) paramsRun+=" ${1#-R}";;
+      +*) regenerate=true; paramsInit+=" ${BRUN_CMAKE_INIT_OPT[${arg#+}]}";;
+      *) regenerate=true; break 2;;
+      esac
+    done; shift
+  done # }}}
+  ${BRUN_CMAKE_INIT_ADD_BUILD_TYPE:-true} && paramsInit+=" -DCMAKE_BUILD_TYPE=$buildType"
+  paramsInit+=" $BRUN_CMAKE_INIT_DEFAULT"
+  [[ -z $bdir ]] && bdir="$(find . -maxdepth 1  -type d -name 'build*' | xargs -r ls -trd | head -n1)"
+  [[ -z $bdir ]] && bdir="build"
+  $clean && ! $dry && rm -rf $bdir
+  if $verb2; then # {{{
+    trap "set +xv; trap - RETURN" RETURN
+    set -xv
+  fi # }}}
+  if [[ ! -e $bdir ]] || $regenerate; then # {{{
+    [[ $@ == "-" ]] && shift
+    exec-verbose cmake -B $bdir $paramsInit $@ || return $?
+    $dry || [[ -z $BRUN_CMAKE_INIT_CMD ]] || eval "$BRUN_CMAKE_INIT_CMD"
+  fi # }}}
+  exec-verbose cmake --build $bdir $paramsRun || return $?
+  [[ -e $bdir/compile_commands.json ]] && cp $bdir/compile_commands.json ./
+  if $install && ${BRUN_CMAKE_INSTALL:-true}; then # {{{
+    exec-verbose cmake --install $bdir || return $?
+  fi # }}}
+} # }}}
+brun-ctest() { # @@:new # {{{
+  local isOk=${BRUN_ENABLED[ctest]:-true} # {{{
+  if ! is-installed -w ctest; then
+    isOk=false
+  elif [[ ! -e ./CMakeLists.txt ]]; then
+    isOk=false
+  elif [[ -z "$(find . -maxdepth 1 -type d -name 'build*' -print -quit)" ]]; then
+    isOk=false
+  fi # }}}
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    case $2 in
+    -b | --build-dir)
+      find . -maxdepth 1 -type d -name 'build*';;
+    -d | --test-dir)
+      find . -maxdepth 2 -type d -path './build*/test';;
+    -j)
+      echo "1 2 $(nproc)";;
+    *)
+      echo "-b --build-dir -d --test-dir -p --progress -j -J -o -rr -v -vv -m --make --no-make --clean - -V --dry"
+      echo "$BRUN_CTEST_COMPL"
+      (( ${#BRUN_CTEST_TESTS[*]} > 0 )) && printf "+%s " "${!BRUN_CTEST_TESTS[@]}";;
+    esac
+    return
+  fi # }}}
+  $isOk || eval $(die "no ctest")
+  local testDir= bDir= params="$BRUN_CTEST_PARAMS" tests= retry=false makeFirst=false
+  local verbose=${BRUN_VERBOSE:-false} dry=${BRUN_DRY:-false} verb2=false
+  [[ -z $1 ]] && makeFirst=${BRUN_CTEST_MAKE_FIRST:-false}
+  declare -a makeParams=( "brun-cmake" )
+  while [[ -n $1 ]]; do # {{{
+    case $1 in
+    -b | --build-dir) bdir="$2"; shift;;
+    -d | --test-dir) testDir="$2"; shift;;
+    -m | --make) makeFirst=true;;
+    -p | --progress) params+=" --progress";;
+    -j) params+=" -j $2"; (( $2 > 1 )) && retry=true; shift;;
+    -J) params+=" -j $(nproc)"; retry=true;;
+    -o) params+=" --output-on-failure";;
+    -v) verbose=true;;
+    -vv) verbose=true; verb2=true;;
+    --clean) makeFirst=true; makeParams+=( --clean );;
+    --dry) dry=true; verbose=true;;
+    --no-make) makeFirst=false;;
+    -rr) params+=" --rerun-failed --output-on-failure -V -j1";;
+    -*) params+=" $1";;
+    -) ;;
+    +*) tests+=" -R ${BRUN_CTEST_TESTS[${1#+}]}";;
+    *) tests+=" -R $1";;
+    esac; shift
+  done # }}}
+  if $makeFirst; then # {{{
+    [[ -n $BRUN_CTEST_MAKE_PARAMS ]] && makeParams+=( "${BRUN_CTEST_MAKE_PARAMS[@]}" )
+    [[ -n $bdir ]] && makeParams+=( --build-dir "$bdir" )
+    exec-verbose "${makeParams[@]}" || return 1
+  fi # }}}
+  if [[ -z $testDir ]]; then # {{{
+    if [[ -z $bdir ]]; then
+      if [[ -e ./build && -e ./build-dev ]]; then
+        bdir="build-dev"
+      else
+        bdir="$(find . -maxdepth 1 -type d -name 'build*' | xargs -r ls -trd | head -n1)"
+      fi
+      [[ -z $bdir ]] && bdir="build"
+    fi
+    testDir="${BRUN_CTEST_DIR:-$bdir/test}"
+  fi # }}}
+  if ! $dry; then
+    [[ -e $testDir ]] || eval $(die "no test dir: $testDir")
+    [[ -n $BRUN_CTEST_INIT_CMD ]] && eval "$BRUN_CTEST_INIT_CMD"
+  fi
+  if $verb2; then # {{{
+    trap "set +xv; trap - RETURN" RETURN
+    set -xv
+  fi # }}}
+  exec-verbose ctest --test-dir $testDir $params $tests && return
+  ! $dry || return
+  $retry || return 1
+  echoe "some tests failed, re-running them with j1"
+  exec-verbose ctest --test-dir $testDir $params --rerun-failed --output-on-failure -j1 $tests
+} # }}}
+brun-clang() { # @@:new # {{{
+  local gitRoot=$(git rev-parse --show-toplevel 2>/dev/null) isGit=true
+  [[ -n $gitRoot ]] || isGit=false
+  local isOk=${BRUN_ENABLED[clang]:-true} # {{{
+  if ! is-installed -w clang-format; then
+    isOk=false
+  else
+    ( [[ -e ./.clang-format ]] || ( $isGit && [[ -e $gitRoot/.clang-format ]] ) ) || isOk=false
+  fi # }}}
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    echo "f fix"
+    [[ $cur == -* ]] && $isGit && [[ $PWD == $gitRoot/* ]] && echo "-r --root"
+    return
+  fi # }}}
+  $isOk || eval $(die "no clang-formatter file")
+  local dry=${BRUN_DRY:-true} goRoot=false
+  while [[ -n $1 ]]; do # {{{
+    case $1 in
+    f | fix) dry=false;;
+    -r | --root) goRoot=true;;
+    esac; shift
+  done # }}}
+  local params=
+  $dry && params+=" --dry-run --Werror" || params+=" -i"
+  $isGit && $goRoot && cd "$gitRoot"
+  if $isGit; then
+    git ls-files -- '*.cpp' '*.c' '*.h' '*.hpp'
+  else
+    fdfind --type f ".*\.(c|cpp|h|hpp)$"
+  fi | xargs clang-format $params
+  if (( $? == 0 )); then
+    echoe "clang: ok"
+  fi
+} # }}}
+brun-run() { # @@:new # {{{
+  local origOrder=
+  if [[ -n $BRUN_RUN_TARGETS ]] && (( ${#BRUN_RUN_TARGETS[*]} == 1 && ${!BRUN_RUN_TARGETS[*]} == 0 )); then # {{{
+    local i=
+    origOrder="$BRUN_RUN_TARGETS"
+    for i in $BRUN_RUN_TARGETS; do
+      BRUN_RUN_TARGETS[$i]="$i"
+      [[ -z $BRUN_RUN_TARGETS_DEFAULT ]] && BRUN_RUN_TARGETS_DEFAULT=$i
+    done
+    unset BRUN_RUN_TARGETS[0]
+  fi # }}}
+  local isOk=${BRUN_ENABLED[run]:-true} # {{{
+  (( ${#BRUN_RUN_TARGETS[*]} > 0 )) || isOk=false # }}}
+  if [[ $1 == '@@' ]]; then # {{{
+    [[ $2 == '?' ]] && { $isOk; return; }
+    $isOk || { echo "---"; return; }
+    case $2 in
+    -b | --build-dir)
+      find . -maxdepth 1 -type d -name 'build*';;
+    *)
+      echo "${!BRUN_RUN_TARGETS[*]}"
+      [[ $cur == -* ]] && echo "-a --all -c --continue -s --stop -b --build-dir -gdb -";;
+    esac
+    return
+  fi # }}}
+  $isOk || eval $(die "no targets specified")
+  local dieP="-b" targets= bdir= gdb=false
+  declare -a args=()
+  while [[ -n $1 ]]; do # {{{
+    case $1 in
+    -b | --build-dir) bdir="$2"; shift;;
+    -c | --continue) dieP="-c";;
+    -s | --stop) dieP="-b";;
+    -a | --all) targets=${origOrder:-${!BRUN_RUN_TARGETS[*]}};;
+    -gdb) gdb=true;;
+    -) shift; args=( "$@" ); shift $#;;
+    *) targets+=" $1";;
+    esac; shift
+  done # }}}
+  [[ -z $targets ]] && targets="${BRUN_RUN_TARGETS_DEFAULT:-${!BRUN_RUN_TARGETS[*]}}"
+  [[ -z $bdir ]] && bdir="$(find . -maxdepth 1 -type d -name 'build*' | xargs -r ls -trd | head -n1)"
+  [[ -e $bdir ]] || eval $(die "no build dir")
+  local t= tt= err=0
+  if $gdb; then # {{{
+    declare -a verif=( $targets )
+    (( ${#verif[*]} == 1 )) || eval $(die "in gdb, provide just one target")
+  fi # }}}
+  for t in $targets; do # {{{
+    tt=$(find $bdir -type f -executable -name "${BRUN_RUN_TARGETS[$t]}")
+    [[ -e $tt ]] || { err=1; eval $(die $dieP "exec for $t not found"); }
+    declare -a cmd=( "$tt" "${args[@]}" )
+    $gdb && cmd=( gdb -ex 'break main' -ex 'run' "$tt" "${args[@]}" )
+    "${cmd[@]}" || { err=1; eval $(die $dieP "execution of $t failed: ${cmd[@]}"); }
+  done # }}}
+  return $err
+} # }}}
 
+# initialization # {{{
+export BRUN_VERBOSE=false
+export BRUN_DRY=false
+export BRUN_DUMP=false
+export BRUN_CFG_PATH=${BRUN_CFG_PATH:-$APPS_CFG_PATH/brun}
+export BRUN_CFG_NAME=
+declare -A BRUN_CFG_MAP=()
+export BRUN_DEFAULT_COMMAND=
+declare -A BRUN_ENABLED=()
+export BRUN_LOG_FILE="$TMP_MEM_PATH/brun.log"
+export BRUN_SHELL_HIST_FILE="$TMP_PATH/brun-shell.history"
+declare -A BRUN_SHORTCUT=()
+BRUN_SHORTCUT[br]="brun-brun"
+BRUN_SHORTCUT[m]="brun-cmake"
+BRUN_SHORTCUT[t]="brun-ctest"
+BRUN_SHORTCUT[r]="brun-run"
+declare -A BRUN_ENV=()
+export BRUN_ENV_FILE="$TMP_MEM_PATH/brun_env.$PPID"
+export BRUN_CMAKE_INIT_CMD=
+export BRUN_CMAKE_INIT_DEFAULT=
+export BRUN_CMAKE_INIT_EXTRA=
+declare -A BRUN_CMAKE_INIT_OPT=()
+declare -A BRUN_CMAKE_ARG_MAP=()
+export BRUN_CTEST_COMPL=
+declare -A BRUN_CTEST_TESTS=()
+export BRUN_CTEST_INIT_CMD=
+export BRUN_CTEST_MAKE_FIRST=
+export BRUN_CTEST_MAKE_PARAMS=
+declare -A BRUN_RUN_TARGETS=()
+declare -A commands=()
+for f in $(declare -F | sed -n '/ brun-.*/s/.*brun-//p'); do
+  commands+=" brun-$f"
+done
+[[ -e $BRUN_CFG_PATH/conf.sh ]] && source $BRUN_CFG_PATH/conf.sh
+[[ -e $BRUN_CFG_PATH ]] && commands+=" $(find -L $BRUN_CFG_PATH -type f -executable -name 'brun-*.sh')"
+[[ -e ./.brun.conf ]] && source ./.brun.conf
+[[ -e $BRUN_EXT_PATH/conf.sh ]] && source $BRUN_EXT_PATH/conf.sh
+[[ -e $BRUN_EXT_PATH ]] && commands+=" $(find -L $BRUN_EXT_PATH -type f -executable -name 'brun-*.sh')"
+if [[ -z $BRUN_CFG_NAME ]]; then # {{{
+  BRUN_CFG_NAME="${PWD##*/}"
+  BRUN_CFG_NAME="${BRUN_CFG_MAP[$BRUN_CFG_NAME]:-$BRUN_CFG_NAME}"
+fi # }}}
+if [[ $BRUN_CFG_NAME != '-' ]]; then # {{{
+  if [[ -e $BRUN_EXT_PATH/$BRUN_CFG_NAME.conf ]]; then
+    source $BRUN_EXT_PATH/$BRUN_CFG_NAME.conf
+  elif [[ -e $BRUN_CFG_PATH/$BRUN_CFG_NAME.conf ]]; then
+    source $BRUN_CFG_PATH/$BRUN_CFG_NAME.conf
+  fi
+fi # }}}
+# internal # {{{
+for c in $commands; do
+  if [[ $c == "brun-"* ]]; then
+    k="${c#brun-}"
+  else
+    k="${c##*/brun-}"
+  fi
+  k="${k%.sh}"
+  ${BRUN_ENABLED[$k]:-true} || continue
+  commands[$k]="$c"
+done
+unset commands[0] # }}}
+# shortcuts # {{{
+for s in ${!BRUN_SHORTCUT[*]}; do
+  commands[$s]="${BRUN_SHORTCUT[$s]}"
+done # }}}
+getCommands() { # {{{
+  local i= external=false cmd=$1
+  [[ $1 == --external ]] && external=true && cmd=
+  for i in ${!commands[*]}; do
+    if $external; then
+      [[ "${commands[$i]}" != brun-* ]] && echo "$i"
+    else
+      if [[ -n $cmd ]]; then
+        [[ "${commands[$i]}" == $cmd ]] && echo "$i"
+      else
+        [[ "${commands[$i]}" == brun-* ]] && echo "${commands[$i]}"
+      fi
+    fi
+  done | sort -u
+} # }}}
+if [[ -z $BRUN_DEFAULT_COMMAND ]]; then # {{{
+  if [[ -n $BRUN_CMD_DEFAULT ]]; then
+    BRUN_DEFAULT_COMMAND="${commands[$BRUN_CMD_DEFAULT]:-$BRUN_CMD_DEFAULT}"
+  else
+    BRUN_DEFAULT_COMMAND="brun-brun"
+    [[ -e ./CMakeLists.txt ]] && BRUN_DEFAULT_COMMAND="brun-cmake"
+  fi
+fi # }}}
+# }}}
+
+declare -p BRUN_ENV >$BRUN_ENV_FILE
+err=0
+trap "rm -f $BRUN_ENV_FILE; exit \$err;" INT TERM EXIT
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  shift; cmd=
+  onlySwitches=true
+  for i in ${@: 2}; do
+    case $i in
+    --* | '');;
+    *) onlySwitches=false; cmd=$i; break;;
+    esac
+  done
+  if [[ $cmd == '-' ]]; then # {{{
+    if is-installed $BRUN_DEFAULT_COMMAND; then
+      $BRUN_DEFAULT_COMMAND @@ "$@"
+    else
+      echo "---"
+    fi
+    rm -f $BRUN_ENV_FILE
+    exit # }}}
+  elif [[ -n $cmd && $cmd != '--'* && -n ${commands[$cmd]} ]]; then # {{{
+    ${commands[$cmd]} @@ "$@"
+    exit
+  fi # }}}
+  if $onlySwitches; then # {{{
+    for cmd in $(getCommands); do
+      $cmd @@ ? && getCommands $cmd
+    done
+    getCommands --external
+    [[ $cur == -* ]] && echo "--dry --verbose --dump --shell --log-file"
+    echo "-"
+  fi # }}}
+  if is-installed $BRUN_DEFAULT_COMMAND; then
+    $BRUN_DEFAULT_COMMAND @@ "$@"
+  fi
+  exit
+fi # }}}
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  --dry) BRUN_DRY=true; BRUN_VERBOSE=true;;
+  --dump) BRUN_DUMP=true; BRUN_VERBOSE=true;;
+  --verbose) BRUN_VERBOSE=true;;
+  --log-file) BRUN_LOG_FILE="$2"; shift;;
+  --shell) # {{{
+    compl="$($0 @@)"
+    err=0
+    while true; do
+      input="$($SCRIPT_PATH/bin/oth/a-shell.sh \
+        --prompt "brun" \
+        --hist-file "$BRUN_SHELL_HIST_FILE" \
+        --completion "$compl" \
+        --err $err)"
+      case $input in
+      '' | exit) break;;
+      esac
+      brun $input
+      err=$?
+      echo "$input" >>$BRUN_SHELL_HIST_FILE
+    done
+    exit 0;; # }}}
+  *) break;;
+  esac; shift
+done # }}}
+if [[ -n $1 && -n ${commands[$1]} ]]; then
+  cmd="$1"; shift
+  ${commands[$cmd]} "$@"
+else
+  [[ $1 == '-' ]] && shift
+  is-installed $BRUN_DEFAULT_COMMAND || die "command '$BRUN_DEFAULT_COMMAND' not found"
+  $BRUN_DEFAULT_COMMAND "$@"
+fi
+err=$?
+
+# sample config: # {{{
+# BRUN_EXT_PATH="..."
+# BRUN_CMAKE_INIT_DEFAULT="-DSYSROOT_PATH=$SYSROOT_PATH"
+# BRUN_CMAKE_INIT_EXTRA="-DENABLE_TESTS=ON -DDISCOVER_CT=ON -DENABLE_DEMO_APP=ON"
+# BRUN_CMAKE_INIT_OPT[tests]="-DENABLE_TESTS=ON -DDISCOVER_CT=ON"
+# BRUN_CMAKE_INIT_OPT[demo]="-DENABLE_DEMO_APP=ON"
+# BRUN_CMAKE_INIT_CMD="( ln -sf ./docs/.../src.json; )"
+# BRUN_CMAKE_ARG_MAP["CT"]="--clean +tests"
+# BRUN_CMAKE_ARG_MAP["T"]="+tests"
+# BRUN_CTEST_INIT_CMD="( cd \$testDir; ln -sf ../../docs/.../src.json; )"
+# BRUN_RUN_TARGETS="utApp ctApp"
+# or: BRUN_RUN_TARGETS[ut]="utApp"
+#     BRUN_RUN_TARGETS[ct]="ctApp"
+#     BRUN_RUN_TARGETS_DEFAULT="ut"
+# # }}}

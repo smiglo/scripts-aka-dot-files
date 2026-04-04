@@ -6,10 +6,6 @@ if ${RCSTUFF_COMPLETION_INSTALLED:-false}; then
   [[ $1 == '--force' ]] || ${RCSTUFF_FORCE:-false} || return 0
 fi
 BASHRC_COMPLETION_FULL=true
-if [[ -e $BASHRC_RUNTIME_PATH/completion-list ]]; then
-  source $BASHRC_RUNTIME_PATH/completion-list
-  [[ $1 == '--force' ]] || BASHRC_COMPLETION_FULL=false
-fi
 [[ $1 == '--force' ]] && shift
 ${RCSTUFF_FORCE:-false} && BASHRC_COMPLETION_FULL=true
 export RCSTUFF_COMPLETION_INSTALLED=true
@@ -66,107 +62,92 @@ if $BASHRC_COMPLETION_FULL; then # {{{
     for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
       if [[ -e $BIN_PATH/vims/$i ]]; then
         while complete -r $i >/dev/null 2>&1; do :; done
-        complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim $i
+        complete $COMPLETE_DEFAULT_PARAMS -D -F _completion_vim $i
       fi
     done
-    complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim vim-session
+    complete $COMPLETE_DEFAULT_PARAMS -D -F _completion_vim vim-session
   }
   # }}}
-  # Brew & Mac-Ports # {{{
-  if $IS_MAC; then
-    if type brew 1>/dev/null 2>&1; then
-      if [[ -e /usr/local/etc/bash_completion ]]; then
-        source <(sed -n '/^\(have()\|__ltrim_colon_completions\)/,/^}/p' /usr/local/etc/bash_completion)
-      fi
-      declare -F have >/dev/null 2>&1 && export -f have
-      export -f __ltrim_colon_completions
-      if [[ -e /usr/local/etc/profile.d/bash_completion.sh ]]; then
-        source /usr/local/etc/profile.d/bash_completion.sh
-      fi
-      unset cf
-    fi
-  fi # }}}
-  # Completion for git aliases defined in git-cmds.sh # {{{
-  for ii in $($SCRIPT_PATH/git/git-cmds.sh --comply); do
-    eval "_git_${ii}() { _completion_generic; }"
+  # Completion for git aliases defined in git-extra-completion.sh # {{{
+  for ii in $($SCRIPT_PATH/git/git-extra-completion.sh --list); do
+    eval "_git_${ii}() { compl-gen; }"
+  done
+  for ii in $(cd $SCRIPT_PATH/git/bin; ls *); do
+    f=${ii#git-} && f=${f//[-]/_}
+    grep -q "@@" $SCRIPT_PATH/git/bin/$ii || continue
+    eval "_git_$f() { compl-gen; }"
   done
   # }}}
   # Set generic completion # {{{
   COMPLETION_GENERIC_UTILS_OLD+=" gitst"
-  for ii in $COMPLETION_GENERIC_UTILS_OLD $TO_INSTALL_BIN_MISC; do # {{{
-    which $ii >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $ii # || echoe -s "Util [$ii] not found"
+  for ii in $COMPLETION_GENERIC_UTILS_OLD; do # {{{
+    which $ii >/dev/null 2>&1 && compl-add --old $ii # || echoe -s "Util [$ii] not found"
   done # }}}
   for ii in $COMPLETION_GENERIC_UTILS; do # {{{
-    which $ii >/dev/null 2>&1 && complete $COMPLETE_DEFAULT_PARAMS -F compl-gen $ii # || echoe -s "Util [$ii] not found"
+    which $ii >/dev/null 2>&1 && compl-add --new $ii # || echoe -s "Util [$ii] not found"
   done # }}}
   for ii in $(echo "$COMPLETION_GENERIC_FUNCTIONS" | tr ' ' '\n' | sort -u | tr '\n' ' '); do # {{{
     if type $ii >/dev/null 2>&1; then
-      complete -r $ii >/dev/null 2>&1
-      complete $COMPLETE_DEFAULT_PARAMS -F compl-gen $ii
+      compl-add --new $ii
     else
       echoe -s "Function [$ii] not found"
     fi
   done # }}}
   for ii in $(echo "$COMPLETION_GENERIC_FUNCTIONS_OLD" | tr ' ' '\n' | sort -u | tr '\n' ' '); do # {{{
     if type $ii >/dev/null 2>&1; then
-      complete -r $ii >/dev/null 2>&1
-      complete $COMPLETE_DEFAULT_PARAMS -F _completion_generic $ii
+      compl-add --old $ii
     else
       echoe -s "Function [$ii] not found"
     fi
   done # }}}
   unset COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS COMPLETION_GENERIC_UTILSCOMPLETION_GENERIC_FUNCTIONS_OLD
-  for ii in $HOME/.bin/*.sh; do # {{{
-    compl-add "${ii##*/}"
+  for ii in $BIN_PATH/*.sh; do # {{{
+    case $(readlink -f $ii) in
+    $SCRIPT_PATH/* | $RUNTIME_PATH/* | $PRJ_PATH/* | $TOOLS_PATH/*)
+      compl-add "${ii##*/}";;
+    esac
   done # }}}
-  # }}}
-  # Git-cmds # {{{
-  complete $COMPLETE_DEFAULT_PARAMS -F _completion_git_cmds git_cmds.sh
   # }}}
   # Hosts # {{{
   if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command grep -vq "^|1|"; then
-    complete -W "$( echo `command cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
+    complete -D -W "$( echo `command cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
   fi # }}}
   # Vim # {{{
   _do_vim_completion
   unset _do_vim_completion
   # }}}
   # Oth # {{{
-  complete $COMPLETE_DEFAULT_PARAMS -F _completion_npm npm
-  complete $COMPLETE_DEFAULT_PARAMS -F _completion_npx npx
-  complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
+  complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -D -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
   declare -F _filedir >/dev/null && eval "$(type -a _filedir | tail -n +2 | sed 's/compopt -o filenames 2>/compopt -o filenames -o noquote 2>/')"
   compl-add --smart ./build.sh
   # }}}
   # tldr # {{{
   if [[ -e $HOME/.local/share/tldr ]]; then
-    complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
+    complete -D -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
   fi # }}}
-  # all from bin/ && PROFILES/bin/ # {{{
-  _oIFS="$IFS"
-  IFS=":" _paths=( $(remove-dups "$PATH" ":") )
-  IFS="$_oIFS"; unset _oIFS
-  for profi in $SCRIPT_PATH/bin $BASH_PROFILES_FULL; do
-    for p in ${!_paths[@]}; do
-      pp=${_paths[p]}
-      case $pp in
-      $profi | $profi/*)
-        for ii in $pp/*; do
-          [[ -f $ii && -x $ii ]] || continue
-          if grep -q "# @@:new" $ii; then
-            compl-add --new ${ii##*/}
-          else
-            compl-add ${ii##*/}
-          fi
-        done
+  # all from own bins/ # {{{
+  add_for_all() { # {{{
+    local a_dir=$1 a_file=
+    for a_file in $a_dir/*; do
+      a_file="$(realpath "$a_file")"
+      [[ -f $a_file && -x $a_file ]] || continue
+      case $a_file in
+      $RUNTIME_PATH/bin/* | $SCRIPT_PATH/*);;
+      *) continue
       esac
+      compl-add $a_file
     done
+  } # }}}
+  add_for_all $SCRIPT_PATH/bin
+  for pp in $BASH_PROFILES_FULL; do
+    add_for_all $pp/bin
   done
-  unset _paths _pp p
+  unset pp
+  add_for_all $BIN_PATH
+  unset -f add_for_all
   # }}}
 fi # }}}
 # Source additional completions # {{{
-[[ -n $COMPLETION_BASH ]] && source $COMPLETION_BASH
 if [[ -e $BASH_PATH/completion.d ]]; then
   for ii in $(ls $BASH_PATH/completion.d); do
     [[ -f $BASH_PATH/completion.d/$ii ]] && source $BASH_PATH/completion.d/$ii
@@ -178,12 +159,22 @@ if [[ -e $RUNTIME_PATH/completion.d ]]; then
   done
 fi
 # }}}
-source $SCRIPT_PATH/bash/completion.alias
 # Source profile specic completions # {{{
 for profi in $BASH_PROFILES_FULL; do
   [[ -e $profi/completion ]] && source $profi/completion
 done
 unset profi ii
 # }}}
+source $SCRIPT_PATH/bash/completion.alias
+if [[ -e $COMPLETION_BASH_PATH/bash_completion ]]; then # {{{
+  source $COMPLETION_BASH_PATH/bash_completion
+  if ${BASHRC_GIT_COMPLETION_FIX:-true}; then
+    [[ -e "$COMPLETION_BASH_PATH/completions/git" ]] && source "$COMPLETION_BASH_PATH/completions/git"
+  fi
+fi # }}}
+# overrides of commons utils # {{{
+complete $COMPLETE_DEFAULT_PARAMS -F _completion_npm npm
+complete $COMPLETE_DEFAULT_PARAMS -F _completion_npx npx
+compl-add --old cd
+# }}}
 true
-

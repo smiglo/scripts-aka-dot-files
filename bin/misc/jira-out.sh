@@ -2,27 +2,33 @@
 # vim: ft=sh fdm=marker fdl=0
 
 if [[ $1 == '@@' ]]; then # {{{
-  case $3 in
+  case $2 in
   -f) # {{{
     get-file-list '*.txt';; # }}}
   -r) # {{{
+    f=
     if [[ $@ =~ \ ?-f\ +([^\ ]+) ]]; then
-      f=${BASH_REMATCH[1]} # vim: {
-      sed -n -e '/^#.* }\{3\}/d' -e 's/^#\+ \+\([^ ]\+\) # {\{3\}/\1/p' -e 's/^#\+ \+\([^ ]\+\)$/\1/p' "$f" # vim: }
-    else
-      echo "---"
-    fi;; # }}}
+      f=${BASH_REMATCH[1]}
+    elif [[ -e $NOTE_FILE && $NOTE_FILE == $PWD/* ]]; then
+      f="$NOTE_FILE"
+    fi
+    [[ -n $f && -e $f ]] || { echo "---"; exit 0; }
+    # vim: {
+    sed -n -e '/^#.* }\{3\}/d' -e 's/^#\+ \+\([^ ]\+\) # {\{3\}/\1/p' -e 's/^#\+ \+\([^ ]\+\)$/\1/p' "$f" | grep -vE "^(NF|TABLE|CODE)$" # vim: }
+    ;; # }}}
   *) # {{{
-    echo "-r -f - --dbg"
+    echo "-r -f - --dbg --slack --jira"
     get-file-list '*.txt';; # }}}
   esac
   exit 0
 fi # }}}
 import-module echor
-region= f= dbg=false
+region= f= dbg=false forSlack=
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   --dbg) dbg=true;;
+  --slack) forSlack=true;;
+  --jira)  forSlack=false;;
   -r) region="$2"; shift;;
   -f) f="$2"; shift;;
   *)  f="$1 ";;
@@ -31,6 +37,8 @@ done # }}}
 if [[ ! -t 0 || $f == '-' ]]; then # {{{
   cat - >$TMP_PATH/jira-out.txt
   f="$TMP_PATH/jira-out.txt"
+elif [[ -e $NOTE_FILE && $NOTE_FILE == $PWD/* ]]; then
+  f="$NOTE_FILE"
 fi # }}}
 regionS= regionE=
 declare -A colorMap=([module]='yellow')
@@ -46,7 +54,7 @@ if [[ ! -z $region ]]; then # {{{
   if $foldet; then # vim: {
     regionE="^# \(.* \)\?$region\(.* \)\? # }\{3\}"
     if ! grep -q "$regionE" "$f"; then
-      region="$(matching-section -f $f -p "^# (.* )?$region")"
+      region="$($ALIASES_SCRIPTS/file-tools/matching-section.sh -f $f -p "^# (.* )?$region")"
       [[ -z $region ]] && echorm 0 "End region [$region] not found" && exit 1
       echo -n "$region" | jira-out.sh
       exit
@@ -57,6 +65,10 @@ if [[ ! -z $region ]]; then # {{{
 fi # }}}
 [[ ! -z $region ]] && $dbg && echorm -m $module -C "%module:{region}: [$regionS|$regionE]"
 s=plain until= untilReplace= tableInfo=
+if [[ -z $forSlack ]]; then
+  grep -q "https://.*/browse/.*" $f && forSlack=false
+  [[ -z $forSlack ]] && forSlack=${JIRA_OUT_SLACK_DEFAULT:-true}
+fi
 cat $f | \
 if [[ -z $region ]]; then
     cat -
@@ -79,14 +91,13 @@ while IFS= read -r l; do
       [[ $l == *'# {{{' ]] && until="# }}}" || until="^$"
       continue
       ;; # }}}
-    [^#]*' # NF'*)
+    [^#]*' # NF'*) # {{{
       echo -e "${l% # NF*}"
       l="# NF${l#* # NF}"
       $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}' (combined line)"
-      ;&
-    '# NF '* | '# NF') # {{{
+      ;& # }}}
+    '# NF '* | '# NF' | '``` '* | '```') # {{{
       $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}'"
-      l="$(echo ${l#\# NF} | tr -s ' ')"
       s="noformat" untilReplace="{noformat}"
       if [[ $l =~ ( *# \{\{\{)$ ]]; then
         l=${l%${BASH_REMATCH[1]}}
@@ -94,11 +105,19 @@ while IFS= read -r l; do
       else
         until="# NF|^$"
       fi
-      if [[ ! -z $l ]]; then
-        $dbg && echorm -m $module -C 2 "%module:{$s}: noformat %green:{title}=[$l]"
-        l="{noformat:title=$l}"
+      case $l in
+      '# NF '*) l="$(echo ${l#\# NF} | tr -s ' ')";;
+      '``` '*)  l='```';;
+      esac
+      if ! $forSlack; then
+        if [[ ! -z $l && $l != '```' ]]; then
+          $dbg && echorm -m $module -C 2 "%module:{$s}: noformat %green:{title}=[$l]"
+          l="{noformat:title=$l}"
+        else
+          l="{noformat}"
+        fi
       else
-        l="{noformat}"
+        l='```'
       fi
       $dbg && echorm -m $module -C 2 "%module:{$s}: noformat entry: [$l], %green:{until}=[$until]"
       ;; # }}}
@@ -158,7 +177,11 @@ while IFS= read -r l; do
       $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{plain}' l=[$l], u=[$until]"
       addNL=false
       [[ -z $l ]] && addNL=true
-      l="${untilReplace:-$until}"
+      if ! $forSlack; then
+        l="${untilReplace:-$until}"
+      else
+        l='```'
+      fi
       $addNL && l+="\n"
       s="plain" until= untilReplace=
     fi;; # }}}
@@ -171,23 +194,34 @@ while IFS= read -r l; do
       $dbg && echorm -m $module -C 2 "%module:{$s}: %gray:%s l=[$l]" "skipping comment line"
       continue
     fi
-    markup='{{'
-    while [[ $l == *"\`"* ]]; do # treat `text` as monospace
-      l="${l/\`/$markup}"
-      case $markup in
-      '{{') markup='}}';;
-      '}}') markup='{{';;
-      esac
-    done
-    while [[ $l == *"''"* ]]; do # treat ''text'' as monospace
-      l="${l/\'\'/$markup}"
-      case $markup in
-      '{{') markup='}}';;
-      '}}') markup='{{';;
-      esac
-    done
-    l="${l//\'\"/\{\{}" # treat '"text"' as monospace
-    l="${l//\"\'/\}\}}"
+    case $l in
+    '```')
+      if $forSlack; then
+        echo "$l"
+      else
+        echo "{noformat}"
+      fi
+      continue;;
+    esac
+    if ! $forSlack; then
+      markup='{{'
+      while [[ $l == *"\`"* ]]; do # treat `text` as monospace
+        l="${l/\`/$markup}"
+        case $markup in
+        '{{') markup='}}';;
+        '}}') markup='{{';;
+        esac
+      done
+      while [[ $l == *"''"* ]]; do # treat ''text'' as monospace
+        l="${l/\'\'/$markup}"
+        case $markup in
+        '{{') markup='}}';;
+        '}}') markup='{{';;
+        esac
+      done
+      l="${l//\'\"/\{\{}" # treat '"text"' as monospace
+      l="${l//\"\'/\}\}}"
+    fi
     echo -e "$l";; # }}}
   table) # {{{
     if [[ ! -z $l ]]; then

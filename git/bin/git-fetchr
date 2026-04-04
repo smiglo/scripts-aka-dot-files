@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+subm=true
+git tag-sync fetchr
+git fetch
+git rreset
+if $subm && [[ $(git rev-parse --show-toplevel) == "$SCRIPT_PATH" ]]; then # {{{
+  shopt -s nullglob
+  for p in $PROFILES_PATH/*; do
+    p=$(readlink -f $p)
+    [[ $p == $SCRIPT_PATH/* ]] || continue
+    (
+      cd $p
+      echoe "${p##*/}: fetching"
+      git fetchr
+    )
+  done
+fi # }}}
+

@@ -25,7 +25,7 @@ vEnv="${AI_VENV_PATH:-.venv}"
 [[ -e "$aiPwd/$vEnv/bin/activate" ]] || die "venv not created"
 source "$aiPwd/$vEnv/bin/activate"
 
-[[ -z $GEMINI_API_KEY ]] && is-installed keep-pass.sh && keep-pass.sh --has-key 'gemini_api' && export GEMINI_API_KEY="$(keep-pass.sh --get --key 'gemini_api')"
+[[ -z $GEMINI_API_KEY ]] && keep-pass --has-key 'gemini_api' && export GEMINI_API_KEY="$(keep-pass --get --key 'gemini_api')"
 [[ ! -z $GEMINI_API_KEY ]] || die "no API key"
 
 python $aiPwd/ai-assistant.py "$@"

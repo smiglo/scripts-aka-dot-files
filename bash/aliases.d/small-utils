@@ -109,37 +109,50 @@ bash-trace() { # @@ # {{{
   *) # {{{
     echoe -f "Wrong mode [$mode]"; return 1;; # }}}
   esac
-}
-export -f bash-trace # }}}
+} # }}}
 byebye() { # {{{
-  local ask=true overSSH=false pid=
-  [[ $1 == '-' ]] && ask=false
-  $ask && ! progress --msg "suspend & log off" --wait 3s --key && return 0
+  local ask=true overSSH=false pid= ip= sessionId=$XDG_SESSION_ID
+  [[ $1 == '-' ]] && ask=false && shift
   if [[ -n $TMUX ]]; then
     pid=$($ALIASES_SCRIPTS/tmux/tm.sh --is-ssh --pid) && overSSH=true
   elif [[ -n $SSH_CONNECTION ]]; then
     overSSH=true
+    ip=$(echo $SSH_CONNECTION | awk '{print $1}')
   fi
-  ( sleep 5 && suspend ) &
-  disown
-  if $overSSH; then
-    if [[ -e /proc/$pid/environ ]]; then
-      local ip=
-      read ip _ < <(strings /proc/$pid/environ | sed -n '/^SSH_CLIENT=/ s/.*=//p')
-      if [[ ! -z $ip ]]; then
-        while read -r _ _ _ _ _ _ sshPid _; do
-          sshPid=${sshPid%%/*}
-          pstree -p $sshPid | grep -q "$pid" && continue
-          kill-rec $sshPid
-        done < <(w -ip | grep "$ip")
-      fi
-    fi
-    if [[ ! -n $TMUX ]]; then
-      command logout 2>/dev/null || command exit
+  $overSSH || return 1
+  if [[ -z $ip ]]; then
+    [[ -e /proc/$pid/environ ]] || return 1
+    read ip _ < <(strings /proc/$pid/environ | sed -n '/^SSH_CONNECTION=/s/.*=//p')
+    read sessionId _ < <(strings /proc/$pid/environ | sed -n '/^XDG_SESSION_ID=/s/.*=//p')
+  fi
+  [[ -n "$ip" ]] || return 1
+  if ${BYEBYE_DO_SUSPEND:-true}; then
+    ! $ask || progress --msg "suspend & log off" --wait 3s --key || return 0
+    if ${UTILS_SUSPEND_USE_PWR_MGR:-false} && is-installed -w power-manager.sh; then
+      ( sleep 5 && power-manager.sh --now ) &
+      disown
     else
-      echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
-      tmux detach -P
+      ( sleep 5 && suspend ) &
+      disown
     fi
+  fi
+  local session= status=
+  while read session _ _ _ _ state _; do
+    [[ "$session" != "$sessionId" ]] || continue
+    local sessionIp=$(loginctl show-session "$session" -p RemoteHost --value)
+    [[ -n $sessionIp ]] || continue
+    [[ "$sessionIp" == "$ip" ]] || continue
+    loginctl session-status $session | grep -q "tmux.*new-session" && continue
+    case $state in
+    active) loginctl terminate-session "$session";;
+    esac
+    loginctl kill-session "$session" 2>/dev/null
+  done < <(loginctl list-sessions --no-legend)
+  if [[ -n $TMUX ]]; then
+    echo $TMUX_SESSION > $TMP_PATH/.tmux_last_session.$USER
+    tmux detach -P
+  else
+    command logout 2>/dev/null || command exit
   fi
 } # }}}
 change-monitor() { # @@ # {{{
@@ -195,7 +208,7 @@ Exit() { # {{{
 } # }}}
 fix-agent() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
-    echo "--start-if --fix -c --check"
+    echo "start-if start-iff fix -c check"
     return 0
   fi
   local err=0
@@ -204,7 +217,7 @@ fix-agent() { # @@ # {{{
     local keys=
     keys="$(ssh-add -l 2>/dev/null)" || keys=
     [[ ! -z $keys ]] && echoe -f "$SSH_AGENT_PID: $(echo -e "$keys" | awk '{print $3}' | sort | tr '\n' ' ')" && return 0
-    source $SCRIPT_PATH/bin/fix-ssh-agent.sh --start-if
+    source $SCRIPT_PATH/bin/fix-ssh-agent.sh start-if
     err=$?; unset __fsa_err
     [[ $err == 0 ]] || eval $(die $err fix-agent "cannot start ssh-agent")
     keys="$(ssh-add -l)" || keys=
@@ -266,6 +279,21 @@ fr() { # {{{
     return 0
   fi # }}}
   local from=
+  if [[ -z $1 && -e $FROM ]]; then # {{{
+    [[ -t 1 ]] || { echo "$FROM"; return 0; }
+    declare -a pwdFro= pwdPwd=
+    pwdFro=( $(echo -n "${FROM/$HOME/\~}" | awk -v RS='/' -v ORS=' ' '{print}') )
+    pwdPwd=( $(echo -n "${PWD/$HOME/\~}"  | awk -v RS='/' -v ORS=' ' '{print}') )
+    local i=
+    for ((i=0; i < ${#pwdFro[*]}; ++i)); do
+      [[ ${pwdFro[$i]} == ${pwdPwd[$i]} ]] && continue
+      pwdFro[$i]="${CYellow}${pwdFro[$i]}"
+      break
+    done
+    printf "/%s" "${pwdFro[@]}" | sed 's|^/~|~|'
+    printf "${COff}\n"
+    return 0
+  fi # }}}
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -t) shift; from=$(tmux display-message -t $1 -p -F '#{pane_current_path}');;
@@ -278,17 +306,17 @@ fr() { # {{{
       fi;;
     esac; shift
   done # }}}
-  if [[ -t 1 ]]; then
+  if [[ -t 1 ]]; then # {{{
     if [[ -z $from ]]; then
       from="$PWD"
       echo "export FROM=\"$from\"; F=\"$from\"" | tee >(xclip --put)
     else
       export FROM="$from"
       export F="$FROM"
-    fi
-  else
+    fi # }}}
+  else # {{{
     echo "${from:-$PWD}"
-  fi
+  fi # }}}
 } # }}}
 getCurPos() { # {{{
   local p=

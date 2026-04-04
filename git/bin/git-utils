@@ -1,0 +1,297 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case ${3:$2} in
+  gitst)
+    echo "--backup --new-branches --all --full -v --verbose --verbose-full --interactive";;
+  backup)
+    echo "--all --all-br --tags --force --full -ff -v --verbose";;
+  *)
+    echo "backup check-repo git-dir gitst";;
+  esac
+  exit 0
+fi # }}}
+add-spaces() { # {{{
+  local len=$1
+  local pos=${2:-"70"}
+  local spaces=""
+  while [[ $len -lt $pos ]]; do
+    spaces+=" "
+    len=$(($len + 1))
+  done
+  echo "$spaces"
+  return 0
+} # }}}
+get-main-remotes() { # {{{
+  echo "origin|_backup.*|local"
+  return 0
+} # }}}
+check-repo() { # {{{
+  local check_origin=false
+  local check_full_owr=$checkFull
+  local dir=$1; shift
+  local silent=false
+  local skipSubmodules=false
+  if [[ $dir == @* ]]; then
+    ! $do_all && return
+    dir=${dir/@}
+  fi
+  [[ ! -e $dir ]] && return 0
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    origin)           check_origin=true;;
+    full)             check_full_owr=true;;
+    --silent)         silent=true;;
+    --skipSubmodules) skipSubmodules=true;;
+    esac
+    shift
+  done # }}}
+  local msg="${CBlue}${dir/$HOME/\~}${COff}$(add-spaces $((${#dir}+20)))"
+  [[ ! -e $dir/.git ]] && echo -e "$msg[${CRed}.GIT${COff}]" && return
+  pushd $dir > /dev/null
+  local git=".git"
+  [[ -f $git ]] && git=$(cat $git | awk '{print $2}')
+  (
+    unset -f $(declare -F | awk '{print $3}')
+    ! $skipSubmodules && git submodule --quiet foreach "git utils check-repo \$PWD --skipSubmodules $(! $display_status && echo '--silent') || true" 2>/dev/null
+  )
+  local commands=
+  local is_change=false
+  local c="git status --short"
+  local change_label=
+  if [[ "$($c)" != "" ]]; then # {{{
+    is_change=true
+    change_label="COMMIT"
+    $display_status && commands+="\n$c"
+  fi # }}}
+  local r= gitBackupParams=
+  $check_full_owr && gitBackupParams+=" --full"
+  for r in $(git remote); do # {{{
+    case $r in
+    origin | _backup* | local)
+      ! $do_all && [[ ! -z $GIT_ST_REMOTES_TO_IGNORE && $r =~ ^"$GIT_ST_REMOTES_TO_IGNORE"$ ]] && continue;;
+    *) continue;;
+    esac
+    if [[ $r == 'origin' && $PWD != ${ENV_PATH}* ]]; then # {{{
+      if ! $check_origin || ! $check_full_owr; then
+        continue
+      fi
+    fi # }}}
+    echo "$r" | grep -qvE "$(get-main-remotes)" && ! $check_full_owr && continue
+    [[ $(git config --get remote.$r.url) == http* ]] && continue
+    local cur_branch="$(git branch | grep "^\*" | cut -c3-)"
+    local b=
+    for b in $(git branch | cut -c3-); do # {{{
+      if [[ $b == "$cur_branch" || $b == 'master' ]] && ( ! git branch -a | grep -q $r/$b || [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b)" ]] ); then
+        is_change=true
+        if [[ $change_label != *BACKUP* ]]; then
+          [[ ! -z $change_label ]] && change_label+="|"
+          change_label+="BACKUP"
+        fi
+        if ! git branch -a | grep -q $r/$b; then # {{{
+          if $check_new_branches; then
+            if [[ $change_label != *NEW* ]]; then
+              [[ ! -z $change_label ]] && change_label+="|"
+              change_label+="NEW($b)"
+            fi
+          fi
+          # }}}
+        elif $display_status; then # {{{
+          if $display_full; then
+            commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}..${CGold}${b}${COff}\ngit lgf $r/$b~..$b"
+          else
+            commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}: $(($(git lgf $r/$b..$b | wc -l)+1)) commit(s) ahead"
+          fi
+        fi # }}}
+      fi
+    done # }}}
+  done # }}}
+  if $is_change; then # {{{
+    ! $silent && echo -e -n "$msg" && echo -e "[${CRed}$change_label${COff}]"
+    if $display_status; then # {{{
+      while read c; do
+        $c
+      done < <(echo -e $commands)
+    fi # }}}
+    local is_ok=true
+    if $is_interactive && [[ $change_label == COMMIT* ]]; then
+      bash || is_ok=false
+    fi
+    $is_ok && ${do_backup:-false} && git backup $gitBackupParams
+    $display_status && echo -e $sep # }}}
+  elif $display_status; then # {{{
+    echo -e -n "$msg"
+    echo -e "[${CGold}UP-TO-DATE${COff}]"
+  fi # }}}
+  popd >/dev/null
+  ! $is_change || return 1
+} # }}}
+backup() { # {{{
+  local repos=$PWD
+  local checkFull=false
+  local skipSubmodules=false
+  local params_main= param_force="--force-with-lease"
+  local verbose=false
+  [[ -z $1 ]] && set -- $(git config --get utils.backup-switches || true)
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --all)    repos=$GIT_REPOS;;
+    --full)   checkFull=true;;
+    --all-br) params_main+=" --all";;
+    -ff)      checkFull=true; params_main+=" $param_force";;
+    --skip-submodules) skipSubmodules=true;;
+    -v | --verbose) verbose=true;;
+    *)        params_main+=" $1";;
+    esac
+    shift
+  done # }}}
+  local label_uptodate="[${CGold}UP-TO-DATE${COff}]"
+  local repo= orig_repo=
+  for repo in $repos; do # {{{
+    if [[ " $GIT_REPOS $BASH_UPDATE_REPOS " == *" $repo "* ]]; then
+      $SCRIPT_PATH/bin/oth/setup-updater.sh --saveTime
+      break
+    fi
+  done # }}}
+  for orig_repo in $repos; do # {{{
+    local repo_printed=false
+
+    repo=${orig_repo/:*}
+    [[ $repo == @* ]] && repo=${repo/@}
+
+    [[ ! -e $repo ]] && continue
+    pushd $repo >/dev/null
+    local dir=$(git utils git-dir)
+    if [[ "$?" != "0" ]]; then # {{{
+      echo -e -n "[${CGreen}${repo/$HOME/~}${COff}]"
+      echo "$(add-spaces $((${#repo}+2)))[${CRed}.GIT${COff}]"
+      popd >/dev/null
+      continue
+    fi # }}}
+
+    for r in $GIT_REPOS; do # {{{
+      r=${r/:*/}
+      [[ "${dir/*projects\//projects/}" == "${r/@*projects\//projects/}" ]] && params_main+=" $param_force" && break
+    done # }}}
+
+    local sub_params="$params_main"
+    $checkFull && sub_params+=" --full"
+    $verbose   && sub_params+=" --verbose"
+
+    (
+      unset -f $(declare -F | awk '{print $3}')
+      ! $skipSubmodules && git submodule --quiet foreach "git utils backup --skip-submodules $sub_params"
+    )
+
+    $verbose && echo -e "[${CGreen}${repo/$HOME/~}${COff}]"
+    local git_cmd="git push --recurse-submodules=no $params_main" r=
+
+    for r in $(git remote); do # {{{
+      local remoteUrl=$(git config --get remote.$r.url)
+      remoteUrl=${remoteUrl/\~/$HOME}
+      local st=
+      if [[ $r == 'origin' ]]; then # {{{
+        if [[ $orig_repo != *:origin* ]] && ! $checkFull && [[ $PWD != ${ENV_PATH}* ]]; then
+          continue
+        fi
+      fi # }}}
+      echo "$r" | grep -qvE "$(get-main-remotes)" && ! $checkFull && continue
+      $verbose && echo -e -n "  [$r]$(add-spaces $((${#r}+4)))"
+      if [[ $remoteUrl == http* ]]; then # {{{
+        $verbose && echo "[${CGold}FOREIGN${COff}]"
+        continue
+      fi # }}}
+      local update_needed=false
+      [[ ! -z $params_main ]] && update_needed=true
+      if ! $update_needed; then # {{{
+        local b= oldIFS=$IFS
+        IFS=
+        while read b; do
+          [[ $b == *HEAD* || $b == *detached* ]] && continue
+          [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b 2>/dev/null)" ]] && update_needed=true && break
+        done < <(git branch | cut -c3-)
+        IFS=$oldIFS
+        if ! $update_needed; then
+          $verbose && echo "$label_uptodate"
+          continue
+        fi
+      fi # }}}
+      local ex_params=
+      [[ "$(git branch | grep "^\*" | cut -c3-)" != 'master' ]] && ex_params="$param_force"
+      case $r in
+      origin|_backup*|local|tom) # {{{
+        if ! $verbose; then
+          ! $repo_printed && echo -e "${CBlue}${repo/$HOME/\~}${COff}" && repo_printed=true
+        fi
+        progress --mark --left --msg "$r"
+        case $r in
+        origin|_backup*|local) # {{{
+          local isRemote=false
+          if [[ $remoteUrl == *@* || $remoteUrl == *:*  ]]; then
+            isRemote=true
+          fi
+          if $isRemote || [[ -d $remoteUrl ]]; then
+            st="$($git_cmd $ex_params $r 2>&1)"
+            err=$?
+          else
+            err=1
+          fi;; # }}}
+        tom) # {{{
+          st=$(mnt.sh --silent -D gh -r "$git_cmd $ex_params tom" 2>&1)
+          err=$? ;; # }}}
+        esac
+        progress --unmark --err=$err
+        ;; # }}}
+      *) $verbose && echo "     $r: ${CGold}skipped${COff}";;
+      esac
+    done # }}}
+    if ! $skipSubmodules; then
+      local repoUpdateFile=$TMP_PATH/.repo-update r=$(basename $repo)
+      local tLocal="$(git log -1 --format="%cd" --date=unix $(git rev-parse --abbrev-ref HEAD))"
+      r="$(echo "$r" | sed 's/[.,-]/_/g')"
+      if [[ -e $repoUpdateFile ]] && grep -q "^tLastSync_$r=" $repoUpdateFile; then
+        sed -i 's/^tLastSync_'$r'=.*/tLastSync_'$r'='$tLocal'/' $repoUpdateFile
+      else
+        echo "tLastSync_$r=$tLocal" >>$repoUpdateFile
+      fi
+    fi
+    popd >/dev/null
+  done # }}}
+  return 0
+} # }}}
+source $ALIASES_D/0.essentials
+GIT_REPOS=$(echo "$GIT_REPOS" | tr ' ' '\n' | awk '!($0 in a) {a[$0]; print}' | tr '\n' ' ')
+todo=$1; shift
+case $todo in
+backup) # {{{
+  backup "$@";; # }}}
+check-repo) # {{{
+  check-repo "$@";; # }}}
+git-dir) # {{{
+  dir=$(git rev-parse --git-dir 2>/dev/null)
+  [[ $? != 0 || -z $dir ]] && exit 1
+  (cd $dir/..; pwd);; # }}}
+gitst) # {{{
+  sep="------------------------------------------------------------------------"
+  do_backup=false do_all=false display_status=false display_full=false is_interactive=false check_new_branches=false checkFull=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --backup)          do_backup=true;;
+    --all)             do_all=true;;
+    --verbose-full)    display_status=true; display_full=true;;
+    --verbose|-v)      display_status=true;;
+    --interactive)     is_interactive=true;;
+    --full)            checkFull=true;;
+    --new-branches)    check_new_branches=true;;
+    esac
+    shift
+  done # }}}
+  export sep do_backup do_all display_status display_full is_interactive checkFull check_new_branches
+  dir= clean=true
+  for dir in $GIT_REPOS; do
+    git utils check-repo ${dir//:/ } || clean=false
+  done
+  $clean || exit 1;; # }}}
+esac
+
+

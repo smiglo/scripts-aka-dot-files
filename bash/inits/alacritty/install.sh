@@ -1,19 +1,24 @@
-d=$HOME/.config/alacritty
+#!/usr/bin/env bash
+# vim: fdl=0
 
+d=$HOME/.config/alacritty
+src="linux"
+if $IS_MAC; then src="mac"
+elif $IS_ARCH; then src="arch"
+fi
+
+sp=$SCRIPT_PATH/bash/inits/alacritty
+cd $sp
 [[ -e $d ]] || mkdir -p $d
 
-src=linux
-$IS_MAC && src=mac
-sp=$SCRIPT_PATH/bash/inits/alacritty
-
-for i in $src-alacritty.toml common.toml common-bindings.toml $src-specific.toml $src-bindings.toml; do
-  df=$d/$i
-  [[ $i == $src-alacritty.toml ]] && df=$d/alacritty.toml
+for i in alacritty common colors bindings specific; do
+  df="$d/$i.toml"
+  [[ -e $i-$src.toml ]] && i="$i-$src"
+  [[ -e $i.toml ]] || continue
   [[ -e $df ]] && mv $df $df.bak
-  ln -sf $sp/$i $df
+  ln -sf $sp/$i.toml $df
 done
 
 if [[ ! -e $d/local-conf.toml ]]; then
   touch $d/local-conf.toml
 fi
-

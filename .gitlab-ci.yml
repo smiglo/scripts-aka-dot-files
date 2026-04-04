@@ -1,0 +1,14 @@
+stages:
+  - squash-and-push
+
+squash_and_push:
+  stage: squash-and-push
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+  script:
+    - git config --global user.name "${GITHUB_AUTHOR%%:*}" && git config --global user.email "${GITHUB_AUTHOR#*:}"
+    - git remote add github https://${GITHUB_USER%%@*}:$GITHUB_TOKEN@github.com/${GITHUB_USER%%@*}/$GITHUB_REPO.git
+    - git fetch origin master && git fetch github master
+    - git checkout -b next && git reset origin/master && git add . && git commit -m "next"
+    - git rebase --onto github/master next~ next
+    - git push --force github next

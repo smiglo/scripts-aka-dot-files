@@ -1,12 +1,83 @@
 #!/usr/bin/env bash
 
-ups=
-if [[ -z $1 ]]; then
-  ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
-elif [[ $1 == */* ]]; then
-  ups="$1"
-else
-  ups="$1/$(git rev-parse --abbrev-ref HEAD)"
+if [[ $1 == "@@" ]]; then # {{{
+  case $2 in
+  -b) git branch --all | cut -c3- | sed -n -e '/HEAD/d' -e '/^remotes\//s/remotes\///p';;
+  -r) git remote;;
+  *) echo "-b -r --dbg --";;
+  esac
+  exit 0
+fi # }}}
+is-remote() { # {{{
+  local remote="$1" remotes="${2:-$(git remote)}"
+  echo "$remotes" | grep -q "^$remote$"
+} # }}}
+if [[ $1 == '@@' ]]; then
+  filter-branches() { # {{{
+    local remote="$1" all_branches="${2:-$(git branch --all | cut -c3- | sed -n -e '/HEAD/d' -e '/^remotes\//s/remotes\///p')}"
+    echo "$all_branches" | sed -n -e '/^'"$remote"'\//s/[^/]*\///p'
+  } # }}}
+  case $2 in
+  -b) # {{{
+    shift 2
+    all_branches="$(git branch --all | cut -c3- | sed -n -e '/HEAD/d' -e '/^remotes\//s/remotes\///p')"
+    remotes="$(git remote)"
+    for r; do
+      is-remote $r "$remotes" || continue
+      all_branches="$(filter-branches "$r" "$all_branches")"
+      break
+    done
+    echo "$all_branches";; # }}}
+  -r) # {{{
+    git remote;; # }}}
+  *) # {{{
+    if [[ " $@ " == *" -- "* ]]; then
+      echo "@@-f"
+    else
+      echo "-b -r --dbg -- "
+      git remote
+    fi;; # }}}
+  esac
+  exit 0
 fi
-[[ -n $ups ]] || exit 1
-git diff $ups..@ "$@"
+remote=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+remote=${remote%%/*}
+branch=$(git rev-parse --abbrev-ref HEAD)
+params=
+showCmd=false
+while [[ ! -z $1 ]]; do
+  case $1 in
+  --dbg) # {{{
+    showCmd=true;; # }}}
+  -b) # {{{
+    r="${2%%/*}"; shift
+    if is-remote "$r"; then
+      remote="${r%%/*}"
+      branch="${r#*/}"
+    else
+      branch="$r"
+    fi;; # }}}
+  -r) # {{{
+    remote="$2"; shift;; # }}}
+  --) # {{{
+    break;; # }}}
+  -*) # {{{
+    params+=" $1";; # }}}
+  */*) # {{{
+    r="${1%%/*}"
+    if is-remote "$r"; then
+      remote="$r"
+      branch="${1#*/}"
+    else
+      branch="$1"
+    fi;; # }}}
+  *) # {{{
+    if is-remote "$1"; then
+      remote="$1"; shift
+    fi
+    break;; # }}}
+  esac; shift
+done
+( $showCmd && set -xv
+  git diff $remote/$branch..@ "$@"
+)

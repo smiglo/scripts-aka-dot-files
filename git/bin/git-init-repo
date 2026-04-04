@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $2 in
+  -p) echo ".. ../..";;
+  *)
+    echo "-f -ff -p"
+    echo "${!GIT_USER_*}" | sed 's/GIT_USER_//g';;
+  esac; exit 0
+fi # }}}
+ignoreExisting=false removeExisting=false path="."
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -f)  ignoreExisting=true;;
+  -ff) ignoreExisting=true; removeExisting=true;;
+  -p)  path="$2"; shift;;
+  *)   break;;
+  esac; shift
+done # }}}
+! git utils git-dir >/dev/null 2>&1 || $ignoreExisting || exit 1
+if [[ $(cd "$path"; pwd) != $PWD ]]; then
+  cd "$path" || exit 1
+fi
+$removeExisting && [[ -e .git ]] && rm -rf .git
+git init .
+case $# in
+0) git userset -d default;;
+1) git userset -d $1;;
+2) git userset -f "$@";;
+esac
+git commit -mInit --allow-empty

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+if [[ $1 == "@@" ]]; then # {{{
+  case $2 in
+  -fu | --fixup) git log -30 --format="%h--%s" | sed -e 's/["'"'"']//' -e 's/[ :]/-/g';;
+  -m) echo "MESSAGE";;
+  *)
+    echo "-nv -ae -m --no-verify --allow-empty --amend -fu --fixup"
+    git log -n 30 --format="@%h";;
+  esac
+  exit 0
+fi # }}}
+msg= params= allowEmpty=false fastFixup=
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -m)  shift; msg="$1";;
+  -m*) msg="${1#-m}";;
+  -nv) params+=" --no-verify";;
+  -ae | --allow-empty) params+=" --allow-empty"; allowEmpty=true;;
+  -fu | --fixup) ref=$2; params+=" --fixup=$ref"; fastFixup="$ref~~"; shift;;
+  -*)  params+=" $1";;
+  *)
+    if [[ $1 =~ ^[0-9]+$ ]]; then
+      params+=" --fixup=@~$1"
+      fastFixup="@~$(($1 + 2))"
+    elif [[ $1 =~ ^@[0-9a-f]+$ ]]; then
+      params+=" --fixup=${1#@}"
+      fastFixup="${1#@}~"
+    else
+      msg="$@"
+    fi
+    params+=" --no-verify"; shift $#;;
+  esac; shift
+done # }}}
+if ! $allowEmpty; then # {{{
+  ! git diff --quiet || ! git diff --cached --quiet || { echo "Nothing to commit" >/dev/stderr; exit 1; }
+  ! git diff --cached --quiet || git add .
+  ! git diff --cached --quiet || { echo "Nothing within '.'}' to commit" >/dev/stderr; exit 1; }
+fi # }}}
+if [[ ! -z $msg ]]; then
+  git commit $params -m "$msg"
+else
+  git commit $params
+  if (( $? == 0 )) && [[ -n $fastFixup ]]; then
+    git rba $fastFixup
+  fi
+fi

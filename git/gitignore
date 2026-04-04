@@ -14,7 +14,6 @@ Session*.vim
 *.orig
 *.out
 *.o
-*.patch
 *.pyc
 *.swo
 *.swp
@@ -48,6 +47,7 @@ core
 
 .env
 .ticket
+.brun.conf
 
 # ------------------------------------------------------------------------
 # Could be quite controversial, let's see:
