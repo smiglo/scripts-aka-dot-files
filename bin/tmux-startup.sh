@@ -29,10 +29,9 @@ if $LOCK; then # {{{
   trap "rm -rf $TMUX_INIT_LOCK" EXIT
 fi # }}}
 # Source extensions # {{{
-for i in $BASH_PROFILES_FULL; do
-  [[ -e $i/bash/inits/tmux-startup.sh ]] && source $i/bash/inits/tmux-startup.sh
-done
-[[ -e $RUNTIME_PATH/tmux-startup.sh ]] && source $RUNTIME_PATH/tmux-startup.sh # }}}
+for i in $($BASH_PATH/env-ext.sh get-plugins inits/tmux-startup.sh); do
+  source $i || true
+done # }}}
 # }}}
 # Functions # {{{
 isTmux_16() { # {{{
@@ -71,7 +70,7 @@ run() { # {{{
   cmd=$1; shift
   case $cmd in
   set-title) # {{{
-    $ALIASES_SCRIPTS/set-title.sh --from-tmux ${s%.*} "$1"
+    $ENV_SCRIPTS/set-title.sh --from-tmux ${s%.*} "$1"
     sleep 0.1
     return 0;; # }}}
   layout | layout-default | layout-restore) # {{{
@@ -79,11 +78,11 @@ run() { # {{{
     [[ -z $current ]] && current=$(tmux display-message -p -t $TMUX_PANE -F '#S:#I.#P')
     case $cmd in
     layout-restore) # {{{
-      cmd="$ALIASES_SCRIPTS/tmux/tm.sh --session --restore -w";; # }}}
+      cmd="$ENV_SCRIPTS/tmux/tm.sh --session --restore -w";; # }}}
     layout | layout-default) # {{{
       local params="-w"
       [[ "$cmd" == 'layout-default' ]] && params="-wd"
-      cmd="$ALIASES_SCRIPTS/tmux/tm.sh --l-restore $@ $params --set-pane-1 || true";; # }}}
+      cmd="$ENV_SCRIPTS/tmux/tm.sh --l-restore $@ $params --set-pane-1 || true";; # }}}
     esac
     shift $#;; # }}}
   command | exec | \
@@ -94,10 +93,10 @@ run() { # {{{
   [[ ! -z $@ ]] && cmd+=" $@"
   $hide && cmd=" $cmd"
   $clear_after && cmd="$cmd; clr --scr --reset --hist"
-  [[ ! -z $current ]] && $ALIASES_SCRIPTS/tmux/tm.sh --switch $s
+  [[ ! -z $current ]] && $ENV_SCRIPTS/tmux/tm.sh --switch $s
   tmux send-key -t $s -l "$cmd"
   sleep 0.1
-  [[ ! -z $current ]] && $ALIASES_SCRIPTS/tmux/tm.sh --switch $current
+  [[ ! -z $current ]] && $ENV_SCRIPTS/tmux/tm.sh --switch $current
   return 0
 } # }}}
 layoutRestore() { # {{{
@@ -142,7 +141,7 @@ makeNiceSplits() { # {{{
   # Verticals # {{{
   rows="$(($cnt / $max_c))"
   [[ $(($cnt % $max_c)) != 0 ]] && rows="$(($rows + 1))"
-  $dbg && echo "cnt=$cnt, max_c=$max_c, rows=$rows" >/dev/stderr
+  echoe $dbg "cnt=$cnt, max_c=$max_c, rows=$rows"
   for i in $(seq 1 $rows); do
     [[ $i -lt $rows ]] && splits+="SPLIT:p=$p_no -v $(splitParam $((($rows - $i) * 100 / ($rows - $i + 1)))) -c "$1"\n"
     p_no="$(($p_no + 1))"
@@ -150,11 +149,11 @@ makeNiceSplits() { # {{{
   # Horizontals # {{{
   p_no=$p_no_orig row=1 co=1
   for i in $(seq 1 $cnt); do
-    $dbg && echo "HORZ: co=$co, ro=$row, i=$i, pno=$p_no, arg=[$1]" >/dev/stderr
+    echoe $dbg "HORZ: co=$co, ro=$row, i=$i, pno=$p_no, arg=[$1]"
     if [[ $row == $rows ]]; then # {{{
       [[ $(($cnt % $max_c)) != 0 ]] && max_c="$(($cnt % $max_c))"
       row=-1
-      $dbg && echo "HORZ: last row, max_c=$max_c" >/dev/stderr
+      echoe $dbg "HORZ: last row, max_c=$max_c"
     fi # }}}
     if [[ $co -lt $max_c ]]; then # {{{
       no="$(($max_c - $co))"
@@ -163,7 +162,7 @@ makeNiceSplits() { # {{{
     p_no="$(($p_no + 1))"
     co="$(($co+1))"
     if [[ $co -gt $max_c ]]; then # {{{
-      $dbg && echo "HORZ: next-row" >/dev/stderr
+      echoe $dbg "HORZ: next-row"
       [[ ! -z $1 ]] && splits+="RUN:p=$p_no cd \"$1\"\n"
       co=1
       [[ $row -gt 0 ]] && row="$(($row+1))"
@@ -226,7 +225,7 @@ initFromEnv() { # {{{
         new-window -t $sessionName:$w $([[ ! -z $t ]] && echo "-n $t") -d -c "$p" \; \
         set-option -t $sessionName:$w -w @locked_title 1
     fi
-    if $ALIASES_SCRIPTS/tmux/tm.sh --l-restore --check "$p" "$t"; then
+    if $ENV_SCRIPTS/tmux/tm.sh --l-restore --check "$p" "$t"; then
       run $sessionName:$w.1 "layout"
     else
       # Preconfigured Splits # {{{
@@ -330,7 +329,7 @@ runExtensions() { # {{{
   [[ -z $sessionName ]] && return 0
   for i in $(eval echo \$TMUX_INIT_EXT_${sessionName//-/_}); do
     if ! declare -F $i >/dev/null 2>&1; then
-      echo "Extention [$1: $i] not defined" >/dev/stderr
+      echoe "Extention [$1: $i] not defined"
       continue
     fi
     $i
@@ -364,7 +363,7 @@ makePreconfiguredSplits() { # {{{
   echo -e "$cfg" | while read i; do
     p=1 pwd= cmd= params= i="$(echo $i)"
     [[ -z $i ]] && continue
-    $dbg && echo "Entry: [$i]" >/dev/stderr
+    echoe $dbg "Entry: [$i]"
     case $i in
     DBG) # {{{
       dbg=true
@@ -374,7 +373,7 @@ makePreconfiguredSplits() { # {{{
       cmd="$(echo "$cmd" | sed 's/\(^p=[0-9]\+\) \([^#]\)/\1 # \2/')"
       params="$cmd"
       [[ $cmd == *\#* ]] && params=$(echo ${cmd#*\#}) && eval $cmd
-      $dbg && echo "  Params=[$params], Cmd=[$cmd], p=[$p], pwd=[$pwd]" >/dev/stderr
+      echoe $dbg "  Params=[$params], Cmd=[$cmd], p=[$p], pwd=[$pwd]"
       ;;& # }}}
     SPLIT:*) # {{{
       [[ $params != *-c\ * ]] && params+=" -c \"${pwd:-$path}\""
@@ -589,10 +588,9 @@ unset RCSTUFF_BASHRC_INSTALLING
 # Load pre/runtime configuration # {{{
 if [[ "$todo" =~ " pre " ]]; then
   runExtensions 'PRE_INIT' || true
-  [[ -e $RUNTIME_PATH/tmux-startup-pre.sh ]] && source $RUNTIME_PATH/tmux-startup-pre.sh || true
-  for i in $BASH_PROFILES; do
-    [[ -e $RUNTIME_PATH/tmux-startup-pre.$i.sh ]] && source $RUNTIME_PATH/tmux-startup-pre.$i.sh || true
-  done
+  for i in $($BASH_PATH/env-ext.sh get-plugins inits/tmux-startup-pre.sh); do
+    source $i || true
+  done # }}}
 fi # }}}
 tmux_size_params=
 [[ ! -n $TMUX ]] && tmux_size_params="-x $(tput cols) -y $(tput lines)"
@@ -619,9 +617,8 @@ done
 # Load post/runtime configuration # {{{
 if [[ "$todo" =~ " post " ]]; then
   runExtensions 'POST_INIT' || true
-  [[ -e $RUNTIME_PATH/tmux-startup-post.sh ]] && source $RUNTIME_PATH/tmux-startup-post.sh || true
-  for i in $BASH_PROFILES; do
-    [[ -e $RUNTIME_PATH/tmux-startup-post.$i.sh ]] && source $RUNTIME_PATH/tmux-startup-post.$i.sh || true
+  for i in $($BASH_PATH/env-ext.sh get-plugins inits/tmux-startup-post.sh); do
+    source $i || true
   done
 fi # }}}
 # Load stored buffers # {{{

@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+declare -Ag UNICODE_EXTRA_CHARS
+UNICODE_EXTRA_CHARS[amanita]="🍄"
+UNICODE_EXTRA_CHARS[apple]="🍏"
+UNICODE_EXTRA_CHARS[array-double]="➾"
+UNICODE_EXTRA_CHARS[array-l]="←"
+UNICODE_EXTRA_CHARS[array-lr]="↔︎"
+UNICODE_EXTRA_CHARS[array-r]="→"
+UNICODE_EXTRA_CHARS[battery-icon]="🔋"
+UNICODE_EXTRA_CHARS[battery]=" "
+UNICODE_EXTRA_CHARS[battery-med]=" "
+UNICODE_EXTRA_CHARS[battery-low]=" "
+UNICODE_EXTRA_CHARS[bell]="🛎"
+UNICODE_EXTRA_CHARS[biohazard]="☣"
+UNICODE_EXTRA_CHARS[bracket-close]="›"
+UNICODE_EXTRA_CHARS[bracket-open]="‹"
+UNICODE_EXTRA_CHARS[clover]="🍀"
+if $IS_ARCH || ${UNICODE_EXTRA_CHARS_DIGITS:-false}; then
+  UNICODE_EXTRA_CHARS[digits]="🯰🯱🯲🯳🯴🯵🯶🯷🯸🯹"
+else
+  UNICODE_EXTRA_CHARS[digits]="0123456789"
+fi
+UNICODE_EXTRA_CHARS[disk]="💾"
+UNICODE_EXTRA_CHARS[docker]="🌋"
+UNICODE_EXTRA_CHARS[dot-big]="🌑"
+UNICODE_EXTRA_CHARS[dot-medium]="⚫"
+UNICODE_EXTRA_CHARS[dot-small]="•"
+UNICODE_EXTRA_CHARS[envelope]="✉ "
+UNICODE_EXTRA_CHARS[exclamation]="❢"
+UNICODE_EXTRA_CHARS[extra-bar]="◼ "
+UNICODE_EXTRA_CHARS[faces]="🤓🤔🥸"
+UNICODE_EXTRA_CHARS[fire]="🔥"
+UNICODE_EXTRA_CHARS[high-cpu]="⚛ "
+UNICODE_EXTRA_CHARS[home]="🏡"
+if $IS_ARCH; then
+  UNICODE_EXTRA_CHARS[icon-err]="🗴"
+  UNICODE_EXTRA_CHARS[icon-err2]="✗"
+  UNICODE_EXTRA_CHARS[icon-ok]="🗸"
+  UNICODE_EXTRA_CHARS[icon-ok2]="✓"
+else
+  UNICODE_EXTRA_CHARS[icon-err]="✗"
+  UNICODE_EXTRA_CHARS[icon-err2]="🗴"
+  UNICODE_EXTRA_CHARS[icon-ok]="✓"
+  UNICODE_EXTRA_CHARS[icon-ok2]="🗸"
+fi
+UNICODE_EXTRA_CHARS[laptop]="💻"
+UNICODE_EXTRA_CHARS[link]="🔗"
+UNICODE_EXTRA_CHARS[ll-pni]="⛏ "
+UNICODE_EXTRA_CHARS[localhost]="🤠"
+UNICODE_EXTRA_CHARS[mic]="🎤"
+UNICODE_EXTRA_CHARS[mute]="🔇"
+UNICODE_EXTRA_CHARS[nested-bash]="❶"
+UNICODE_EXTRA_CHARS[new-line]="↳"
+UNICODE_EXTRA_CHARS[padlock]="🔓"
+UNICODE_EXTRA_CHARS[pause]="⏸"
+UNICODE_EXTRA_CHARS[pirate]="🕱"
+UNICODE_EXTRA_CHARS[play]="⏺"
+UNICODE_EXTRA_CHARS[power]="🔌"
+UNICODE_EXTRA_CHARS[progress-bar]="▁▃▄▅▆▇█▇▆▅▄▃"
+UNICODE_EXTRA_CHARS[progress-dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
+UNICODE_EXTRA_CHARS[romb]="✦"
+UNICODE_EXTRA_CHARS[root]="☢ "
+UNICODE_EXTRA_CHARS[satellite]="📡"
+UNICODE_EXTRA_CHARS[sep-dot]="·"
+UNICODE_EXTRA_CHARS[sep-x]="×"
+UNICODE_EXTRA_CHARS[skull]="💀"
+UNICODE_EXTRA_CHARS[smart]="ⓢ "
+UNICODE_EXTRA_CHARS[snake]="🐍"
+UNICODE_EXTRA_CHARS[ssh]="🚀"
+UNICODE_EXTRA_CHARS[tmux-main]="🌅"
+UNICODE_EXTRA_CHARS[tmux_env]="🌋"
+UNICODE_EXTRA_CHARS[tractor]="🚜"
+UNICODE_EXTRA_CHARS[yin-yang]="☯"
+UNICODE_EXTRA_CHARS[zoom-left]="🔍"
+UNICODE_EXTRA_CHARS[zoom-right]="🔎"
+UNICODE_EXTRA_CHARS[zoom]="${UNICODE_EXTRA_CHARS[zoom-right]}"
+if $IS_MAC; then
+  TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
+elif [[ -z $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS ]]; then
+  TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
+  if [[ "$(echo -en "🔍" | { $IS_MAC && gwc -L || wc -L; })" != "2" ]]; then
+    TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=false
+  fi
+fi
+if ! $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS; then
+  UNICODE_EXTRA_CHARS[battery]="B"
+  UNICODE_EXTRA_CHARS[disk]="U"
+  UNICODE_EXTRA_CHARS[localhost]=":)"
+  UNICODE_EXTRA_CHARS[mic]="Mic"
+  UNICODE_EXTRA_CHARS[mute]="Mute"
+  UNICODE_EXTRA_CHARS[power]="P"
+  UNICODE_EXTRA_CHARS[zoom]="/Z"
+fi

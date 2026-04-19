@@ -35,8 +35,7 @@ getPathFast() { # {{{
   return 1
 }
 export -f getPathFast # }}}
-import-module echor
-import-module time2s time-tools
+import-module echor time-tools
 echorm --name tt
 [[ ! -z $verbose && $verbose -gt $(echorm -f??) ]] && echorm + $verbose
 case $1 in
@@ -49,14 +48,14 @@ $dbg_tt && echorm -xv
 # }}}
 # Pre-Setup # {{{
 source $TICKET_TOOL_PATH/common
-[[ -z $TICKET_PATH ]] && "Env[TICKET_PATH] not defined (tt-t)" >/dev/stderr && exit 1
+[[ -n $TICKET_PATH ]] || die "Env[TICKET_PATH] not defined (tt-t)"
 if [[ $1 == --issue ]]; then
   issue="$2"
   shift 2
   path_issue="$(getPathFast || $TICKET_TOOL_PATH/ticket-setup.sh --get-path "$issue" true)"
   issue_file=$(getIssueFile 2>/dev/null)
 fi
-[[ -z $issue ]] && echo "Issue not defined" >/dev/stderr && exit 1
+[[ -n $issue ]] || die "Issue not defined"
 # Path to issue # {{{
 [[ -z $path_issue ]] && path_issue="$($TICKET_TOOL_PATH/ticket-setup.sh --get-path "$issue" true)"
 [[ -z $issue_file ]] && issue_file=$(getIssueFile 2>/dev/null)
@@ -64,7 +63,7 @@ if [[ -z $issue_file ]]; then
   if [[ $1 == '@@' ]]; then
     exit 0
   fi
-  echo "Issue [$issue] not present" >/dev/stderr && exit 1
+  die "Issue [$issue] not present"
 fi
 path_issue="${path_issue/$PWD/.}"
 declare -A conf=([use-new-args]=false)
@@ -358,7 +357,7 @@ info*) # {{{
       if [[ ! -z $func ]]; then
         bash -c "$func" - "$@"
       else
-        echo "No definition for [$cmd]" >/dev/stderr
+        echoe "No definition for [$cmd]"
       fi
     fi
   fi;; # }}}

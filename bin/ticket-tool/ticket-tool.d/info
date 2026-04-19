@@ -31,7 +31,7 @@ else
   while [[ ! -z $1 ]]; do
     s="${1,,}"
     s="$(echo -ne "$func\n" | grep -ai "^##\+ @ $s\( .*\)\{0,1\}" | head -n1 | sed -e 's/^##\+ @ //' -e 's/ #.*//')"
-    [[ -z $s ]] && echo "Section [$1] not found" >/dev/stderr && shift && continue
+    [[ -n $s ]] || { echoe "Section [$1] not found"; shift; continue }
     if echo -ne "$func\n" | grep -aq  "^##\+ @ $s .*}}[}]"; then
       echo -ne "$func\n" | sed -n -e "/^##\+ @ $s .*{{[{]/,/^##\+ @ $s .*}}[}]/p" | sed -e "s/^\(##\+ @\).*}}[}]/\1/"
     else

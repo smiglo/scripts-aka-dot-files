@@ -8,15 +8,15 @@ export RCSTUFF_RUNTIME_POST_INSTALLED=true
 # }}}
 # Runtime file # {{{
 RUNTIME_POST_FILE=$RUNTIME_PATH/runtime-post.bash
-[[ -e $RUNTIME_POST_FILE ]] && source $RUNTIME_POST_FILE
-for profi in $BASH_PROFILES; do
-  [[ -e $RUNTIME_POST_FILE.$profi ]] && source $RUNTIME_POST_FILE.$profi
+for rpost in $($BASH_PATH/env-ext.sh get-plugins runtime-post.bash); do
+  source $rpost
 done
-unset RUNTIME_POST_FILE
+unset RUNTIME_POST_FILE rpost
 # }}}
 # TMUX_STATUS_RIGHT_EXTRA # {{{
 if [[ -z $TMUX_STATUS_RIGHT_EXTRA_SORTED ]]; then
   TMUX_STATUS_RIGHT_EXTRA_SORTED=
+  ( ${TMUX_STATUS_RIGHT_EXTRA_HAS_BATTERY:-false} || [[ -n $TMUX_SB_BATTERY_THRESHOLDS ]] ) && TMUX_STATUS_RIGHT_EXTRA+=" 016:battery"
   while read l; do
     l=$(echo ${l#*:})
     [[ -z $l ]] && continue
@@ -25,72 +25,10 @@ if [[ -z $TMUX_STATUS_RIGHT_EXTRA_SORTED ]]; then
   unset l TMUX_STATUS_RIGHT_EXTRA
 fi # }}}
 if ! is-installed --no-cache -t kp-pp; then # {{{
-  source "$SCRIPT_PATH/bash/inits/keep-pass/keep-pass-env.sh"
+  source "$SCRIPT_PATH/inits/keep-pass/keep-pass-env.sh"
 fi # }}}
-# Source profiles' runtimes # {{{
-for profi in $BASH_PROFILES_FULL; do
-  [[ -e $profi/runtime-post ]] && source $profi/runtime-post
-done # }}}
-# Remote changes # {{{
-src_dir="$SHARED_BASH_PATH/to-apply"
-if ${REMOTE_CHANGES_APPLY:-false} && [[ ! -z $SHARED_BASH_PATH && $UID != 0 ]]; then
-  now="${EPOCHSECONDS:-$(epochSeconds)}" rmt_chngs_file="$MEM_KEEP/remote.changes"
-  if [[ -z $REMOTE_CHANGES_LAST || $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now ]]; then # {{{
-    REMOTE_CHANGES_LAST=0
-    [[ -e "$rmt_chngs_file" ]] && source "$rmt_chngs_file"
-  fi # }}}
-  if [[ $(($REMOTE_CHANGES_LAST + 12*60*60)) -lt $now && -d $src_dir ]]; then
-    export REMOTE_CHANGES_LAST="$now"
-    echo "export REMOTE_CHANGES_LAST=\"$REMOTE_CHANGES_LAST\"" > $rmt_chngs_file
-    i= sum= h_sum= file= p= found=
-    for i in $src_dir/*; do # {{{
-      file="${i##*/}"
-      # To apply or not to apply # {{{
-      [[ -d $i ]] && continue
-      [[ $i != *.sh && $i != *.enc ]] && continue
-      [[ $i == *.sh && ! -x $i ]] && continue
-      [[ $i == *.sh ]] && ! ${REMOTE_CHANGES_ALLOW_PLAIN:-true} && continue
-      [[ $i == *.enc && -z $REMOTE_CHANGES_PWD && -z $REMOTE_CHANGES_KEY ]] && continue
-      if [[ $file != all* ]]; then # {{{
-        found=false
-        for p in $BASH_PROFILES; do
-          [[ $file == ${p}* ]] && found=true && break
-        done
-        ! $found && continue
-      fi # }}} # }}}
-      sum="$(shasum $i | cut -d\  -f1)"
-      h_sum="$(echo -n ${HOSTNAME%%.*} | shasum | cut -d\  -f1)"
-      [[ -e "$src_dir/.applied" ]] && command grep -q "^$h_sum $sum" "$src_dir/.applied" && continue
-      echo "Applying remote changes [$file]..." >/dev/stderr
-      if [[ $file == *.enc ]]; then # {{{
-        j="$TMP_MEM_PATH/${file%.enc}"
-        if [[ ! -z $REMOTE_CHANGES_KEY ]]; then
-          p="--key '$REMOTE_CHANGES_KEY'"
-        elif [[ ! -z $REMOTE_CHANGES_PWD ]]; then
-          p="--pass '$($PROFILES_PATH/home/bin/oth/runtime-pwd.sh -q "$REMOTE_CHANGES_PWD")'"
-        else
-          echo "Missing passphrase for [$file]"
-          continue
-        fi
-        if ! eval encryptor $p "$i" "$j"; then
-          echo "Cannot decrypt [$file]"
-          continue
-        fi
-        command chmod +x "$j"
-        i="$j"
-        unset j
-      fi # }}}
-      $i && echo "$h_sum $sum $file $(command date +'%Y%m%d')" >>"$src_dir/.applied"
-      [[ $file == *.enc ]] && rm -f "$i"
-    done # }}}
-    unset i sum h_sum file p found
-  fi
-  unset now rmt_chngs_file
-fi
-unset REMOTE_CHANGES_APPLY REMOTE_CHANGES_ALLOW_PLAIN REMOTE_CHANGES_PWD REMOTE_CHANGES_KEY src_dir
-# }}}
 # Check personalities # {{{
-[[ -z $PERS_USERS ]] && echo "Personalities not found!!!" >/dev/stderr && sleep 2
+[[ -z $PERS_USERS ]] && echoe "Personalities not found!!!" && sleep 2
 # }}}
 # nvm # {{{
 if [[ -e $HOME/.nvm ]] && ${NODE_USE_NVM:-false}; then
@@ -106,7 +44,6 @@ if [[ ! -z "$UNICODE_EXTRA_CHARS_FILE" && ! -e "$UNICODE_EXTRA_CHARS_FILE" ]]; t
     for i in $(echo ${!UNICODE_EXTRA_CHARS[*]} | tr ' ' '\n' | sort); do
       echo "UNICODE_EXTRA_CHARS[$i]=\"${UNICODE_EXTRA_CHARS[$i]}\""
     done
-    echo
   } >"$UNICODE_EXTRA_CHARS_FILE"
   unset i
 fi # }}}
@@ -247,12 +184,36 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
     local rlPoint=$READLINE_POINT
     READLINE_POINT=
     READLINE_LINE="$( history -r; __fzf_history__)"
-    READLINE_POINT=$rlP
+    READLINE_POINT=$rlPoint
+  } # }}}
+  __fzf-env-widget() { # {{{
+    declare -a resA
+    readarray -t resA < <(\
+      compgen -v | grep "^[A-Z]" \
+      | fzf +m --sort \
+          --prompt 'env> ' \
+          --preview 'eval echo \${1}' --preview-window 'nohidden' \
+          --expect ctrl-n \
+          --expect ctrl-q \
+          --expect ctrl-v)
+    (( $? == 0 )) || return 1
+    local key="${resA[0]}" selected="${resA[1]}"
+    [[ -n $selected ]] || return 1
+    case $key in
+    '') selected="\$$selected";;
+    ctrl-n) ;;
+    ctrl-q) local -n ref="$selected"; selected="\"$ref\"";;
+    ctrl-v) local -n ref="$selected"; selected="$ref";;
+    esac
+    READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
+    READLINE_POINT=$((READLINE_POINT + ${#selected}))
   } # }}}
   bind -m vi-command -r "\C-r"
   bind -m vi-insert  -r "\C-r"
-  bind -m vi-command -x '"\C-w\C-e": "__fzf-git-widget"'
-  bind -m vi-insert  -x '"\C-w\C-e": "__fzf-git-widget"'
+  bind -m vi-command -x '"\C-w\C-e": "__fzf-env-widget"'
+  bind -m vi-insert  -x '"\C-w\C-e": "__fzf-env-widget"'
+  bind -m vi-command -x '"\C-w\C-g": "__fzf-git-widget"'
+  bind -m vi-insert  -x '"\C-w\C-g": "__fzf-git-widget"'
   bind -m vi-command -x '"\C-w\C-r": "__fzf-history"'
   bind -m vi-insert  -x '"\C-w\C-r": "__fzf-history"'
   bind -m vi-command -x '"\C-t"    : "__fzf-file-widget"'
@@ -275,7 +236,7 @@ if ${TMUX_POPUP:-false}; then # {{{
 fi # }}}
 if $IS_DOCKER; then # {{{
   if ! $IS_VSCODE && $BASHRC_FULL_START; then # {{{
-    $ALIASES_SCRIPTS/docker-tools/clipboard-docker.sh &
+    $ENV_SCRIPTS/docker-tools/clipboard-docker.sh &
     disown $!
   fi # }}}
 fi # }}}

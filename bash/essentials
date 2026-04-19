@@ -1,0 +1,303 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+is-installed() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # @@:new # {{{
+    echo "-f --function -F -x --exporter-Function -w --which -t --type -v --var --cache --no-cache"
+    return 0
+  fi # }}}
+  local err=0 no=1 mode= tool= fInstalled="$BASHRC_RUNTIME_PATH/is-installed" key= useCache=true
+  declare -Ax IS_INSTALLED_TOOL
+  [[ -e $fInstalled ]] && source $fInstalled
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in # {{{
+    -v      | --var)               mode="var";    tool=$2; shift;;
+    -f      | --function)          mode="fun";    tool=$2; shift;;
+    -F | -x | --exporter-Function) mode="fun-x";  tool=$2; shift;;
+    -w      | --which)             mode="which";  tool=$2; shift;;
+    -t      | --type)              mode="type";   tool=$2; shift;;
+    --cache)    useCache=true;;
+    --no-cache) useCache=false;;
+    *)                             mode="type";   tool=$1;;
+    esac; shift # }}}
+    key="$tool:$mode"
+    if [[ -z ${IS_INSTALLED_TOOL[$key]} ]] || ! $useCache; then
+      case $mode in
+      var)    declare -p $tool;;
+      fun)    declare -F $tool;;
+      fun-x)  declare -Fx | command grep -q " $tool$";;
+      which)  which $tool;;
+      type)   type $tool;;
+      esac >/dev/null 2>&1
+      if [[ $? == 0 ]]; then
+        IS_INSTALLED_TOOL[$key]=1
+        declare -p IS_INSTALLED_TOOL >$fInstalled
+      else
+        err=$((err+no))
+      fi
+    fi
+    no=$((no*2))
+  done # }}}
+  return $err
+} # }}}
+is-sourced() { # {{{
+  [[ "${BASH_SOURCE[1]}" != "$0" ]]
+} # }}}
+import-module() { # {{{
+  local module= toExport= alias_i=
+  while (( $# )); do
+    module="$1"; shift
+    local -n moduleRef="__MODULE_${module//-/_}"
+    ! ${moduleRef:-false} || continue
+    toExport=
+    while [[ $1 == +* ]]; do # {{{
+      toExport+=" ${1#+}"; shift
+    done # }}}
+    for alias_i in ${!BASH_ALIASES[*]}; do # {{{
+      [[ ${BASH_ALIASES[$alias_i]} =~ $BASH_PATH/env.modules/$module ]] || continue
+      unalias $alias_i
+    done # }}}
+    source $BASH_PATH/env.modules/$module
+    if [[ -z $toExport ]]; then
+      __export_$module
+    else
+      export -f $toExport
+    fi
+  done
+}
+if declare -F compl-add >/dev/null 2>&1; then
+  [[ -z ${COMPLETION_STATIC[import-module]} ]] && COMPLETION_STATIC[import-module]="$(builtin cd $BASH_PATH/env.modules; ls)"
+  compl-add --static import-module
+fi
+# }}}
+echoe() { # {{{
+  local module= cModule='[0;90m' cOff='[0m' addColor=
+  case $1 in
+  false) return 0;;
+  true) shift;;
+  esac
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f | --function)  module=${FUNCNAME[1]};;
+    -s | --source)    module=${BASH_SOURCE[-1]##*/};;
+    -w | --which)     module=${0##*/};;
+    -m)               module="$2"; shift;;
+    -c)  addColor=true;;
+    -nc) addColor=false;;
+    --)  shift; break;;
+    *) break;;
+    esac; shift
+  done # }}}
+  [[ ! -z $1 ]] || { echo >&2; return 0; }
+  if [[ -z $module ]]; then # {{{
+    case $0 in
+    bash | -bash) module=${BASH_SOURCE[1]##*/};;
+    *)            module=${0##*/};;
+    esac
+  fi # }}}
+  if [[ ! -z $module ]]; then # {{{
+    case $module in
+    *.sh)   module=${module%.sh};;
+    *.bash) module=${module%.bash};;
+    esac
+    if [[ -z $addColor ]]; then
+      [[ -t 1 ]] && addColor=true || addColor=false
+    fi
+    $addColor && module="$cModule$module$cOff"
+    module+=": "
+  fi # }}}
+  echo -e "$module$@" >&2
+} # }}}
+die() { # {{{
+  local mode='exit' retVal=1 n=1 silent=false colorParam="-c" module=
+  case ${FUNCNAME[1]} in # {{{
+  '') # {{{
+    case $0 in
+    bash | -bash) mode='return';
+    esac;; # }}}
+  main | bash | source);;
+  *) mode='return';;
+  esac # }}}
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -r  | --return)  mode='return';;
+    -e  | --exit)    mode='exit';;
+    -c  | --cont)    mode='continue';;
+    -c* | --cont=*)  mode='continue'; n=$1; n=${n#-c}; n=${n#--cont=};;
+    -b  | --break)   mode='break';;
+    -b* | --break=*) mode='break';    n=$1; n=${n#-b}; n=${n#--break=};;
+    -rv | --ret-val) retVal=$2; shift;;
+    -s)              silent=true;;
+    -s=true | -s=false) silent=${1#-s=};;
+    -s=!true)        silent=false;;
+    -s=!false)       silent=true;;
+    --plain)         colorParam="-nc";;
+    *) break;;
+    esac; shift
+  done # }}}
+  [[ $1 =~ ^[0-9]+$ ]] && retVal=$1 && shift
+  if [[ $# -ge 2 ]]; then # {{{
+    module="$1"; shift # }}}
+  else # {{{
+    case $0 in
+    bash | -bash) module=${BASH_SOURCE[1]##*/};;
+    *)            module=${0##*/};;
+    esac
+  fi # }}}
+  case $module in # {{{
+  *.sh)   module=${module%.sh};;
+  *.bash) module=${module%.bash};;
+  esac # }}}
+  if ! $silent; then # {{{
+    if [[ ! -z $1 ]]; then
+      echoe $colorParam -m ${module:--} "$@"
+    else
+      echoe $colorParam -m ${module:--} "dying..."
+    fi
+  fi # }}}
+  case $mode in
+  exit)      exit $retVal;;
+  return)    echo "return $retVal";;
+  continue)  echo "continue $n";;
+  break)     echo "break $n"
+  esac
+} # }}}
+remove-dups() { # {{{
+  local sep=":" onlyIfExist=false i= ret=
+  while [[ -n $1 ]]; do
+    case $1 in
+    --check) onlyIfExist=true;;
+    --sep) sep="$2"; shift;;
+    *) break;;
+    esac; shift
+  done
+  while read i; do
+    ! $onlyIfExist || [[ -e $i ]] || continue
+    ret+="$i$sep"
+  done < <(printf "%s" "$1" | awk -v RS="$sep" -v ORS='\n' '!($0 in a) {a[$0]; print}')
+  echo "${ret%:}"
+} # }}}
+# epochSeconds() # {{{
+if [[ -z $EPOCHSECONDS ]]; then
+  epochSeconds() {
+    command date +%s
+  }
+  export -f epochSeconds
+fi # }}}
+env-snapshot() { # @@:new # {{{
+  [[ ! -z $ENV_SNAPSHOT ]] || return 1
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "-f --force -v --verbose -s --silent"
+    echo "load save clean clean-all sync"
+    return 0
+  fi # }}}
+  local snap_i= errOut="/dev/stderr" force=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -f | --force) force=true;;
+    -v | --verbose) errOut="/dev/stderr";;
+    -s | --silent)  errOut="/dev/null";;
+    *) break;;
+    esac; shift
+  done # }}}
+  case $1 in
+  clean) # {{{
+    rm -rf $ENV_SNAPSHOT;; # }}}
+  clean-all) # {{{
+    rm -rf $ENV_SNAPSHOT_PRE*;; # }}}
+  load) # {{{
+    [[ ! -e $ENV_SNAPSHOT/setting ]] || return 1
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC && ! -e $ENV_SNAPSHOT/set ]]; then
+      cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
+      unset ENV_SNAPSHOT_SRC
+    fi
+    [[ -e $ENV_SNAPSHOT/set ]] || return 1
+    for snap_i in bash env func compl alias; do
+      [[ -e $ENV_SNAPSHOT/$snap_i ]] || continue
+      source $ENV_SNAPSHOT/$snap_i 2>$errOut
+    done
+    if [[ $- == *i* ]]; then
+      [[ -e $ENV_SNAPSHOT/bind.glob ]] && source $ENV_SNAPSHOT/bind.glob
+    fi
+    local __promptCommand="${PROMPT_COMMAND[0]}"
+    unset PROMPT_COMMAND
+    export PROMPT_COMMAND="$__promptCommand"
+    history -r
+    return 0;; # }}}
+  save) # {{{
+    command mkdir -p $ENV_SNAPSHOT
+    command mkdir $ENV_SNAPSHOT/setting >/dev/null 2>&1 || return 1
+    if [[ ! -e $ENV_SNAPSHOT/set ]] || $force; then
+      shopt | awk '/on$/ {print "shopt -s", $1} /off$/ {print "shopt -u", $1 }' >$ENV_SNAPSHOT/bash
+      echo "set -${-//[isc]}" >>$ENV_SNAPSHOT/bash
+      local vars="${!BASHRC_*}" v=
+      vars="${vars/BASHRC_RUNTIME_PATH}"; vars="${vars/BASHRC_PLAIN_INSTALL}"
+      v="i profi what_to_do RCSTUFF_FORCE RCSTUFF_IN_BASHRC RCSTUFF_ORIG_TERM TIME_MEASURE_PREFIX $vars"
+      v+=" snap_i errOut force p pp v vars"
+      v="${v// /\\|}"
+      local __promptCommand="${PROMPT_COMMAND[0]}"
+      unset PROMPT_COMMAND
+      export PROMPT_COMMAND="$__promptCommand"
+      unset __promptCommand
+      declare -p | \
+        sed \
+          -e '/^declare -[^ ]\?r/d' \
+          -e '/^declare -[^ ]\? BASH_\(ALIASES\|ARGC\|ARGV\|ARGV0\|CMDS\|COMMAND\|COMPAT\|COMPLETION_VERSINFO\|LAST_ERR\|LINENO\|REMATCH\|SOURCE\|SUBSHELL\|VERSION\)=/d' \
+          -e '/^declare -[^ ]\? \(BASHPID\|PPID\|\|_\|PS0_time\|PS1\|PWD\|OLDPWD\|EPOCHSECONDS\|EPOCHREALTIME\|TMUX_PANE\|TERM\)=/d' \
+          -e '/^declare -[^ ]\? \(BASHRC_PROFILER\|BASHRC_DBG\|ENV_SNAPSHOT\)=/d' \
+          -e '/^declare -[^ ]\? \(BASH\|FUNCNAME\|DIRSTACK\|DIRS\|LINENO\|LINES\|COLUMNS\|PIPESTATUS\|RANDOM\|ROWS\|SHELL\|SHLVL\|SRANDOM\)=/d' \
+          -e '/^declare -[^ ]\? BASHRC_TRACE[^=]*=/d' \
+          -e '/^declare -[^ ]\? RCSTUFF_\(BASHRC_INSTALLING\)=/d' \
+          -e '/^declare -[^ ]\? READLINE_[^=]*=/d' \
+          -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\)[^=]*=/d' \
+          -e '/^declare -[^ ]\? BASH_PHISTORY_\(LAST\|TODAY\|TODAY_LINE\)=/d' \
+          -e '/^declare -[^ ]\? SSH_\(CLIENT\|CONNECTION\)=/d' \
+          -e '/^declare -[^ ]\? \('"$v"'\)="/d' \
+          -e 's/^declare /declare -g /' \
+          >$ENV_SNAPSHOT/env
+      if [[ $ENV_SNAPSHOT == *.main ]]; then
+        sed -i '/^declare -[^ ]\? PS1_STATUS=/d' $ENV_SNAPSHOT/env
+      fi
+      declare -f |
+        sed \
+          -e '/^__bashrc_exit ()/s/__bashrc_exit/__bashrc_exit_tmp/' \
+          >$ENV_SNAPSHOT/func
+      complete -p | while read line; do
+        if [[ "$line" =~ .*\ -F\ +(_.*)\ +(.*)$ ]]; then
+          local f=${BASH_REMATCH[1]} cmd=${BASH_REMATCH[2]}
+          [[ $f == _$cmd ]] && continue
+        fi
+        echo "$line"
+      done >$ENV_SNAPSHOT/compl
+      alias >$ENV_SNAPSHOT/alias
+      for snap_i in vi vi-command vi-insert emacs; do
+        (
+          bind -m $snap_i -p | sed '/^#\|self-insert/d'
+          bind -m $snap_i -s
+        ) | sed -e '/^\s*$/d' -e $'s/^.*/bind -m '"$snap_i"$' \'\\0\'/'
+        bind -m $snap_i -X | sed $'s/^.*/bind -m '"$snap_i"$' -x \'\\0\'/'
+      done >$ENV_SNAPSHOT/bind.glob
+      touch $ENV_SNAPSHOT/set
+    fi
+    rm -rf $ENV_SNAPSHOT/setting
+    return 0;; # }}}
+  sync) # {{{
+    local i=
+    for i in "${ENV_POST_INVOKE[@]}"; do $i; done;; # }}}
+  esac
+} # }}}
+load-colors() { # {{{
+  if [[ -s $COLORS_FILE ]]; then
+    source $COLORS_FILE
+  else
+    is-installed -f color-cache-init || source $BASH_PATH/colors
+    color-cache-init
+  fi
+} # }}}
+if is-installed --no-cache compl-add; then # {{{
+  compl-add --new is-installed env-snapshot
+fi # }}}
+alias SBF="source ~/.bashrc --force"
+export HISTIGNORE+=":is-installed:is-sourced:import-module:echoe"
+export -f is-installed is-sourced import-module echoe die remove-dups env-snapshot load-colors
+

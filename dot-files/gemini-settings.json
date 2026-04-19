@@ -1,0 +1,10 @@
+{
+  "selectedAuthType": "oauth-personal",
+  "theme": "ANSI",
+  "preferredEditor": "vim",
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  }
+}

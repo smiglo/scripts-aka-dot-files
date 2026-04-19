@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-import-module compl-short
+import-module echor compl-short
 
 if [[ $1 == '@@' ]]; then # {{{
   if [[ $2 == --shorts ]]; then # {{{
@@ -104,7 +103,7 @@ while [[ ! -z $1 ]]; do # {{{
     fi
     shift;; # }}}
   -R)              repos=;;
-  -b | --bash)     [[ -z $whatToDo ]] && whatToDo='run-bash'; wtd="$SHELL </dev/tty >/dev/tty 2>/dev/stderr"; echorm -; exitOnFail=true;;
+  -b | --bash)     [[ -z $whatToDo ]] && whatToDo='run-bash'; wtd="$SHELL </dev/tty >/dev/tty"; echorm -; exitOnFail=true;;
   -l | --list)     list=true; [[ -z $whatToDo ]] && whatToDo='list';;
   +br)             list=true; list_addBranch=true; whatToDo='dump-rev';;
   --no-list)       list=false;;

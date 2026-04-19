@@ -18,73 +18,7 @@ export RCSTUFF_RUNTIME_INSTALLED=true
 # }}}
 # Unicode extra chars # {{{
 if [[ -z ${UNICODE_EXTRA_CHARS[bell]} ]] || $RCSTUFF_FORCE; then
-  declare -Ag UNICODE_EXTRA_CHARS
-  UNICODE_EXTRA_CHARS[apple]="🍏"
-  UNICODE_EXTRA_CHARS[array-r]="→"
-  UNICODE_EXTRA_CHARS[array-l]="←"
-  UNICODE_EXTRA_CHARS[array-double]="➾"
-  UNICODE_EXTRA_CHARS[array-lr]="↔︎"
-  UNICODE_EXTRA_CHARS[battery]="🔋"
-  UNICODE_EXTRA_CHARS[bell]="🛎"
-  UNICODE_EXTRA_CHARS[bracket-open]="‹"
-  UNICODE_EXTRA_CHARS[bracket-close]="›"
-  UNICODE_EXTRA_CHARS[docker]="🌋"
-  UNICODE_EXTRA_CHARS[dot-small]="•"
-  UNICODE_EXTRA_CHARS[dot-medium]="⚫"
-  UNICODE_EXTRA_CHARS[dot-big]="🌑"
-  UNICODE_EXTRA_CHARS[disk]="💾"
-  UNICODE_EXTRA_CHARS[nested-bash]="❶"
-  UNICODE_EXTRA_CHARS[envelope]="✉ "
-  UNICODE_EXTRA_CHARS[exclamation]="❢"
-  UNICODE_EXTRA_CHARS[extra-bar]="◼ "
-  UNICODE_EXTRA_CHARS[high-cpu]="⚛ "
-  UNICODE_EXTRA_CHARS[home]="🏡"
-  UNICODE_EXTRA_CHARS[icon-ok]="✓"
-  UNICODE_EXTRA_CHARS[icon-err]="✗"
-  UNICODE_EXTRA_CHARS[laptop]="💻"
-  UNICODE_EXTRA_CHARS[link]="🔗"
-  UNICODE_EXTRA_CHARS[ll-pni]="⛏ "
-  UNICODE_EXTRA_CHARS[localhost]="🤠"
-  UNICODE_EXTRA_CHARS[mic]="🎤"
-  UNICODE_EXTRA_CHARS[mute]="🔇"
-  UNICODE_EXTRA_CHARS[new-line]="↳"
-  UNICODE_EXTRA_CHARS[padlock]="🔓"
-  UNICODE_EXTRA_CHARS[pause]="⏸"
-  UNICODE_EXTRA_CHARS[play]="⏺"
-  UNICODE_EXTRA_CHARS[power]="🔌"
-  UNICODE_EXTRA_CHARS[progress-bar]="▁▃▄▅▆▇█▇▆▅▄▃"
-  UNICODE_EXTRA_CHARS[progress-dots]="⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿⡀⡁⡂⡃⡄⡅⡆⡇⡈⡉⡊⡋⡌⡍⡎⡏⡐⡑⡒⡓⡔⡕⡖⡗⡘⡙⡚⡛⡜⡝⡞⡟⡠⡡⡢⡣⡤⡥⡦⡧⡨⡩⡪⡫⡬⡭⡮⡯⡰⡱⡲⡳⡴⡵⡶⡷⡸⡹⡺⡻⡼⡽⡾⡿⢀⢁⢂⢃⢄⢅⢆⢇⢈⢉⢊⢋⢌⢍⢎⢏⢐⢑⢒⢓⢔⢕⢖⢗⢘⢙⢚⢛⢜⢝⢞⢟⢠⢡⢢⢣⢤⢥⢦⢧⢨⢩⢪⢫⢬⢭⢮⢯⢰⢱⢲⢳⢴⢵⢶⢷⢸⢹⢺⢻⢼⢽⢾⢿⣀⣁⣂⣃⣄⣅⣆⣇⣈⣉⣊⣋⣌⣍⣎⣏⣐⣑⣒⣓⣔⣕⣖⣗⣘⣙⣚⣛⣜⣝⣞⣟⣠⣡⣢⣣⣤⣥⣦⣧⣨⣩⣪⣫⣬⣭⣮⣯⣰⣱⣲⣳⣴⣵⣶⣷⣸⣹⣺⣻⣼⣽⣾⣿"
-  UNICODE_EXTRA_CHARS[romb]="✦"
-  UNICODE_EXTRA_CHARS[root]="☢ "
-  UNICODE_EXTRA_CHARS[satellite]="📡"
-  UNICODE_EXTRA_CHARS[sep-dot]="·"
-  UNICODE_EXTRA_CHARS[sep-x]="×"
-  UNICODE_EXTRA_CHARS[smart]="ⓢ "
-  UNICODE_EXTRA_CHARS[snake]="🐍"
-  UNICODE_EXTRA_CHARS[ssh]="🚀"
-  UNICODE_EXTRA_CHARS[tmux_env]="🌋"
-  UNICODE_EXTRA_CHARS[tmux-main]="🌅"
-  UNICODE_EXTRA_CHARS[zoom-left]="🔍"
-  UNICODE_EXTRA_CHARS[zoom-right]="🔎"
-  UNICODE_EXTRA_CHARS[zoom]="${UNICODE_EXTRA_CHARS[zoom-right]}"
-  if $IS_MAC; then
-    TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
-  elif [[ -z $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS ]]; then
-    TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
-    if [[ "$(echo -en "🔍" | { $IS_MAC && gwc -L || wc -L; })" != "2" ]]; then
-      TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=false
-    fi
-  fi
-  if ! $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS; then
-    UNICODE_EXTRA_CHARS[battery]="B"
-    UNICODE_EXTRA_CHARS[disk]="U"
-    UNICODE_EXTRA_CHARS[localhost]=":)"
-    UNICODE_EXTRA_CHARS[mic]="Mic"
-    UNICODE_EXTRA_CHARS[mute]="Mute"
-    UNICODE_EXTRA_CHARS[power]="P"
-    UNICODE_EXTRA_CHARS[zoom]="/Z"
-  fi
-  export UNICODE_EXTRA_CHARS
+  source $BASH_PATH/unicode
   export UNICODE_EXTRA_CHARS_FILE="$BASHRC_RUNTIME_PATH/unicode-extra.conf"
 fi
 export TMUX_ICONS=
@@ -97,14 +31,10 @@ export TMUX_ICONS+=" docker:${UNICODE_EXTRA_CHARS[docker]}"
 ${INPUTRC_MODE_CHAR_USE:-true} && export INPUTRC_MODE_CHAR="☯ "
 # }}}
 # Static completions # {{{
-if [[ -z ${COMPLETION_STATIC[_placeholder]} ]] || $RCSTUFF_FORCE; then
-  declare -Ag COMPLETION_STATIC
-  COMPLETION_STATIC[_placeholder]="_defined"
-  COMPLETION_STATIC[npm]="run test install ci i audit ls exec"
-  COMPLETION_STATIC[npm:audit]="fix"
-  COMPLETION_STATIC[npm:audit:fix]="--force"
-  COMPLETION_STATIC[npx:semantic-release]="--dry-run"
-fi # }}}
+COMPLETION_STATIC[npm]="run test install ci i audit ls exec"
+COMPLETION_STATIC[npm:audit]="fix"
+COMPLETION_STATIC[npm:audit:fix]="--force"
+COMPLETION_STATIC[npx:semantic-release]="--dry-run" # }}}
 # Personalities # {{{
 [[ -e $BASH_PATH/personalities/personalities ]] && source $BASH_PATH/personalities/personalities
 [[ -e $RUNTIME_PATH/personalities ]] && source $RUNTIME_PATH/personalities
@@ -113,11 +43,11 @@ fi # }}}
 export PATH=@END@:$PATH
 export PATH=$SCRIPT_PATH/bin:$PATH
 export PATH=$SCRIPT_PATH/git/bin:$PATH
-export PATH=$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$PATH
+export PATH=$APPS_CFG_PATH/bin:$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$PATH
 # }}}
 # FZF Runtime # {{{
 fzfPath=$FZF_PATH
-if [[ -z $FZF_INSTALLED ]]; then
+if [[ -z $FZF_INSTALLED || -z $VIM_FZF_RUNTIME_PATH ]]; then
   export FZF_INSTALLED=false
   if [[ -z $fzfPath ]]; then # {{{
     if [[ -e $TOOLS_PATH/fzf/bin/fzf ]]; then
@@ -126,8 +56,8 @@ if [[ -z $FZF_INSTALLED ]]; then
       fzfPath="/usr/bin"
     elif [[ -e /usr/local/bin/fzf ]]; then
       fzfPath="/usr/local/bin"
-    elif [[ -e $SCRIPT_PATH/bash/inits/fzf/bin/fzf ]]; then
-      fzfPath="$SCRIPT_PATH/bash/inits/fzf/bin"
+    elif [[ -e $SCRIPT_PATH/inits/fzf/bin/fzf ]]; then
+      fzfPath="$SCRIPT_PATH/inits/fzf/bin"
     fi
   fi # }}}
   if [[ ! -z $fzfPath  ]]; then
@@ -135,6 +65,15 @@ if [[ -z $FZF_INSTALLED ]]; then
     [[ :$PATH: == *:$fzfPath:* ]] || PATH=$fzfPath:$PATH
   elif is-installed fzf; then
     FZF_INSTALLED=true
+  fi
+  if $FZF_INSTALLED; then
+    if which fzf >/dev/null 2>&1; then
+      export VIM_FZF_RUNTIME_PATH="$(readlink -f $(which fzf))"
+      export VIM_FZF_RUNTIME_PATH="${VIM_FZF_RUNTIME_PATH%/*/*}"
+    else
+      FZF_INSTALLED=false
+      export VIM_FZF_RUNTIME_PATH="/not-exist"
+    fi
   fi
 fi
 unset fzfPath # }}}
@@ -149,7 +88,7 @@ if is-installed ccache; then
   export CMAKE_ARGS+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache"
   export CMAKE_ARGS+=" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
 fi
-# export MAKEFILE_COMMON="$SCRIPT_PATH/bash/inits/Makefile"
+# export MAKEFILE_COMMON="$SCRIPT_PATH/inits/Makefile"
 # # }}}
 # AIder # {{{
 if false && is-installed -w aider; then
@@ -469,24 +408,24 @@ if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]]
         $HOME/*)         msg+=" [${p/$HOME/\~}]";;
         esac
         msg+="${COff}"
-        $SCRIPT_PATH/bin/progress --mark --dots --left --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
+        $SCRIPT_PATH/bin/progress --mark --dots --left --msg "$msg" --color ${CCyan} --delay 0.1
         # Old files # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -not -newer $marker -a -type f \
           -exec \
-            $SHELL -c 'f() { [[ ! -z "'$keep'" ]] && echo "${1/$2\/}" | command grep -qe "'$keep'" && return 0; ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
+            $SHELL -c 'f() { [[ ! -z "'$keep'" ]] && echo "${1/$2\/}" | command grep -qe "'$keep'" && return 0; ! '$silent' && echo -en "\nRemoving ['${CCyan}'${1/$2\/}'${COff}']" >&2; rm -f "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         # Dead links # {{{
         find $p \
           -mindepth 1 -path $p/'.*' -prune -o -type l \
           -exec \
-            $SHELL -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo -en "\nRemoving deadlink ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
+            $SHELL -c 'f() { if [[ ! -e "$1" ]]; then ! '$silent' && echo -en "\nRemoving deadlink ['${CCyan}'${1/$2\/}'${COff}']" >&2; rm -f "$1"; fi; }; f "{}" '"$p"';' \; \
           2>/dev/null # }}}
         # Empty Dirs # {{{
         find $p \
           -mindepth 1 -not -path $p/'.*' -a -type d -a -not -newer $marker -a -empty \
           -exec \
-            $SHELL -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']" >/dev/stderr; rm -rf "$1"; }; f "{}" '\"$p\"';' \; \
+            $SHELL -c 'f() { ! '$silent' && echo -en "\nRemoving empty dir ['${CCyan}'${1/$2\/}'${COff}']" >&2; rm -rf "$1"; }; f "{}" '\"$p\"';' \; \
           2>/dev/null # }}}
         rm -f $marker
         $SCRIPT_PATH/bin/progress --unmark
@@ -494,7 +433,7 @@ if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]]
       sleep 0.1
       if which tac >/dev/null 2>&1 && [[ ! -n $TMUX || $do_clean != 'false' ]]; then # {{{
         msg="${CBlue}Cleaning bash histories${COff}"
-        $SCRIPT_PATH/bin/progress --mark --dots --left --msg "$msg" --color ${CCyan} --delay 0.1 --out /dev/stderr
+        $SCRIPT_PATH/bin/progress --mark --dots --left --msg "$msg" --color ${CCyan} --delay 0.1
         find -L $TMP_PATH/.tmux -maxdepth 3 -name bash_history \
           -exec \
             $SHELL -c 'f() { \
@@ -528,14 +467,16 @@ export PATH="$HOME/.cargo/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 [[ -e $TOOLS_PATH/.runtime.bash ]] && source $TOOLS_PATH/.runtime.bash
 if $IS_MAC && is-installed -w brew; then # {{{
-  pathFile="$BASHRC_RUNTIME_PATH/brew.paths"
+  pathFile="$BASHRC_RUNTIME_PATH/brew.paths" prefix="$(brew --prefix)"
   if [[ ! -e $pathFile ]]; then
     brewPaths="$( \
-      find $(brew --prefix)/Cellar -type d -path '*/libexec/gnubin' \
+      find $prefix/Cellar -type d -path '*/libexec/gnubin' \
       | grep -v "${BREW_LIBEXEC_EXCLUDE:-@@@}" \
       | tr '\n' ':')"
+    ccachePath=$(ls -d $prefix/Cellar/ccache/*/libexec 2>/dev/null)
+    [[ -n $ccachePath ]] && brewPaths+="$ccachePath:"
     echo "${brewPaths%:}" >>$pathFile
-    unset brewPaths
+    unset brewPaths prefix ccachePath
   fi
   [[ -s $pathFile ]] && PATH="$(< $pathFile):$PATH"
   unset pathFile
@@ -553,8 +494,8 @@ source $RUNTIME_FILE
 if $IS_VIRTUAL_OS && [[ -e $BASH_PATH/runtime-virtos.bash ]]; then # {{{
   source $BASH_PATH/runtime-virtos.bash
 fi # }}}
-for profi in $BASH_PROFILES; do
-  [[ -e $RUNTIME_FILE.$profi ]] && source $RUNTIME_FILE.$profi
+for profi in $($BASH_PATH/env-ext.sh get-plugins runtime); do
+  source $profi
 done
 # }}}
 # Source profiles' runtimes # {{{

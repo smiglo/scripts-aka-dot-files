@@ -259,7 +259,7 @@ backup() { # {{{
   done # }}}
   return 0
 } # }}}
-source $ALIASES_D/0.essentials
+source $BASH_PATH/essentials
 GIT_REPOS=$(echo "$GIT_REPOS" | tr ' ' '\n' | awk '!($0 in a) {a[$0]; print}' | tr '\n' ' ')
 todo=$1; shift
 case $todo in

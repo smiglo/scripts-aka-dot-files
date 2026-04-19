@@ -5,7 +5,7 @@ is_git=false
 git -C $TICKET_PATH rev-parse 2>/dev/null && is_git=true
 cd "$path_issue"
 dst_tar="$issue-archive.tar" dst_gz="$dst_tar.gz" list= params= do_clean=false do_test=false
-[[ -e $dst_tar ]] && echo "Intermediate file [$dst_tar] exists, remove them and proceed again" >/dev/stderr && exit 1
+[[ ! -e $dst_tar ]] || die "Intermediate file [$dst_tar] exists, remove them and proceed again"
 [[ -e $dst_gz ]] && { gunzip "$dst_gz"; params+=" -r"; } || params+=" -c"
 [[ $1 == --pkg ]] && set -- --all-all --test
 while [[ ! -z $1 ]]; do # {{{
@@ -16,13 +16,13 @@ while [[ ! -z $1 ]]; do # {{{
     else
       list="$(find . -name ${issue}-'*' -prune -o -name .${issue}-'*' -prune -o -name .done -prune -o -print | sed '/^\.$/ d')"
     fi
-    [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+    [[ -n $list ]] || die "No files were chosen"
     do_clean=true
     ;; # }}}
   --all-all) # {{{
     list="$(find . -print | sed '/^\.$/ d')"
     list="$(echo "$list" | sort | fzf --height 100% --prompt "Choose files> ")"
-    [[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+    [[ -n $list ]] || die "No files were chosen"
     ;; # }}}
   --clean) do_clean=true;;
   --test)  do_test=true;;
@@ -38,7 +38,7 @@ if [[ -z $list ]]; then # {{{
   fi
   list="$(echo "$list" | sed '/^\.$/ d' | sort | fzf --height 100% --prompt "Choose files> ")"
 fi # }}}
-[[ -z $list ]] && echo "No files were chosen" >/dev/stderr && exit 1
+[[ -z $list ]] && echo "No files were chosen"
 list="$(echo "$list" | tr '\n' ' ')"
 tar $params -f "$dst_tar" $list
 $do_test && tar -tf "$dst_tar"

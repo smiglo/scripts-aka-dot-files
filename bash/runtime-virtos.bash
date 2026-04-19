@@ -3,6 +3,7 @@
 
 export PS1_STATUS="short_git:default"
 [[ -z $TMUX_ICON_HOST ]] && export TMUX_ICON_HOST="docker"
+[[ -z $TMUX_STATUS_LEFT_CHECK_SSH ]] && export TMUX_STATUS_LEFT_CHECK_SSH=false
 [[ ! -z $TZ ]] || export TZ="Europe/Warsaw"
 
 bindList="Downloads Desktop Documents $VIRTOS_HOST_LINKS"
@@ -41,4 +42,3 @@ if $BASHRC_FULL_START; then # {{{
   fi
 fi # }}}
 unset bindList
-

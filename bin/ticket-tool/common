@@ -4,8 +4,7 @@
 getIssueFile() { # {{{
   [[ -e "$path_issue/${issue}-data.txt" ]] && echo "$path_issue/${issue}-data.txt" && return 0
   [[ -e "$path_issue/.${issue}-data.txt" ]] && echo "$path_issue/.${issue}-data.txt" && return 0
-  echo "Cannot find issue file for issue '$issue'/'$path_issue'" >/dev/stderr
-  return 1
+  eval $(die "Cannot find issue file for issue '$issue'/'$path_issue'")
 }
 export -f getIssueFile
 # }}}

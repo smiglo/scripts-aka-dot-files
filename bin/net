@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module time2s time-tools
-import-module echor
-import-module progress-dot progress
+import-module time-tools echor progress
 
 _net() { # @@ # {{{
   # Errors: # {{{
@@ -74,11 +72,9 @@ _net() { # @@ # {{{
     esac
     shift
   done # }}}
-  local ping="ping" pingParams="-c1 -w1" ts= err=0 colorsOn=
-  is-installed -w timeout && ping="timeout 0.85 ping"
+  local ping="ping" pingParams="-c1 -i0.5 -W0.5" ts= err=0 colorsOn=
   [[ ! -t 2 ]] && colorsOn=false
   [[ ! -t 1 ]] && fix=false
-  $IS_MAC && pingParams="-c1 -t1"
   if $waitFor; then # {{{
     local cnt=$(time2s $waitTime -o s)
     while true; do

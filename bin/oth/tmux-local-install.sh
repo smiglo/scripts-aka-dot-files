@@ -8,7 +8,7 @@
 TMUX_INSTALL_VERSION=${TMUX_INSTALL_VERSION:-'local:2.8'}
 if [[ $TMUX_INSTALL_VERSION == local:* ]]; then
   TMUX_INSTALL_VERSION=${TMUX_INSTALL_VERSION/'local:'}
-  LOCAL_TARBALL=$ENV_PATH/scripts/bash/inits/tmux/src/tmux-src-${TMUX_INSTALL_VERSION}.tar.gz
+  LOCAL_TARBALL=$ENV_PATH/scripts/inits/tmux/src/tmux-src-${TMUX_INSTALL_VERSION}.tar.gz
 fi
 TAKE_CARE_OF_LIBS=false
 ROOT=$HOME/.config/tmux-local

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+file-part() { # @@ # {{{
+  $ENV_SCRIPTS/file-tools/file-part.sh "$@"
+} # }}}
+stat() { # @@ # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "A C M size @@-f"
+    return 0
+  fi # }}}
+  local params=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    A)    params="-c %X";;
+    C)    params="-c %W";;
+    M)    params="-c %Y";;
+    size) params="-c %s";;
+    *)    break;;
+    esac; shift
+  done # }}}
+  command stat $params "$@"
+} # }}}
+file-stat() { # @@ # {{{
+  $ENV_SCRIPTS/file-tools/file-stat.sh "$@"
+} # }}}
+get-file-list() { # @@ # {{{
+  $ENV_SCRIPTS/file-tools/get-file-list.sh "$@"
+} # }}}
+export -f file-part stat file-stat get-file-list
+export PHISTORY_IGNORED_COMMANDS+=":update-file"
+

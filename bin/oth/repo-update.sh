@@ -76,7 +76,7 @@ while [[ ! -z $1 ]]; do # {{{
   esac; shift
 done # }}}
 
-[[ ! -e $fManifest ]] && echo "Manifest file [$fManifest] not found" >/dev/stderr && exit 1
+[[ -e $fManifest ]] || die "Manifest file [$fManifest] not found"
 ! $wtdSet && exit 1
 
 if $tag && [[ -z $tagName || $tagName == '-' ]]; then
@@ -113,12 +113,12 @@ while read l; do
         git checkout m/master
         git reset --hard origin/master
         if ! git checkout $r; then
-          echo "Cannot checkout to $r" >/dev/stderr
-          $SHELL </dev/tty >/dev/tty 2>/dev/stderr
+          echoe "Cannot checkout to $r"
+          $SHELL </dev/tty >/dev/tty
         fi
         if [[ ! -z $cleanRepo ]] && ! git stash pop -q; then
-          echo "Cannot pop stash" >/dev/stderr
-          $SHELL </dev/tty >/dev/tty 2>/dev/stderr
+          echoe "Cannot pop stash"
+          $SHELL </dev/tty >/dev/tty
         fi
       fi
       rHead="$(git rev-parse HEAD)"

@@ -6,7 +6,7 @@ if [[ $1 == '@@' ]]; then # {{{
   _git_sha_compl -n 30 --cur "$cur" +branches
   exit 0
 fi # }}}
-source $ALIASES_D/0.essentials
+source $BASH_PATH/essentials
 d= c= first="HEAD" fzf_p= gitlog= firstRun=true stashed=false changed=false pattern='-------' cnt=${GIT_CBA_MAX:-30}
 backup=false use_smart=true useFirst=false autoQuit=false askQuit=true autoMode=false curHead=
 # Submodules # {{{
@@ -62,7 +62,7 @@ if [[ -z $c ]]; then # {{{
     firstRun=false
     if git diff --cached --quiet $d; then
       if git diff --quiet $([[ ! -z $d ]] && echo "-- $d"); then
-        $firstRun && echo "Nothing to commit" >/dev/stderr && exit 0
+        $firstRun && echoe "Nothing to commit" && exit 0
         break
       fi
       if ! $autoMode; then

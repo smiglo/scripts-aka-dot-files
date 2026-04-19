@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-import-module time2s time-tools
+import-module echor time-tools
 
 exec-verbose() { # {{{
   declare -a hide=()
@@ -326,8 +325,7 @@ brun-cmake() { # @@:new # {{{
   local verbose=${BRUN_VERBOSE:-false} dry=${BRUN_DRY:-false} verb2=false
   local paramsInit= paramsRun=${BRUN_CMAKE_RUN:---parallel}
   [[ $paramsRun == "-" ]] && paramsRun=
-  is-installed -w ccache && paramsInit+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
-  paramsInit+=" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  paramsInit+=" ${BRUN_ENV[cmake-init-params]}"
   while [[ -n $1 ]]; do # {{{
     for arg in ${BRUN_CMAKE_ARG_MAP[$1]:-$1}; do
       case $arg in
@@ -561,6 +559,8 @@ BRUN_SHORTCUT[m]="brun-cmake"
 BRUN_SHORTCUT[t]="brun-ctest"
 BRUN_SHORTCUT[r]="brun-run"
 declare -A BRUN_ENV=()
+BRUN_ENV[cmake-init-params]+=" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+is-installed -w ccache && BRUN_ENV[cmake-init-params]+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
 export BRUN_ENV_FILE="$TMP_MEM_PATH/brun_env.$PPID"
 export BRUN_CMAKE_INIT_CMD=
 export BRUN_CMAKE_INIT_DEFAULT=

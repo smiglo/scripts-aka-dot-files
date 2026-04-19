@@ -7,15 +7,20 @@ aawk() { # @@ # {{{
   local scriptPath="$SCRIPT_PATH/bin/awk.script"
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
+    split) echo ": -";;
     -f) get-file-list '*.awk'; get-file-list --pwd "$scriptPath" '*.awk';;
     -F) echo "\'[=\\ ]\'";;
-    *)  echo "1 2 3 -F -f";;
+    *)  echo "1 2 3 -F -f --split";;
     esac
     return 0
   fi # }}}
   local params= print= pre= script=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    split)
+      shift
+      cat - | awk -v RS="${1:-:}" -v ORS='\n' '{print}'
+      return 0;;
     /*)      pre="$1";;
     [0-9]*)  print+=",\$$1";;
     -f)      script="$2"; shift;;

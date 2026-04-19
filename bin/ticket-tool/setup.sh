@@ -2,10 +2,10 @@
 # vim: fdl=0
 
 if [[ -z $TICKET_PATH ]]; then # {{{
-  echo "Env[TICKET_PATH] not defined (tt-S)" >/dev/stderr
+  echoe "Env[TICKET_PATH] not defined (tt-S)"
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit || return
 fi # }}}
-[[ -z $TICKET_LIST ]] && export TICKET_LIST="$TICKET_TOOL_PATH/list-basic.sh" && ${dbg:-false} && echo "TICKET_LIST set to default setter" >/dev/stderr
+[[ -z $TICKET_LIST ]] && export TICKET_LIST="$TICKET_TOOL_PATH/list-basic.sh" && ${dbg:-false} && echoe "TICKET_LIST set to default setter"
 open=false layout=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -18,7 +18,7 @@ done # }}}
 ISSUES="$@"
 if [[ -z $ISSUES ]]; then # {{{
   if [[ ! -e $TICKET_LIST ]]; then # {{{
-    echo "Issue file does not exist ! (tt-S)" >/dev/stderr
+    echoe "Issue file does not exist ! (tt-S)"
     [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 1 || { unset open; return 1; }
   fi # }}}
   ISSUES="$($TICKET_LIST)"
@@ -67,7 +67,7 @@ fi # }}}
 for i in $ISSUES; do # {{{
   i="${i,,}"
   i="${i%%:*}"
-  [[ "${BASH_SOURCE[0]}" == "$0" ]] && ${dbg:-false} && echo "Shall be sourced to source env for [$i]" >/dev/stderr
+  [[ "${BASH_SOURCE[0]}" == "$0" ]] && ${dbg:-false} && echoe "Shall be sourced to source env for [$i]"
   source $TICKET_TOOL_PATH/ticket-setup.sh $($open && echo '--open') $($layout && echo '--layout') "$i"
   if [[ -n $TICKET_CURRENT_TICKETS && ! -e "$TICKET_CURRENT_TICKETS/$i" && ( ! -n $TMUX || $(tmux display-message -p -t $TMUX_PANE -F '#P') == '1' ) ]]; then
     t="$(find $TICKET_PATH -maxdepth 4 -name "$i" | head -n1)"
@@ -87,7 +87,7 @@ unset i s open layout ISSUES
 #   for i in $ISSUES; do
 #     i="${i,,}"
 #     p="$TICKET_PATH/$i"
-#     [[ -z $p || ! -e $p/${i}-data.txt ]] && echo "Issue [$i] not present" >/dev/stderr && continue
+#     [[ -z $p || ! -e $p/${i}-data.txt ]] && echoe "Issue [$i] not present" && continue
 #     setup+=("${i^^}:$p")
 #   done
 #   true

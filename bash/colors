@@ -321,7 +321,7 @@ cl() { # {{{
     --sep) sep="$2"; shift;;
     -C) # {{{
       shift
-      cCurrent=$(get-color ${1%%:*}) || { $verbose && echo "Cannot find color for '${1%%:*}'" >/dev/stderr; }
+      cCurrent=$(get-color ${1%%:*}) || echoe $verbose "Cannot find color for '${1%%:*}'"
       ! $format && [[ $1 == *:* ]] && break;; # }}}
     *) break;;
     esac; shift
@@ -403,7 +403,7 @@ cl() { # {{{
           fi
           c="${colorCache[$n]}"
           if [[ -z $c ]]; then
-            c=$(get-color $n) || { $verbose && echo "Cannot find color for '$n'" >/dev/stderr; }
+            c=$(get-color $n) || echoe $verbose "Cannot find color for '$n'"
             colorCache[$n]="$c"
           fi
           cLast=$c # }}}

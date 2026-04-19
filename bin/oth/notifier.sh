@@ -124,8 +124,7 @@ wakeUpThread() { # {{{
   sed -i -e '/'"^$BASHPID"' /d' $data_file
 } # }}}
 
-import-module time2s time-tools
-import-module dbgF dbg
+import-module time-tools dbg
 
 [[ -z $1 ]] && set -- --list
 while [[ ! -z $1 ]]; do # {{{

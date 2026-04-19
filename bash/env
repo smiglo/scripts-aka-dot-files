@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --clean) rm -f $BASHRC_RUNTIME_PATH/env*.dump; RCSTUFF_ENV_INSTALLED=false;;
+  --force) RCSTUFF_ENV_INSTALLED=false;;
+  *) break;;
+  esac; shift
+done # }}}
+! ${RCSTUFF_ENV_INSTALLED:-false} || ! declare -f ___rcstuff_env_markup >/dev/null 2>&1 || return 0
+export RCSTUFF_ENV_INSTALLED=true # {{{
+___rcstuff_env_markup() { : ; }
+export -f ___rcstuff_env_markup # }}}
+install-extensions() { # {{{
+  local ask=
+  [[ $1 == --no-ask ]] && ask=false && shift
+  local  wdir="$1" name="$2"; shift 2
+  local dumpFile="$BASHRC_RUNTIME_PATH/env-$name.dump" lockDir="$BASHRC_RUNTIME_PATH/.lock-$name.lock"
+  local i= iF=
+  if [[ ! -e "$dumpFile" ]]; then # {{{
+    ( ii=6; while ! command mkdir "$lockDir" 2>/dev/null && (( --ii )); do
+        sleep 0.5
+      done
+    )
+  fi # }}}
+  if [[ ! -e "$dumpFile" ]]; then # {{{
+    dumpFile="$dumpFile.tmp"
+    cat >"$dumpFile" <<-EOF
+		#!/usr/bin/env bash
+		# vim: fdl=0
+		
+	EOF
+    local complNewToAdd= complOldToAdd=
+    for i in $(command cd $wdir; find . -maxdepth 1 -type f \( -name '*.ign' -prune -o -name '*~' -prune -o -print \) | sed 's|^\./||' | sort -n); do # {{{
+      local ask_i=$ask fc_i=
+      iF="$wdir/$i"
+      [[ $i =~ ^[0-9]+\..* ]] && i="${i#*.}"
+      [[ $i == -* ]] && ask_i=true && i=${i#-}
+      ! $ask_i || ${ENV_EXT[$i]:-true} || continue
+      declare -a fcon
+      mapfile -t fcon < <(sed -n -e 1p -e '/# @@\|# @@:new/p' $iF)
+      [[ "${fcon[0]}" == "#!"* ]] || { echoe -f "Skipping file [$i] because of missing shebang"; continue; }
+      for fc_i in ${!fcon[*]}; do
+        if false; then :
+        elif [[ ${fcon[$fc_i]} =~ ^\ *([a-zA-Z].*)\(\)\ *\{\ *#\ @@:new ]]; then # }
+          complNewToAdd+=" ${BASH_REMATCH[1]//:/ }"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *([a-zA-Z].*)\(\)\ *\{\ *#\ @@ ]]; then # }
+          complOldToAdd+=" ${BASH_REMATCH[1]//:/ }"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *alias\ *([a-zA-Z].*)=.*\ *#\ @@:new ]]; then
+          complNewToAdd+=" ${BASH_REMATCH[1]//:/ }"
+        elif [[ ${fcon[$fc_i]} =~ ^\ *alias\ *([a-zA-Z].*)=.*\ *#\ @@ ]]; then
+          complOldToAdd+=" ${BASH_REMATCH[1]//:/ }"
+        fi
+      done
+      # command grep -q "^# env:" "$iF" && eval "$(sed -n '/# env: /s/# env: \(.*\)/\1/p' "$iF")"
+      {
+        echo "#-#-# START: $iF # {{{"
+        cat "$iF"
+        sed -n '/^# env: /s/# env: \(.*\)/\1/p' "$iF"
+        echo "#-#-# END: $iF # }}}"
+      }
+    done >>"$dumpFile" # }}}
+    if [[ -n $complNewToAdd ]]; then # {{{
+      echo "export COMPLETION_GENERIC_FUNCTIONS+=\" $complNewToAdd\"" >>"$dumpFile"
+      export COMPLETION_GENERIC_FUNCTIONS+=" $complNewToAdd"
+    fi # }}}
+    if [[ -n $complOldToAdd ]]; then # {{{
+      echo "export COMPLETION_GENERIC_FUNCTIONS_OLD+=\" $complOldToAdd\"" >>"$dumpFile"
+      export COMPLETION_GENERIC_FUNCTIONS_OLD+=" $complOldToAdd"
+    fi # }}}
+    dumpFile="${dumpFile%.tmp}"
+    mv "$dumpFile.tmp" "$dumpFile"
+    rm -rf "$lockDir"
+  fi # }}}
+  source "$dumpFile"
+} # }}}
+install-extensions --no-ask "$SCRIPT_PATH/bash/env.d" main
+if [[ -e $PROFILES_PATH ]]; then
+  for i in $PROFILES_PATH/*; do
+    [[ -e $i/env.d ]] || continue
+    install-extensions "$i/env.d" $(basename $i)
+  done
+fi
+if [[ -e $APPS_CFG_PATH/env.d ]]; then
+  install-extensions "$APPS_CFG_PATH/env.d" runtime
+fi
+unset -f install-extensions
