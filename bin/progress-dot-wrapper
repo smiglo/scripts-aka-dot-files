@@ -19,8 +19,7 @@ if [[ $1 == '@@' ]]; then # {{{
   exit 0
 fi # }}}
 
-import-module progress-dot progress
-import-module time-tools
+import-module progress time-tools
 
 delay="5m"
 checkCmd=

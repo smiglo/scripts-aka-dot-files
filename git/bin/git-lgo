@@ -113,7 +113,7 @@ if $fzfUse && $FZF_INSTALLED; then # {{{
         i=
         list="$(echo "$list" | sed 's|^|'$PWD'/|')"
         for i in $list; do
-          [[ ! -d $i ]] && $ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f $i
+          [[ ! -d $i ]] && $ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f $i
           sleep 1
         done;; # }}}
       esac;; # }}}

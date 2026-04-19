@@ -2,8 +2,8 @@
 # vim: fdl=0
 
 # Initial checks & set up # {{{
-[[ -z $TICKET_PATH ]] && echo "Env[TICKET_PATH] not defined (tt-s)" >/dev/stderr && exit 1
-[[ -z $TICKET_TOOL_PATH ]] && echo "Env[TICKET_TOOL_PATH] not defined (tt-s)" >/dev/stderr && exit 1
+[[ -n $TICKET_PATH ]] || die "Env[TICKET_PATH] not defined (tt-s)"
+[[ -n $TICKET_TOOL_PATH ]] || die "Env[TICKET_TOOL_PATH] not defined (tt-s)"
 getPath() { # {{{
   local issue="$1" must_exisit="${2:-false}" ext=
   local path_issue="$TICKET_PATH/$issue"

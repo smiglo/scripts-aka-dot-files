@@ -14,7 +14,7 @@ _kb-open() { # @@ # {{{
   local kb=$1
   if [[ -z $kb ]]; then
     [[ -e ./.ticket-data.sh && -e ./.env ]] && kb='.'
-    [[ -z $kb ]] && echo "Missing KB name" >/dev/stderr && return 1
+    [[ -n $kb ]] || eval $(die "Missing KB name")
   fi
   if [[ $kb != '.' ]]; then
     if tmux list-sessions -F '#S' | command grep -q "^${kb^^}$"; then # {{{
@@ -24,9 +24,9 @@ _kb-open() { # @@ # {{{
     for i in $KB_PATHS; do # {{{
       [[ $kb == ${i%%:*} ]] && p="${i#*:}" && break
     done # }}}
-    [[ -z $p ]]  && echo "Could not find path of KB [$i]" >/dev/stderr && return 1
+    [[ -n $p ]] || eval $(die "Could not find path of KB [$i]")
     if [[ ! -e $p/.env ]]; then # {{{
-      echo "The .env file for KB [$i] could not be found" >/dev/stderr
+      echoe "The .env file for KB [$i] could not be found"
       cat  >$p/.env <<-EOF
 				#!/bin/bash
 				if [[ -n \$TICKET_TOOL_PATH && -e \$TICKET_TOOL_PATH/session-init.sh ]]; then

@@ -13,14 +13,41 @@
 # KEEP_PASS_GET_PARAMS
 # ----------------------------
 
+if ${KEEP_PASS_JOURNAL_USE_SHARED:-false} && [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then
+  export KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
+fi
+if [[ -z $KEEP_PASS_JOURNAL ]] && [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
+  export KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
+fi
+journalList="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED"
+journalMainFile=
+
+getJournals() { # {{{
+  [[ -n $journalMainFile ]] && echo "$journalMainFile" && return 0
+  declare -A journals=()
+  local i= check=false cnt=1
+  [[ $1 == '--check' ]] && check=true
+  for i in $journalList; do
+    ! $check || [[ -e $i ]] || continue
+    journals[$i]=$cnt
+    ((++cnt))
+  done
+  [[ -e ./keep-pass.journal ]] && journals[$PWD/keep-pass.journal]=0
+  for i in ${!journals[*]}; do
+    printf "%3s %s\n" ${journals[$i]} $i
+  done | sort -k1,1n | cut -c5-
+} # }}}
+getDefaultJournal() { # {{{
+  [[ -n $journalMainFile ]] && echo "$journalMainFile" && return
+  [[ -e ./keep-pass.journal ]] && echo "./keep-pass.journal" && return
+  echo "${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}"
+} # }}}
+
 if [[ $1 == '@@' ]]; then # {{{
   get-keys() { # {{{
     local mode="plain"
     [[ $1 == --for-gen ]] && mode="with-phrase"
-    local journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED" f= keys=
-    [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles+=" $PWD/keep-pass.journal"
-    for f in $journalFiles; do
-      [[ -e "$f" ]] || continue
+    for f in $(getJournals --check); do
       case $mode in
       plain) keys+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*\).*:\s\+.*/\1/' "$f")";;
       with-phrase) keys+=" $(sed -e '/^#/ d' -e '/^$/ d' -e 's/\(^[^:]*.*\):\s\+.*/\1/' "$f")";;
@@ -28,23 +55,11 @@ if [[ $1 == '@@' ]]; then # {{{
     done
     echo "$keys"
   } # }}}
-  if [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then # {{{
-    KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
-  fi
-  if [[ -z $KEEP_PASS_JOURNAL ]]; then
-    if [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
-      KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
-    fi
-  fi # }}}
   case $3 in
-  --cnt) # {{{
-    echo {1..10};; # }}}
-  --journal) # {{{
-    journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED"
-    [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
-    echo "$journalFiles";; # }}}
-  --key | --save) # {{{
-    [[ $3 == '--save' ]] && echo "--key"
+  -j | --journal) # {{{
+    getJournals;; # }}}
+  --key | key | --save | save | --has | has) # {{{
+    [[ " $3 " =~ \ (--)?save\  ]] && echo "--key"
     if [[ "$cur" == *:* ]]; then
       keys="$(get-keys --for-gen)" key="${cur%%:*}"
       if [[ " $keys " =~ .*\ $key:([^ ])\ .* ]]; then
@@ -54,38 +69,45 @@ if [[ $1 == '@@' ]]; then # {{{
       fi
     else
       genParam=
-      [[ " ${@:4} " =~ .*\ (--gen|--save|-s)\ .* ]] && genParam="--for-gen"
+      [[ " ${@:4} " =~ .*\ ((--)?gen|(--)?save)\ .* ]] && genParam="--for-gen"
       get-keys $genParam
     fi;; # }}}
-  -t) # {{{
-    echo "- 0 60 120";; # }}}
-  -p | --parts) # {{{
-    [[ " $@ " == *" --gen-ios-pass "* ]] && echo "2 3 4 5 10";; # }}}
-  -l | --seg-len) # {{{
-    [[ " $@ " == *" --gen-ios-pass "* ]] && echo "3 5 6 10";; # }}}
-  --name) # {{{
-    [[ " $@ " == *" --add-env "* ]] && echo "KEY-NAME";; # }}}
-  --save-mode) # {{{
-    [[ " $@ " == *" --add-env "* ]] && echo "skip true false";; # }}}
   *) # {{{
     if false; then # {{{
       : # }}}
-    elif [[ " $@ " == *" --gen "* ]]; then # {{{
-      echo " --cnt --upper --special --digit --no-sp --upper-first --save --no-save --key --update --padding --no-padding --plain --pass-save --no-pass-save"
-      echo " --in --in= --seq --seq="
-      echo " --pass --pass= --no-pass" # }}}
-    elif [[ " $@ " == *" --get "* ]]; then # {{{
+    elif [[ " $@ " =~ \ (--)?gen\  ]]; then # {{{
+      case $3 in
+      --cnt) echo {1..10};;
+      *)
+        echo " --cnt --upper --special --digit --no-sp --upper-first --save --no-save --key --update --padding --no-padding --plain --pass-save --no-pass-save"
+        echo " --in --in= --seq --seq="
+        echo " --pass --pass= --no-pass";;
+      esac # }}}
+    elif [[ " $@ " =~ \ (--)?get\  ]]; then # {{{
       echo " --pass --pass= --key --seq --no-intr --no-decrypt" # }}}
-    elif [[ " $@ " == *" --list-keys "* ]]; then # {{{
+    elif [[ " $@ " =~ \ (--)?list\  ]]; then # {{{
       echo " --all -d -dd" # }}}
-    elif [[ " $@ " == *" --list-all-keys "* ]]; then # {{{
+    elif [[ " $@ " =~ \ (--)?list-all\  ]]; then # {{{
       echo " -d -dd" # }}}
-    elif [[ " $@ " == *" --set-master-key "* ]]; then # {{{
-      echo " -t" # }}}
-    elif [[ " $@ " == *" --gen-ios-pass "* ]]; then # {{{
-      echo "-p --parts -l --seg-len" # }}}
-    elif [[ " $@ " == *" --add-env "* ]]; then # {{{
-      echo "--save-mode --name PHRASE" # }}}
+    elif [[ " $@ " =~ " (--)?set-master-key " ]]; then # {{{
+      case $3 in
+      -t) echo "- 0 60 120";;
+      *) echo " -t";;
+      esac # }}}
+    elif [[ " $@ " =~ \ (--)?ios-pass\  ]]; then # {{{
+      case $3 in
+      -p | --parts) echo "2 3 4 5 10";;
+      -l | --seg-len) echo "3 5 6 10";;
+      *) echo "-p --parts -l --seg-len";;
+      esac # }}}
+    elif [[ " $@ " =~  \ (--)?add-env\  ]]; then # {{{
+      case $3 in
+      --name) echo "KEY-NAME";;
+      --save-mode) echo "skip true false";;
+      *) echo "--save-mode --name PHRASE"
+      esac # }}}
+    elif [[ " $@ " =~ \ (--)?(sync|sync-get|sync-put)\  ]]; then # {{{
+      echo "---" # }}}
     else # {{{
       if [[ $3 == *:* ]]; then
         echo "PHRASE"
@@ -97,9 +119,16 @@ if [[ $1 == '@@' ]]; then # {{{
           echo " $( echo "$keys" | sed s'/.*:/'"$key"':/')"
         fi
       else
-        echo " $(get-keys)"
-        echo " -v -vv -vvv --journal"
-        echo " --gen --get --key --save --has-key --list-keys --list-all-keys --set-master-key --help --gen-ios-pass --add-env"
+        echo "$(get-keys)"
+        echo "-v -vv -vvv -j --journal --help --test"
+        list=" add-env gen get has ios-pass key list list-all save set-master-key"
+        if is-installed keep-pass-sync.sh && keep-pass-sync.sh --is-configured; then
+          list+=" sync sync-get sync-put"
+        fi
+        for i in $list; do echo "--$i"; done
+        if (( ${#cur} > 0 )); then
+          echo "$list"
+        fi
       fi
     fi # }}}
     ;; # }}}
@@ -121,8 +150,7 @@ err() { # {{{
 import-module echor
 echorm --name keep-pass
 LC_ALL=C
-dictFile="${KEEP_PASS_DICT:-$SCRIPT_PATH/bash/inits/keep-pass/keep-pass.dict}"
-journalMainFile=
+dictFile="${KEEP_PASS_DICT:-$SCRIPT_PATH/inits/keep-pass/keep-pass.dict}"
 [[ ! -e "$dictFile" ]] && err "Dictionary file not found ($dictFile)" && exit 1
 end="65433"
 letters=(11111 13161 15553 22241 23664 25136 26515 32225 33466 34323 35143 35561 41351 43251 44146 44611 46624 51223 52513 56326 62265 62533 63334 64532 64626 65255)
@@ -132,17 +160,11 @@ digits=(65434 65435 65436 65441 65442 65443 65444 65445 65446 65451)
 specials=(66563 66564 66565 66566 66611 66612 66613 66614 66615 66616 66621 66622 66623 66624 66625 66626 66631 66632 66634 66635 66641 66643 66645 66646 66652 66653 66655 66656 66661 66662 66663 66664 66666)
 # info  : space     `     ~     ^     _     {     }     [     ]     \     |     '     <     >     ,     .     /     !     "     #     $     %     &     (     )     *     +     -     :     ;     =     ?     @
 verbose=0
-if [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then
-  export KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
-else
+if ${KEEP_PASS_JOURNAL_USE_SHARED:-false} && [[ -z $KEEP_PASS_JOURNAL_SHARED ]]; then
   echorm 1 "No shared journal"
 fi
 if [[ -z $KEEP_PASS_JOURNAL ]]; then
-  if [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
-    export KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
-  else
-    echorm 1 "No apps journal"
-  fi
+  echorm 1 "No apps journal"
 fi
 [[ -z $KEEP_PASS_KEYS ]] && export KEEP_PASS_KEYS="$APPS_CFG_PATH/keep-pass/keep-pass.keys"
 [[ -e $APPS_CFG_PATH/keep-pass ]] || mkdir -p $APPS_CFG_PATH/keep-pass/
@@ -156,22 +178,14 @@ if [[ ! -z "$KEEP_PASS_KEYS" ]]; then # {{{
   fi
 fi # }}}
 
-getJournals() { # {{{
-  [[ ! -z $journalMainFile ]] && echo "$journalMainFile" && return 0
-  local journalFiles="$KEEP_PASS_JOURNALS $KEEP_PASS_JOURNAL $KEEP_PASS_JOURNAL_SHARED"
-  [[ -e "$PWD/keep-pass.journal" && " $journalFiles " != *\ "$PWD/keep-pass.journal"\ * ]] && journalFiles="$PWD/keep-pass.journal $journalFiles"
-  echorv -M 1 journalFiles
-  echo "$journalFiles"
-} # }}}
 getRand() { # {{{
   echo "$(($1 + $RANDOM % ($2-$1+1)))"
-}
+} # }}}
 testRand() { # {{{
   for ((i=0; i<${3:-10}; i++)); do
     echo "$(getRand $1 $2)"
   done
 } # }}}
-# }}}
 genWordSeq() { # {{{
   local i= r=
   while [[ -z $r || $r -gt $end ]]; do
@@ -278,7 +292,7 @@ setMasterKey() { # {{{
   fi
   while [[ $tries -gt 0 ]]; do
     if [[ -z $mkey ]]; then
-      if read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p "${CYellow}Enter master key:${COff} " mkey >/dev/stderr; then
+      if read $([[ ! -z $timeout ]] && echo "-t $timeout") -s -p "${CYellow}Enter master key:${COff} " mkey >&2; then
         [[ -z $mkey ]] && echore && return 1
       fi
       echore
@@ -315,7 +329,7 @@ getMasterKey() { # {{{
   fi
   [[ ! -z $mkey ]] && echo "$mkey" && return 0
   $interactive || return 1
-  read -r -s -p "Enter Master Key: " mkey >/dev/stderr && echor
+  read -r -s -p "Enter Master Key: " mkey >&2 && echor
   [[ -z $mkey ]] && return 1
   if [[ ! -z $KEEP_PASS_MASTER_KEY_SALT ]]; then # {{{
     dbg 2 "Hashing master key: $mkey + $KEEP_PASS_MASTER_KEY_SALT"
@@ -374,8 +388,7 @@ getPass() { # {{{
   dbg 1 "seq-0 : $seq ph: $phrase"
   if [[ ! -z $phrase ]]; then # {{{
     local f= line=
-    for f in $(getJournals); do
-      [[ ! -e $f ]] && continue
+    for f in $(getJournals --check); do
       line="$(grep "^$phrase\(:.*\)\{0,1\}:\s\+" "$f" | head -n1)"
       [[ ! -z $line ]] && break
     done
@@ -529,7 +542,7 @@ genPass() { # {{{
   done # }}}
   [[ -z $save ]] && save=false
   if $read_input; then # {{{
-    [[ -z $input ]] && read -r -p 'Enter input: ' input >/dev/stderr
+    [[ -z $input ]] && read -r -p 'Enter input: ' input >&2
     seq=
     local uppers= vv= j= k=
     i=0
@@ -627,9 +640,9 @@ genPass() { # {{{
       fi
     fi # }}}
     while [[ -z $pass ]]; do # {{{
-      read -r -s -p "Enter pass: " pass >/dev/stderr && echor
+      read -r -s -p "Enter pass: " pass >&2 && echor
       [[ ! -z $pass ]] && break
-      read -p 'No pass specified, proceed without encryption [y/n] ? ' >/dev/stderr
+      read -p 'No pass specified, proceed without encryption [y/n] ? ' >&2
       case ${i,,} in
       y) break;;
       esac
@@ -654,12 +667,7 @@ genPass() { # {{{
   fi # }}}
   if $save; then # {{{
     [[ -z $info ]] && info="$(date +"%Y%m%d-%H%M%S")"
-    local entry="${info// /-}:" journalFile="${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}"
-    if [[ ! -z $journalMainFile ]]; then
-      journalFile="$journalMainFile"
-    elif [[ -e "$PWD/keep-pass.journal" ]]; then
-      journalFile="$PWD/keep-pass.journal"
-    fi
+    local entry="${info// /-}:" journalFile="$(getDefaultJournal)"
     [[ -z $journalFile ]] && err "Journal file not found" && return 1
     while [[ ${#entry} -lt 18 ]]; do entry+=' '; done
     entry+="\t"
@@ -681,13 +689,13 @@ genPass() { # {{{
 } # }}}
 hasKey() { # {{{
   local f=
-  for f in $(getJournals); do
-    [[ -e $f ]] && grep -q "^$1:" "$f" && return 0
+  for f in $(getJournals --check); do
+    grep -q "^$1:" "$f" && return 0
   done
   return 1
 } # }}}
 listKeys() { # {{{
-  local f= i= d= files="${KEEP_PASS_JOURNAL:-$KEEP_PASS_JOURNAL_SHARED}" all=false details=0
+  local f= i= d= files="$(getDefaultJournal)" all=false details=0
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --all) all=true;;
@@ -696,13 +704,7 @@ listKeys() { # {{{
     esac
     shift
   done # }}}
-  if $all; then # {{{
-    files="$(getJournals)"
-  elif [[ ! -z $journalMainFile ]]; then
-    files="$journalMainFile"
-  elif [[ -e "$PWD/keep-pass.journal" ]]; then
-    files="$PWD/keep-pass.journal"
-  fi # }}}
+  $all && files="$(getJournals)"
   for f in $files; do # {{{
     [[ -e "$f" ]] || continue
     if [[ $details -gt 0 ]]; then # {{{
@@ -769,7 +771,7 @@ while [[ ! -z $1 ]]; do # {{{
   -v)        verbose=1;;
   -vv)       verbose=2;;
   -vvv)      verbose=3;;
-  --journal) journalMainFile="$2"; shift;;
+  -j | --journal) journalMainFile="$2"; shift;;
   *)         break;;
   esac
   shift
@@ -778,26 +780,44 @@ echorm -f?
 [[ $? == 10 ]] && echorm -f $verbose
 case $1 in
 --help) # {{{
-  echor "Usage:"
-  echor "  $(basename "$0") name                    # get"
-  echor "  $(basename "$0") name[:env-pwd] phrase   # save"
-  echor "  $(basename "$0") --gen [--save] name:env-pwd phrase"
-  echor "  $(basename "$0") --gen [--key name:env-pwd] phrase"
-  echor "  $(basename "$0") [--get] [--key] name"
-  echor "  $(basename "$0") [--gen-ios-pass [-p|--parts number] [-l|--seg-len number]"
-  # echor "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
+  echo "Usage:"
+  echo "  $(basename "$0") name                    # get"
+  echo "  $(basename "$0") name[:env-pwd] phrase   # save"
+  if is-installed keep-pass-sync.sh && keep-pass-sync.sh --is-configured; then
+    echo "  $(basename "$0") [sync | sync-get | sync-put]"
+  fi
+  echo
+  echo "  $(basename "$0") gen [--save] name:env-pwd phrase"
+  echo "  $(basename "$0") gen [--key name:env-pwd] phrase"
+  echo "  $(basename "$0") [get] [--key] name"
+  echo "  $(basename "$0") [ios-pass [-p|--parts number] [-l|--seg-len number]"
+  # echo "  $(basename "$0") --test encrypt env-pwd \$KEEP_PASS_MASTER_KEY"
   exit 0;; # }}}
---get)             shift; getPass "$@";;
---gen)             shift; genPass "$@";;
---add-env)         shift; genEnvKey --save-mode true "$@";;
---key)             getPass "$@";;
---save)            genPass "$@";;
---has-key)         shift; hasKey "$1";;
---list-keys)       shift; listKeys $@;;
---list-all-keys)   shift; listKeys --all $@;;
---set-master-key)  shift; setMasterKey $@;;
---test)            shift; $@;;
---gen-ios-pass)    shift; genIOSLikePass $@;;
+--get | get) shift; getPass "$@";;
+--gen | gen) shift; genPass "$@";;
+--add-env | add-env) shift; genEnvKey --save-mode true "$@";;
+--key | key) getPass "$@";;
+--save | save) genPass "$@";;
+--has | has) shift; hasKey "$1";;
+--list | list) shift; listKeys $@;;
+--list-all | list-all) shift; listKeys --all $@;;
+--set-master-key | set-master-key) shift; setMasterKey $@;;
+--test) shift; $@;;
+--ios-pass | ios-pass) shift; genIOSLikePass $@;;
+--sync | --sync-put | --sync-get | sync | sync-put | sync-get) # {{{
+  is-installed keep-pass-sync.sh || { err "sync not found"; exit 1; }
+  keep-pass-sync.sh --is-configured || { err "sync not configured"; exit 1; }
+  journalFile="$(getDefaultJournal)"
+  case $1 in
+  --sync | sync)
+    [[ -e $journalFile ]] || { err "Journal file not found"; exit 1; }
+    keep-pass-sync.sh --journal $journalFile cmp;;
+  --sync-put | sync-put)
+    [[ -e $journalFile ]] || { err "Journal file not found"; exit 1; }
+    keep-pass-sync.sh --journal $journalFile put;;
+  --sync-get | sync-get)
+    keep-pass-sync.sh --journal $journalFile get;;
+  esac;; # }}}
 *)
   if (( $# == 2 )); then
     genPass "$@"

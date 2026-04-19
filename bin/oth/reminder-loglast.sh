@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-import-module time2s time-tools
+import-module echor time-tools
 
 reminder() { # @@ # {{{
   if [[ $1 == @@ ]]; then # {{{

@@ -4,7 +4,7 @@
 getUrls() { # {{{
   local cmd="$1"; shift
   local func="$(getFunctionBodyRaw "$cmd")" urls=
-  [[ -z $func ]] && echo "Cannot get any URLs from [$cmd]" >/dev/stderr && return 1
+  [[ -n $func ]] || eval $(die "Cannot get any URLs from [$cmd]")
   if [[ $cmd == 'browser' ]]; then
     urls="$(echo "$func")"
   else
@@ -55,7 +55,7 @@ done
 urls="$@"
 if [[ -z $urls ]]; then
   urls="$(getUrls $cmd $params)"
-  [[ $? != 0 || -z $urls ]] && echo -e "No URLs were provided by [$cmd ${params:-\b}]" >/dev/stderr && exit 1
+  [[ $? == 0 || -n $urls ]] || die "No URLs were provided by [$cmd ${params:-\b}]"
   case $method in
   1)   urls="$(echo "$urls" | head -n1)";;
   fzf) urls="$(echo "$urls" | fzf -1 +s -m)";;
@@ -71,7 +71,7 @@ for i in $urls; do
     ! which $broswer >/dev/null 2>&1 && browse="chromium-browser"
     $browser $i --profile-directory="$profile" 2>/dev/null;;
   brave)    browser="${TICKET_CONF_BROWSER_BRAVE_PATH:-/opt/brave.com/brave/brave}"
-            [[ ! -f $browser ]] && echo "Brave not found at [$browser]" >/dev/stderr && exit 1
+            [[ -f $browser ]] || die "Brave not found at [$browser]"
             $browser $i --profile-directory="$profile" 2>/dev/null;;
   open)     open $i 2>/dev/null;;
   esac

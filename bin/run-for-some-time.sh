@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-import-module time2s time-tools
+import-module echor time-tools
 
 run-for-some-time() { # @@ # {{{
   if [[ $1 == @@ ]]; then
@@ -41,7 +40,7 @@ run-for-some-time() { # @@ # {{{
     timeout $s $cmd
     return $?
   fi # }}}
-  [[ -z $cmd ]] && echo "Command to execute is missing" >/dev/stderr && return 1
+  [[ -z $cmd ]] && echo "Command to execute is missing" >&2
   watchdog() { # {{{
     local process_pid=
     initial_sleep=$(( $initial_sleep * 10 ))

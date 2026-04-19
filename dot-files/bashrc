@@ -1,0 +1,370 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+[[ $- == *i* ]] || [[ $1 == --* ]] || return 0
+[[ -e $HOME/.runtime/check-shell ]] && source $HOME/.runtime/check-shell
+BASHRC_USE_FAST_ENV=${BASHRC_USE_FAST_ENV:-true}
+# BASHRC_USE_FAST_ENV=false
+BASHRC_PROFILER=${BASHRC_PROFILER:-false}
+# BASHRC_PROFILER=true
+BASHRC_TRACE=${BASHRC_TRACE:-false}
+# BASHRC_TRACE=true
+BASHRC_DBG=${BASHRC_DBG:-false} BASHRC_DBG_MODULE='-'
+# BASHRC_DBG=true
+export BASHRC_FULL_START=false
+[[ ! -z $PS1 && $UID != 0 && ! -n $TMUX && $SHLVL == 1 ]] && BASHRC_FULL_START=true
+$BASHRC_FULL_START && [[ "$TERM_PROGRAM" == "vscode" ]] && BASHRC_FULL_START=false
+export BASHRC_SHELL_START=true
+[[ -z $PS1 || $UID == 0 || "$TERM_PROGRAM" == "vscode" || $SHLVL -gt 1 ]] && BASHRC_SHELL_START=false
+# Check arguments and do really basics # {{{
+__bashrc_exit() { # {{{
+  ${BASHRC_PROFILER:-false} && time-measure -v bashrc_exit
+  local addInstalling=true addReturn=true retVal=0 keep=false attach=false
+  local v="unset -f __bashrc_exit;"
+  v+=" unset i profi what_to_do RCSTUFF_FORCE RCSTUFF_IN_BASHRC RCSTUFF_ORIG_TERM TIME_MEASURE_PREFIX"
+  local vars="${!BASHRC_*}"
+  vars="${vars/BASHRC_RUNTIME_PATH}"
+  vars="${vars/BASHRC_PLAIN_INSTALL}"
+  v+=" $vars"
+  v+=" COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS COMPLETION_GENERIC_UTILS_OLD COMPLETION_GENERIC_FUNCTIONS_OLD"
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -)       addInstalling=false;;
+    --for-attach) attach=true; addReturn=false;;
+    --nr)    addReturn=false;;
+    -[0-9])  addReturn=true; retVal="${1#-}";;
+    --keep) # {{{
+      keep=true
+      v="${v/__bashrc_exit}"
+      v="${v/BASHRC_PROFILER}";; # }}}
+    *)       v+=" $1";;
+    esac; shift
+  done
+  [[ $what_to_do == 'full' ]] && touch $HOME/.runtime/bashrc/bashrc.initialized
+  ! $keep && ${BASHRC_PROFILER:-false} && v+=" $(echo ${!BASHRC_PROFILER_*})"
+  $addInstalling && v+=" RCSTUFF_BASHRC_INSTALLING"
+  v+=";"
+  ${BASHRC_PROFILER:-false} && time-measure -v bashrc_exit --msg 'exit'
+  if ${BASHRC_TRACE:-false}; then # {{{
+    set +xv
+    if [[ ! -z $BASH_XTRACEFD ]]; then
+      eval "exec $BASH_XTRACEFD>&-"
+      unset BASH_XTRACEFD
+    fi
+  fi # }}}
+  if $attach; then
+    local lastSession=
+    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && lastSession="$(cat $TMP_PATH/.tmux_last_session.$USER)"
+    tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=${TMUX_SESSION_DEFAULT:-'MAIN'}
+    tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=
+    [[ -n $lastSession ]] && lastSession="-t $lastSession"
+    v+=" TMUX_LAST_SESSION=\"$lastSession\";"
+  elif $addReturn; then
+    v+=" return $retVal;"
+  fi
+  echo "$v"
+} # }}}
+if [[ -z $BASHRC_PLAIN_INSTALL ]]; then # {{{
+  export BASHRC_PLAIN_INSTALL=false
+  if ! pgrep tmux >/dev/null 2>&1 || ! tmux ls >/dev/null 2>&1; then
+    export BASHRC_PLAIN_INSTALL=true
+  fi
+fi # }}}
+f=$PWD/bashrc.conf
+[[ -s $f ]] || f=$HOME/.bashrc.conf
+if [[ -s $f ]]; then # {{{
+  source $f ""
+  if [[ $? == 0 ]] && ${BASHRC_CONF_MSG:-true}; then
+    ! ${BASH_CONF_SOURCED:-false} && echo "Using bashrc-conf [$f]" >&2
+    export BASH_CONF_SOURCED=true
+  fi
+fi # }}}
+unset f
+if $BASHRC_PLAIN_INSTALL; then # {{{
+  [[ -e $HOME/.bashrc.nice ]] && eval $(__bashrc_exit)
+fi # }}}
+# Arguments # {{{
+RCSTUFF_FORCE=${RCSTUFF_FORCE:-false}
+what_to_do='basic'
+if [[ -z "$PS1" ]]; then
+  what_to_do="min"
+  $BASHRC_DBG && echo "Not interactive shell" >&2
+elif $BASHRC_FULL_START || [[ ! -e $HOME/.runtime/bashrc/bashrc.initialized || $UID == 0 ]]; then
+  what_to_do='full'
+fi
+[[ ! -z $BASHRC_PARAMS ]] && set -- $BASHRC_PARAMS "$@"
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -v)             BASHRC_DBG=true;;
+  --do-full)      what_to_do='full';;
+  --do-basic)     what_to_do='basic';;
+  --do-min)       what_to_do='min';;
+  --no-rc)        what_to_do='nothing';;
+  --force)        RCSTUFF_FORCE=true;;
+  --profiler)     BASHRC_PROFILER=true;;
+  --trace)        BASHRC_TRACE=true;;
+  --attach)       BASHRC_TMUX_ATTACH=true;;
+  *)              break;;
+  esac
+  shift
+done # }}}
+# }}}
+if $BASHRC_TRACE; then # {{{
+  $BASHRC_PLAIN_INSTALL && [[ -z $BASHRC_TRACE_F ]] && export BASHRC_TRACE_F="$HOME/.tmp/bashrc-$(command date +"%Y%m%d-%H%M%S").log"
+  if [[ ! -z $BASHRC_TRACE_F ]]; then
+    tmpFD=3
+    eval "exec $tmpFD>\"$BASHRC_TRACE_F\""
+    export BASH_XTRACEFD=$tmpFD
+    unset tmpFD
+    echo "Tracing bashrc into '$BASHRC_TRACE_F'" >&2
+    set -x
+  else
+    set -xv
+  fi
+fi # }}}
+if $BASHRC_PROFILER; then # {{{
+  source ${BASH_PATH:-$HOME/env/scripts/bash}/env.modules/time-tools ""
+  export TIME_MEASURE_PREFIX="BASHRC_PROFILER_"
+  time-measure -v bashrc_full
+fi # }}}
+if $RCSTUFF_FORCE; then # {{{
+  unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs)
+  unset RCSTUFF_BASHRC_INSTALLING
+  if $BASHRC_USE_FAST_ENV && [[ -z $TMUX ]]; then
+    env-snapshot clean-all
+  fi
+fi # }}}
+# Essentials # {{{
+if [[ -z $BASH_ESSENTIALS_PATH ]]; then
+  export BASH_ESSENTIALS_PATH=$(readlink -f $HOME/.bashrc)
+  export BASH_ESSENTIALS_PATH="${BASH_ESSENTIALS_PATH%%/scripts/*}/scripts/bash"
+fi
+source "$BASH_ESSENTIALS_PATH/runtime.basic" ""
+$BASHRC_PROFILER && time-measure -v bashrc_step
+export RCSTUFF_IN_BASHRC=true
+bashEssentialsAlways="completion.basic colors essentials"
+[[ -e $HOME/.runtime/essentials.bash ]] && source $HOME/.runtime/essentials.bash ""
+[[ -e $BASH_ESSENTIALS_PATH/essentials.bash ]] && source $BASH_ESSENTIALS_PATH/essentials.bash ""
+for profi in $bashEssentialsAlways; do
+  [[ -e $BASH_ESSENTIALS_PATH/$profi ]] || { echo "Missing $profi" >&2; continue; }
+  source "$BASH_ESSENTIALS_PATH/$profi" ""
+done
+if ${TMUX_POPUP:-false} || ! declare -F import-module >/dev/null 2>&1; then
+  if [[ -e $HOME/.bin/bash/profiles ]]; then
+    for profi in $HOME/.bin/bash/profiles/*; do
+      [[ -e $profi/essentials.bash ]] && source $profi/essentials.bash ""
+    done
+  fi
+fi
+unset i bashEssentials bashEssentialsAlways
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'essentials'
+# }}}
+if $RCSTUFF_FORCE; then # {{{
+  if [[ ! -z $BASHRC_RUNTIME_PATH ]]; then
+    rm -rf \
+      $BASHRC_RUNTIME_PATH/env* \
+      $BASHRC_RUNTIME_PATH/fzf.def* \
+      $BASHRC_RUNTIME_PATH/net.status \
+      $BASHRC_RUNTIME_PATH/unicode-extra.conf
+  fi
+  if [[ ! -z $ENV_SNAPSHOT ]]; then
+    rm -rf $ENV_SNAPSHOT/*
+  fi
+  what_to_do='full' # }}}
+elif $BASHRC_USE_FAST_ENV; then # {{{
+  if env-snapshot load; then
+    $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'snapshot-load'
+    $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'all' -0
+    $BASHRC_PROFILER && time-measure -v bashrc_full --msg 'bashrc-full' && time-measure --end
+    if [[ -n $TMUX ]]; then
+      case "$(tmux display-message -p -t $TMUX_PANE -F '#W')" in
+      bash | '' | reattach-to-user-namespace) set-title --set-window --unlock-force;;
+      esac
+    fi
+    env-snapshot sync
+    if [[ -e $COMPLETION_BASH_PATH/bash_completion ]]; then # {{{
+      source $COMPLETION_BASH_PATH/bash_completion
+      if ${BASHRC_GIT_COMPLETION_FIX:-true}; then
+        [[ -e "$COMPLETION_BASH_PATH/completions/git" ]] && source "$COMPLETION_BASH_PATH/completions/git"
+      fi
+    fi # }}}
+    if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1) && ! $IS_VSCODE; then
+      eval $(__bashrc_exit --for-attach)
+      tmux attach $TMUX_LAST_SESSION
+      return 0
+    else
+      eval $(__bashrc_exit)
+    fi
+  fi
+fi # }}}
+$BASHRC_DBG && echoe -m bashrc "wtd=[$what_to_do], args=[$@]"
+if ${RCSTUFF_BASHRC_INSTALLING:-false}; then # {{{
+  $BASHRC_DBG && echoe -m bashrc "Already being installed [$0, params=($@), tree=(${BASH_SOURCE[*]})]"
+  eval $(__bashrc_exit '-')
+fi # }}}
+# Really nothing # {{{
+if [[ "$what_to_do" == 'nothing' ]]; then
+  export PS1='\w $ '
+  eval $(__bashrc_exit "PROMPT_COMMAND")
+fi # }}}
+export RCSTUFF_BASHRC_INSTALLING=true
+# if [[ ! -z "$PS1" ]]; then # {{{
+#   $BASHRC_DBG && echoe -m bashrc "Unsetting RCSTUFF_*"
+#   unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs)
+# fi # }}}
+# }}}
+# If not running interactively and not forced, don't do anything # {{{
+if [[ "$what_to_do" == 'min' ]]; then
+  [[ -e $BASH_PATH/runtime ]] && source $BASH_PATH/runtime ""
+  eval $(__bashrc_exit)
+fi # }}}
+# Source basics # {{{
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'start'
+[[ -e $BASH_PATH/runtime ]] && source $BASH_PATH/runtime ""
+if ${IS_IN_MC:-false}; then
+  eval $(__bashrc_exit)
+else
+  unset IS_IN_MC
+fi
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'runtime'
+[[ -e $BASH_PATH/cfg ]] && source $BASH_PATH/cfg ""
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'cfg'
+[[ -e $BASH_PATH/env ]] && source $BASH_PATH/env ""
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'env'
+[[ -e $BASH_PATH/runtime-post ]] && source $BASH_PATH/runtime-post ""
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'r-post'
+[[ -e $BASH_PATH/completion ]] && source $BASH_PATH/completion ""
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'compl'
+# }}}
+# clean HISTIGNORE # {{{
+histIgnoreClean="$(\
+  set -f
+  for i in $(echo "$HISTIGNORE" | awk -v RS=':' '{print $1}' | sort -u); do
+    [[ $i == '*' ]] && continue
+    echo -n ":$i"
+    [[ "$HISTIGNORE" == *"$i*"* || " $HISTIGNORE_WILD_WHITELIST " == *" $i "* ]] && continue
+    echo -n ":$i *"
+  done)"
+HISTIGNORE="${histIgnoreClean:1}"
+unset histIgnoreClean
+# }}}
+# Remove duplicates # {{{
+export PATH="${PATH//@END@:}"
+export PATH="${PATH//:.:/:}"
+export PATH="${PATH//::/:}"
+export PATH="${PATH%:}"
+export PATH="$(remove-dups --check ".:$PATH")"
+$IS_WSL && export PATH="$(printf "%s" "$PATH" | awk -v RS=':' -v ORS=':' '!/\/mnt/ {print}')"
+export HISTIGNORE="$(remove-dups "$HISTIGNORE")"
+export PHISTORY_IGNORED_COMMANDS="$(remove-dups "$PHISTORY_IGNORED_COMMANDS")"
+# }}}
+$BASHRC_PROFILER && time-measure -v bashrc_step
+# Only in interactive mode # {{{
+if [[ "$what_to_do" == 'full' ]]; then # {{{
+  if [[ ! -z $TMUX_USE_NICE_PRIO ]]; then # {{{
+    command ps -U $USER -o pid,nice,comm,cmd | command grep -e "^[^\s]\+\s\+$TMUX_USE_NICE_PRIO" | command grep -v "tmux: server" | while read i; do
+      pid="${i/ *}"
+      $BASHRC_DBG && echoe -m bashrc "Renicing process $(echo $i | awk '{print $3, "[", $4, "]"}') [pid=$pid]"
+      sudo renice -n 0 $pid >/dev/null 2>&1
+    done
+    unset i
+  fi # }}}
+  # Do not start extra features if root and BASH_START_EXTRA_FEATURES was not defined explicity # {{{
+  if [[ $UID == 0 ]] && ${BASH_START_EXTRA_FEATURES:-true}; then
+    export BASH_EXTRA_FEATURES="tmux-startup $BASH_EXTRA_FEATURES_ADD_ROOT"
+    export TMUX_INIT_SESSIONS='ROOT'
+    export TMUX_STATUS_RIGHT_EXTRA_SORTED='tmux_info time'
+    export TMUX_SESSION_DEFAULT="$TMUX_INIT_SESSIONS"
+  fi # }}}
+  # Start extra features # {{{
+  if ${BASH_START_EXTRA_FEATURES:-true}; then
+    [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES="ssh-agent tmux-startup $BASH_EXTRA_FEATURES_ADD"
+    isStartAllowed() { # {{{
+      $RCSTUFF_FORCE && return 0
+      local prefix='skip' onEnd=0 onFound=1 i=
+      if [[ $TERM == 'linux' ]]; then
+        prefix='do' onEnd=1 onFound=0
+      fi
+      set -- all $@
+      for i; do
+        [[ -e $HOME/$prefix.$i || -e $TMP_PATH/$prefix.$i || -e $TMP_MEM_PATH/$prefix.$i ]] && echoe -m bashrc "File [$prefix.$i] found" && return $onFound
+      done
+      return $onEnd
+    } # }}}
+    if [[ ! -n $TMUX ]]; then
+      # Set up ssh-agent # {{{
+      if [[ $BASH_EXTRA_FEATURES == *ssh-agent* ]] && isStartAllowed 'ssh'; then
+        if ! $IS_VSCODE; then
+          if [[ -n "$SSH_CLIENT" ]]; then
+            [[ $(who | command grep -v "(:" | sort -k5,5 -u | wc -l) == 0 ]] && unset SSH_CLIENT SSH_TTY
+          fi
+          if [[ ! -n "$SSH_CLIENT" ]]; then
+            source $SCRIPT_PATH/bin/fix-ssh-agent.sh start-if
+          else
+            source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
+          fi
+        else
+          source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
+        fi
+      fi # }}}
+      $ENV_SCRIPTS/tmux/tm.sh --monitors
+      # Start TMUX # {{{
+      if ${BASHRC_START_TMUX:-true}; then
+        # Start tmux if not started or not attached # {{{
+        if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]] && isStartAllowed 'tmux' && ! $IS_VSCODE && ! $RCSTUFF_FORCE; then
+          if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1); then
+            eval $(__bashrc_exit --for-attach)
+            tmux attach $TMUX_LAST_SESSION
+            return 0
+          elif ! $BASHRC_PLAIN_INSTALL; then
+            if ${BASHRC_TMUX_ATTACH:-false}; then
+              eval $(__bashrc_exit --for-attach)
+              tmux attach $TMUX_LAST_SESSION
+              return 0
+            fi
+          elif ! tmux ls 2>/dev/null | command grep -q "attached"; then
+            unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING isStartAllowed RCSTUFF_FORCE
+            if [[ ${LINES:-0} -lt 35 || ${COLUMNS:-0} -lt 100 ]] && ${BASHRC_TMUX_WAIT_TO_MAXIMIXE:-true} && $BASHRC_FULL_START && ! $IS_DOCKER && [[ -z $SSH_CONNECTION ]]; then
+              read -t ${BASHRC_TMUX_WAIT_TO_MAXIMIXE_TIMEOUT:-2} -s -n1 -p  "Sleeping for a while to give time to maxime window" >&2 </dev/tty
+              echo >&2
+            fi
+            $BASHRC_DBG && echoe -m bashrc "Starting tmux..."
+            eval $(__bashrc_exit --nr --keep)
+            export BASHRC_PLAIN_INSTALL=false
+            progress --clean
+            $SCRIPT_PATH/bin/tmux-startup.sh --lock
+            eval $(__bashrc_exit --for-attach)
+            tmux attach $TMUX_LAST_SESSION
+            return 0
+          fi
+        fi # }}}
+      else
+        echoe -m bashrc "Start of tmux disabled via env"
+      fi # }}}
+    fi
+    unset isStartAllowed
+  fi # }}}
+  # }}}
+elif [[ "$what_to_do" == 'basic' ]]; then # {{{
+  if ! $J2_USE_J2_WRAPPER && [[ -d $TICKET_TOOL_PATH ]]; then # {{{
+    source $TICKET_TOOL_PATH/ticket-helper-j
+  fi # }}}
+fi # }}}
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg "interactive[$what_to_do]"
+# window title # {{{
+if [[ -n $TMUX ]]; then
+  case "$(tmux display-message -p -t $TMUX_PANE -F '#W')" in
+  bash | '' | reattach-to-user-namespace) set-title --set-window --unlock-force;;
+  esac
+fi
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'window-title' # }}}
+# }}}
+if $BASHRC_USE_FAST_ENV; then # {{{
+  if env-snapshot save; then
+    $BASHRC_PROFILER && time-measure -v bashrc_step --msg 'snapshot-save'
+  fi
+fi # }}}
+$BASHRC_PROFILER && time-measure -v bashrc_step --msg 'all' -0
+$BASHRC_PROFILER && time-measure -v bashrc_full --msg 'bashrc-full' && time-measure --end
+eval $(__bashrc_exit --nr)
+true

@@ -2,37 +2,6 @@
 # vim: fdl=0
 
 export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
-_completion_generic() { # {{{
-  echoe "should not be called, [${BASH_SOURCE[*]}][$0]"
-  compl-old "$@"
-} # }}}
-_completion_vim() { # {{{
-  COMPREPLY=()
-  local cmd=${COMP_WORDS[0]}
-  [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
-  compl-old
-} # }}}
-_completion_npm() { # {{{
-  COMPREPLY=( "" )
-  [[ -e package.json ]] || return
-  declare -xa opts
-  if (( $COMP_CWORD > 1 )); then
-    case ${COMP_WORDS[COMP_CWORD - 1]} in
-    run) opts=( $(jq -r '.scripts | keys[]' package.json 2>/dev/null) );;
-    exec) opts=( $(jq -r '.devDependencies | keys[] | select(startswith("@") | not)' package.json 2>/dev/null) )
-    esac
-  fi
-  compl-static
-} # }}}
-_completion_npx() { # {{{
-  COMPREPLY=( "" )
-  [[ -e package.json ]] || return
-  declare -xa opts
-  if (( $COMP_CWORD == 1 )); then
-    opts=( $(jq -r '.devDependencies | keys[] | select(startswith("@") | not)' package.json 2>/dev/null) )
-  fi
-  compl-static
-} # }}}
 _completion_filenames() { # {{{
     local cur="$1"
     command grep -v -F -f <(compgen -d -P ^ -S '$' -- "$cur") <(compgen -f -P ^ -S '$' -- "$cur") | sed -e 's/^\^//' -e 's/\$$/ /'
@@ -46,6 +15,7 @@ compl-add() { # {{{
     -n | --new) f="compl-gen";;
     -o | --old) f="compl-old";;
     -s | --smart) f="compl-smart";;
+    --static) f="compl-static";;
     *) break;;
     esac; shift
   done
@@ -56,18 +26,18 @@ compl-add() { # {{{
       if [[ $i == $HOME/* ]]; then
         [[ $(file -b "$i") =~ "ASCII text" ]] || continue
         grep -q "@@" "$i" || continue
-        grep -qE "# (@-@|@@:new)" "$i" && ff="compl-gen"
+        grep -qE "# @@:new" "$i" && ff="compl-gen"
         i=${i##*/}
       elif [[ " $COMPLETION_USE_NEW " == *" $i "* ]]; then
         ff="compl-gen"
       elif declare -F $i >/dev/null 2>&1; then
-        type $i | grep -qE "(@-@|@@:new)" && ff="compl-gen"
+        type $i | grep -qE "@@:new" && ff="compl-gen"
       else
         i="$(which "$i" 2>/dev/null)" || continue
         [[ $i == $HOME/* ]] || continue
         [[ $(file -b "$i") =~ "ASCII text" ]] || continue
         grep -q "@@" "$i" || continue
-        grep -qE "# (@-@|@@:new)" "$i" && ff="compl-gen"
+        grep -qE "# @@:new" "$i" && ff="compl-gen"
         i=${i##*/}
       fi
     fi
@@ -98,9 +68,9 @@ compl-old() { # {{{
         param=
       fi
     elif [[ ! -z $this_alias ]]; then
-      if [[ $this_alias == $ALIASES_D/modules/* ]]; then
+      if [[ $this_alias == $BASH_PATH/env.modules/* ]]; then
         local module="${this_alias%% *}" cmd="${this_alias#* }"
-        import-module $cmd ${module##*/}
+        import-module ${module##*/}
       else
         cmd="$this_alias"
         [[ $cmd =~ ^set\ -[a-z]+\ *\;\ *(.*) ]] && cmd="${BASH_REMATCH[1]}"
@@ -169,9 +139,9 @@ compl-gen() { # {{{
       fi
     fi
   elif [[ ! -z $this_alias ]]; then
-    if [[ $this_alias == $ALIASES_D/modules/* ]]; then
+    if [[ $this_alias == $BASH_PATH/env.modules/* ]]; then
       local module="${this_alias%% *}" cmd="${this_alias#* }"
-      import-module $cmd ${module##*/}
+      import-module ${module##*/}
     else
       cmd="${this_alias%% *}"
     fi

@@ -33,9 +33,9 @@ while [[ ! -z $1 ]]; do # {{{
   esac; shift
 done # }}}
 if ! $allowEmpty; then # {{{
-  ! git diff --quiet || ! git diff --cached --quiet || { echo "Nothing to commit" >/dev/stderr; exit 1; }
+  ! git diff --quiet || ! git diff --cached --quiet || die "Nothing to commit"
   ! git diff --cached --quiet || git add .
-  ! git diff --cached --quiet || { echo "Nothing within '.'}' to commit" >/dev/stderr; exit 1; }
+  ! git diff --cached --quiet || die "Nothing within '.' to commit"
 fi # }}}
 if [[ ! -z $msg ]]; then
   git commit $params -m "$msg"

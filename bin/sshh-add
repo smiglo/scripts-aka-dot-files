@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-declare -F import-module >/dev/null 2>&1 || source $ALIASES_D/0.essentials
+declare -F import-module >/dev/null 2>&1 || source $BASH_PATH/essentials
 
 _screen_lock() { # {{{
   local colors=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' ) tmp=
   local c1="0"
   local c2="$(( ($c1 + 1 + $RANDOM % (${#colors[*]} - 1)) % ${#colors[*]} ))"
   local cmatrix_cmd="nice -n 15 cmatrix -u ${CMATRIX_SPEED:-5} -b"
-  import-module mutex-init mutex-locking
-  import-module time2s time-tools
+  import-module mutex-locking time-tools
+  tput reset
   if ${SSHH_ADD_LOCK_NO_PWD:-false} || [[ -z $SSHH_ADD_LOCK_NO_PWD && -z $SSH_AGENT_LOCK_PWD ]] || [[ "$(tmux display-message -pF '#{client_tty}')" !=  *"/0" && $(tmux list-clients | wc -l) -gt 1 ]] ; then # {{{
     eval $cmatrix_cmd -C ${colors[$(($RANDOM % ${#colors[*]}))]}
     return
@@ -32,7 +32,7 @@ _screen_lock() { # {{{
     mutex-init "ssh-lock" --no-trap --auto-clean-after 0
     if ! mutex-lock; then
       eval $cmatrix_cmd -C ${colors[$c1]}
-      $from_tmux && tmux display-message "Cannot lock ssh-agent, mutex locked" || echo "Cannot lock ssh-agent, mutex locked" >/dev/stderr
+      $from_tmux && tmux display-message "Cannot lock ssh-agent, mutex locked" || echoe "Cannot lock ssh-agent, mutex locked"
       sleep 1
       return 1
     fi
@@ -44,7 +44,7 @@ _screen_lock() { # {{{
       if [[ $cmatrixLockFileCreated -lt $(date +%s -d "today 0:00") ]]; then
         rm -f $SSHH_ADD_LOCK_TS_FILE
         cmatrixLockTime=0 cmatrixLockFileCreated=$cTime
-        $ALIASES_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockFileCreated $cTime
+        $ENV_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockFileCreated $cTime
       fi
     fi
     if [[ ! -z $timeout && $timeout != 0 ]]; then
@@ -54,7 +54,7 @@ _screen_lock() { # {{{
       run-for-some-time.sh --cmd "$cmatrix_cmd -C ${colors[$c1]}; reset" --watchdog-cmd 'cmatrix' --wait $((timeout-2)):2
       if [[ $? != 255 ]]; then
         read -s -n 10000 -t 0.5 tmp
-        [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ALIASES_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
+        [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ENV_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
         mutex-unlock; mutex-deinit
         return 0
       fi
@@ -132,7 +132,7 @@ _screen_lock() { # {{{
       done # }}}
     fi # }}}
   done # }}}
-  [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ALIASES_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
+  [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ENV_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
   mutex-unlock
   mutex-deinit
   if [[ ! -z $SSHH_ADD_LOCK_POST ]]; then
@@ -242,7 +242,7 @@ _sshh-add() { # @@ # {{{
     [[ " $keys " != *" $key "* ]] && keys+=" $key"
   done # }}}
   local fSshAsk=$TMP_MEM_PATH/ssh-ask.sh pList=
-  pList="$(keep-pass --list-all-keys)"
+  pList="$(keep-pass --list-all)"
   local kList="$(ssh-add -l | awk '{print $2}')"
   for k in $keys; do # {{{
     [[ $k == -* ]] && continue

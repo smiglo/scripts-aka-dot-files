@@ -106,7 +106,7 @@ if [[ -z $in ]]; then # {{{
     [[ -z "$in" ]] && in="$VIM_ENC_DEFAULT_GUI_FILE"
   fi
   ( [[ -z "$in" && ! -t 0 ]] && ! $batchMode ) && in="-" && out="$TMP_MEM_PATH/stdin.note"
-  [[ -z $in ]] && echo "Source file not set" >/dev/stderr && exit 1
+  [[ -n $in ]] || die "Source file not set"
 fi # }}}
 rm -f "$out"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module time2s time-tools
+import-module time-tools
 
 _progress() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
@@ -296,13 +296,13 @@ _progress() { # @@ # {{{
         local cnt=$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{printf "%d", $1/$2}')
         j="--once --cnt $cnt"
       fi # }}}
-      chars="$($ALIASES_SCRIPTS/progress/random-text-drawer.sh --no-tput $j "$rndTxt")"
+      chars="$($ENV_SCRIPTS/progress/random-text-drawer.sh --no-tput $j "$rndTxt")"
     }
     nextChar() {
-      chars="$($ALIASES_SCRIPTS/progress/random-text-drawer.sh --state "$chars")"
+      chars="$($ENV_SCRIPTS/progress/random-text-drawer.sh --state "$chars")"
     }
     getChar()  {
-      $ALIASES_SCRIPTS/progress/random-text-drawer.sh --print "$chars"
+      $ENV_SCRIPTS/progress/random-text-drawer.sh --print "$chars"
     }
     getLastChar() {
       local t=
@@ -321,7 +321,7 @@ _progress() { # @@ # {{{
           setCursor
         fi
       fi # }}}
-      $ALIASES_SCRIPTS/progress/random-text-drawer.sh --final "$chars"
+      $ENV_SCRIPTS/progress/random-text-drawer.sh --final "$chars"
     }
     setCursor() {
       $useTput && tput rc || printf "\b%.0s" $(seq $((${#rndTxt}+2)))
@@ -347,9 +347,9 @@ _progress() { # @@ # {{{
     [[ ! -z $msg ]] && echo -n " $msg" >>$out
   fi
   if [[ ! -z $dbg ]]; then # {{{
-    echo >/dev/stderr
-    echo "cmd=($cmd)" >/dev/stderr
-    echo >/dev/stderr
+    echoe $dbg
+    echoe $dbg "cmd=($cmd)"
+    echoe $dbg
   fi # }}}
   if [[ $out != '/dev/stderr' && "$cmd" != 'false' ]] && ! $do_mark; then # {{{
     exec 3>&2

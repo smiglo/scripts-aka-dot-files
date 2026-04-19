@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+smart_alias() { # {{{
+  local cmd= store=
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    --title) set-title "$2"; shift;;
+    --cmd)   cmd="$2"; shift;;
+    --store) store="$2"; shift;;
+    --)      shift; break;;
+    *)       break;;
+    esac
+    shift
+  done # }}}
+  [[ -n $cmd ]] || eval $(die "Command is missing")
+  if [[ ! -z $store ]]; then # {{{
+    if [[ -z $1 ]]; then
+      [[ ! -z $store ]] && set -- ${!store}
+    else
+      export $store="$@"
+    fi
+  fi # }}}
+  eval "$cmd"
+}
+alias mcd="smart_alias --cmd 'command mkdir -pv \"\$1\" && cd_wrapper -- \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+alias mcdd="smart_alias --cmd 'command mkdir -pv \"\$1\" && pushd \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+alias ll*="smart_alias --store 'SMART_AL_LL_ASTER' --cmd 'ls -Alhv | command grep --color=yes \"\$1\"'"  # Syntax fix for Vim in OS/X'"
+# }}}
+alias vv='vim --Fast'
+alias v='vim --Fast +files'
+alias vd='vimdiff' # @@
+alias vdf='vimdiff-from' # @@:new
+alias vp='tmux capture-pane -p -J -S- -E- | /bin/cat -s | { if [[ -t 1 ]]; then vim --Fast -c "normal G"; else /bin/cat -; fi; }'
+export PHISTORY_IGNORED_COMMANDS+=":vf:v:vp"
+if is-installed -w cmatrix >/dev/null 2>&1; then # {{{
+  export CMATRIX_COLORS=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' )
+  alias cmatrix="cmatrix -u ${CMATRIX_SPEED:-5} -b -C "'${CMATRIX_COLORS[$(($RANDOM % ${#CMATRIX_COLORS[*]}))]}'
+fi # }}}
+# Enable color support of ls and also add handy aliases # {{{
+if [[ -x /usr/bin/dircolors ]] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
+  test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+  export LS_COLORS="$LS_COLORS:di=36;40:ln=35;40:so=37;40:pi=33;40:ex=32;40:bd=0;43:cd=0;43:su=0;45:sg=0;45:tw=4;36:ow=4;36:"
+  alias ls='ls --color=auto -B'
+else
+  alias ls='ls -B'
+fi
+alias ll="ls -Alhv"
+alias l.="ll -d .*"
+# }}}
+# rsync # {{{
+alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
+alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
+alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
+alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
+# }}}
+# scripted # {{{
+alias bat="cat.sh -p" # @@
+alias batcat="cat.sh -p" # @@
+alias date="$ENV_SCRIPTS/time-tools/date-pipe.sh" # @@
+alias PC='progress --clean'
+alias pg="psgrep" # @@
+alias r="remember.sh" # @@
+alias rR="remember.sh -r"
+export PHISTORY_IGNORED_COMMANDS+=":r:rR"
+alias runx="$ENV_SCRIPTS/small-utils/runx.sh" # @@
+alias show_notifications="$ENV_SCRIPTS/tmux/show-notifications.sh" # @@
+alias tm="$ENV_SCRIPTS/tmux/tm.sh" # @@
+alias tp="tmux-popup" # @@
+export HISTIGNORE+=":rR"
+# docker-tools # {{{
+if ! $IS_DOCKER; then
+  alias doc="$ENV_SCRIPTS/docker-tools/docker.sh" # @@
+  alias ubu="doc start ubu"
+  compl-add doc
+else
+  alias snapshot="$ENV_SCRIPTS/docker-tools/snapshot.sh"
+  alias doc="echoe -m doc 'available on host'"
+  compl-add snapshot
+fi
+# }}}
+# file-tools # {{{
+alias file-eval="$ENV_SCRIPTS/file-tools/file-eval.sh" # @@
+alias matching-sections="$ENV_SCRIPTS/file-tools/matching-sections.sh" # @@
+alias update-file="$ENV_SCRIPTS/file-tools/update-file.sh" # @@
+alias bck="$ENV_SCRIPTS/file-tools/bck.sh" # @@
+# }}}
+# find-tools # {{{
+alias f="$ENV_SCRIPTS/find-tools/find-short.sh" # @@
+alias ff="$ENV_SCRIPTS/find-tools/find-short.sh +find" # @@
+# }}}
+# fzf-tools # {{{
+alias F="fzf"
+alias vimg="$ENV_SCRIPTS/fzf-tools/vimg.sh" # @@
+alias vims="$ENV_SCRIPTS/fzf-tools/vims.sh" # @@
+alias ffwr='fzfwr'
+alias vimf='set -f;$ENV_SCRIPTS/fzf-tools/vimf.sh' # @@
+export PHISTORY_IGNORED_COMMANDS+=":vimg:vims:ffwr:vimf"
+# }}}
+# grep-tools # {{{
+alias grepf="$ENV_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep -E"
+
+alias hl-bash="$ENV_SCRIPTS/grep-tools/hl-bash.sh" # @@
+if ${HL_USE_PYTHON_VER:-true}; then
+  export HL_CONFIG_DIR="$SCRIPT_PATH/inits/hl-python"
+  alias hl="$ENV_SCRIPTS/grep-tools/hl-python.sh"
+  compl-add hl
+else
+  alias hl="$ENV_SCRIPTS/grep-tools/hl-bash.sh"
+  compl-add hl
+fi
+
+alias output-to-file="$ENV_SCRIPTS/grep-tools/output-to-file.sh" # @@
+alias last-grep="$ENV_SCRIPTS/grep-tools/last-grep.sh" # @@
+
+alias xaa="$ENV_SCRIPTS/grep-tools/xaa.sh" # @@
+alias xa='xargs -r -I{}'
+export PHISTORY_IGNORED_COMMANDS+=":xaa:xa"
+# }}}
+# cpp-tools # {{{
+alias gdb-core-enable='ulimit -c unlimited; echo "core-%e-%p-%t.dmp" >/proc/sys/kernel/core_pattern'
+# }}}
+alias kb-open="$TICKET_TOOL_PATH/kb-open.sh" # @@
+alias kb="$TICKET_TOOL_PATH/kb-open.sh" # @@
+# }}}
+# very short # {{{
+alias C="capture ." # @@:new
+alias CP="capture . --pane -i -s" # @@:new
+alias CR="restore" # @@
+alias G="gr" # @@
+alias F="fzf"
+alias A="awk"
+alias AA="aawk"
+alias S="sed"
+alias X="xargs -r"
+alias X1="xargs -r -n1"
+alias XI="xargs -r -I{}"
+alias ct="cat.sh -p" # @@
+alias bt="cat.sh -p" # @@
+alias br="brun" # @@:new
+export PHISTORY_IGNORED_COMMANDS+=":C:CP:CR:G:F:A:AA:S:X:XI:bt:ct:br" # }}}
+# modules # {{{
+alias is-found="$BASH_PATH/env.modules/actions is-found" # @@
+alias do-action="$BASH_PATH/env.modules/actions do-action" # @@
+alias doa="$BASH_PATH/env.modules/actions doa" # @@
+alias tf="$BASH_PATH/env.modules/actions tf" # @@
+alias compl-short="$BASH_PATH/env.modules/compl-short compl-short" # @@
+alias FAT="$BASH_PATH/env.modules/dbg FAT"
+alias ERR="$BASH_PATH/env.modules/dbg ERR"
+alias WRN="$BASH_PATH/env.modules/dbg WRN"
+alias INF="$BASH_PATH/env.modules/dbg INF"
+alias DBG="$BASH_PATH/env.modules/dbg DBG"
+alias TRC="$BASH_PATH/env.modules/dbg TRC"
+alias dbg="$BASH_PATH/env.modules/dbg dbg"   # @@
+alias dbgC="$BASH_PATH/env.modules/dbg dbgC" # @@
+alias echorm="$BASH_PATH/env.modules/echor echorm" # @@
+alias echormf="$BASH_PATH/env.modules/echor echormf" # @@
+alias echor="$BASH_PATH/env.modules/echor echor" # @@
+alias echorc="$BASH_PATH/env.modules/echor echor" # @@
+alias echorv="$BASH_PATH/env.modules/echor echorv" # @@
+alias echore="$BASH_PATH/env.modules/echor echore" # @@
+alias vIsSet="$BASH_PATH/env.modules/prefix-vars vIsSet" # @@
+alias vGet="$BASH_PATH/env.modules/prefix-vars vGet" # @@
+alias vSet="$BASH_PATH/env.modules/prefix-vars vSet" # @@
+alias vClean="$BASH_PATH/env.modules/prefix-vars vClean" # @@
+alias vBool="$BASH_PATH/env.modules/prefix-vars vBool" # @@
+alias vDumpArrayNicely="$BASH_PATH/env.modules/prefix-vars vDumpArrayNicely" # @@
+alias progress-dot="$BASH_PATH/env.modules/progress progress-dot" # @@
+alias time2s="$BASH_PATH/env.modules/time-tools time2s" # @@
+alias time-measure="$BASH_PATH/env.modules/time-tools time-measure" # @@
+alias sleep-precise="$BASH_PATH/env.modules/time-tools sleep-precise" # @@
+# }}}
+if is-installed -w fdfind; then
+  alias fd='fdfind'
+fi
+alias more='less'
+alias cp='cp -R'
+alias du='du -sh'
+alias chr='$SCRIPT_PATH/bin/misc/chroma-effects-wrapper.sh'
+alias cap="capture" # @@:new
+export PHISTORY_IGNORED_COMMANDS+=":cap"
+alias mkdir='mkdir -pv'
+alias reminder="$SCRIPT_PATH/bin/reminder.sh" # @@:new
+export PHISTORY_IGNORED_COMMANDS+=":reminder"
+alias man="$ENV_SCRIPTS/small-utils/man.sh"
+type _man >/dev/null 2>&1 && complete -F _man man
+alias rmf='rm -rf'
+rm-b() { # {{{
+  local i
+  for i; do
+    mv $i $i.del && rm -rf $i.del &
+  done
+} # }}}
+if ${J2_USE_J2_WRAPPER:-true}; then # {{{
+  alias j="j2-tool.sh" # @@
+  PHISTORY_IGNORED_COMMANDS+=":j"
+fi # }}}
+# git # {{{
+alias gg='git cba 1'
+alias gG='git cba --auto'
+alias gsar='git sync --reset'
+alias gitst='git utils gitst'
+alias g='git'
+alias gti='git'
+declare -F __git_wrap__git_main >/dev/null && export -f __git_wrap__git_main
+complete -o bashdefault -o default -o nospace -F __git_wrap__git_main g
+export PHISTORY_IGNORED_COMMANDS+=":gg:gG:gsar:gitst:g"
+# }}}
+alias shlock='sshh-add --lock'
+if type colordiff >/dev/null 2>&1; then # {{{
+  alias diff='colordiff -u'
+  alias diff-sbs='colordiff -y --suppress-common-lines' # }}}
+else # {{{
+  alias diff='diff -u --suppress-common-lines'
+  alias diff-sbs='diff -y --suppress-common-lines'
+fi # }}}
+alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
+alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
+alias scp='scp -r'
+
+if is-installed -w lolcat >/dev/null 2>&1; then # {{{
+  export LOLCAT_PARAMS="-F 0.2 -p 3"
+  export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
+  lc() {
+    local p="$@"
+    if [[ -z $p ]]; then
+      p="$LOLCAT_PARAMS"
+    elif [[ $p == '-a' ]]; then
+      p="$LOLCAT_PARAMS_A"
+    fi
+    lolcat $p
+  }
+  alias lll='ll | lc'
+fi # }}}
+if is-installed -w r2 >/dev/null 2>&1; then # {{{
+  alias r2help="r2 -q -c '?*~...' -"
+fi # }}}
+
+ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
+case $OS_KIND in # {{{
+arch | ubuntu)
+  alias df='df -Th';;&
+mac)
+  alias fix_mouse='unclutter -idle 1 -root -grab -visible'
+  alias df='df -h'
+  if (( UID )); then
+    alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
+    if is-installed -w htop >/dev/null 2>&1; then
+      alias htop="sudo htop"
+    fi
+  fi;;
+arch)
+  if (( UID )); then
+    alias pacman="$ALIASES_AUTO_SUDO_PROMPT && sudo pacman"
+    alias powertop="sudo powertop"
+  fi;;
+ubuntu)
+  if (( UID )); then
+    alias apt="$ALIASES_AUTO_SUDO_PROMPT && sudo apt -y"
+    alias apt-get="$ALIASES_AUTO_SUDO_PROMPT && sudo apt-get -y"
+    alias dpkg="$ALIASES_AUTO_SUDO_PROMPT && sudo dpkg"
+    alias service="$ALIASES_AUTO_SUDO_PROMPT && sudo service"
+    alias snap="$ALIASES_AUTO_SUDO_PROMPT && sudo snap"
+    complete -D apt apt-get dpkg service snap
+  fi;;
+esac # }}}
+if is-installed -w grc >/dev/null 2>&1; then # {{{
+  grc_prgs=''
+  grc_prgs+="traceroute ::google.pl\n"
+  grc_prgs+="mtr ::google.pl @@case \\\$1 in 8) arg='8.8.8.8';; esac;\n"
+  grc_prgs+="ping ::-c:5:8.8.8.8 @@case \\\$1 in 8) arg='8.8.8.8';; .*) arg=\\\$(get-ip \\\$1);; esac;\n"
+  grc_prgs_cols=''
+  grc_prgs_cols+="mount\n"
+  GRC_ALIASES=false
+  if [[ -e /etc/profile.d/grc.sh ]] && ${GRC_USE_DEFAULTS:-true}; then
+    GRC="$(which grc)"
+    aliases_list="$(echo "${!BASH_ALIASES[@]}" | sed '/\.[0-9]\+/d')"
+    aliases_list="${aliases_list// /\\|}"
+    [[ ! -z $aliases_list ]] && aliases_list="\|$aliases_list"
+    source <(sed -n '/^\s*alias/p' /etc/profile.d/grc.sh | sed '/\(head\|tail'"$aliases_list"'\)=/d')
+    alias diffc='colourify diff'
+    alias df="colourify ${BASH_ALIASES[df]#colourify }"
+    alias du="colourify du -sh"
+    is-installed -w lsof && alias lsof='colourify lsof'
+    unset aliases_list
+  else
+    grc_prgs+="configure\ngcc\nnetstat\nwdiff\nlast\nps\ndig\nip\nifconfig\n"
+  fi
+  if type column >/dev/null 2>&1; then
+    for grc_cmd in $(echo -e "$grc_prgs_cols"); do
+      is-installed -w $grc_cmd || continue
+      alias ${grc_cmd/:*}="__util_grc_f() { [[ -z \$1 && -t 1 ]] && { command ${grc_cmd//:/ } | column -t | grcat conf.${grc_cmd%%:*}; } || command ${grc_i//:/ } "\$@"; }; __util_grc_f"
+    done
+  else
+    grc_prgs+="$grc_prgs_cols"
+  fi
+  $IS_MAC && grc_prgs="${grc_prgs/mtr/sudo-mtr}"
+  while read grc_cmd grc_i; do
+    [[ ! -z $grc_cmd ]] || continue
+    is-installed -w $grc_cmd || continue
+    grc_sudo= grc_def= grc_code=":" grc_params=
+    [[ $grc_cmd == sudo-* ]] && grc_cmd="${grc_cmd#sudo-}" && grc_sudo="sudo"
+    while [[ ! -z $grc_i ]]; do
+      grc_ii="${grc_i%% *}"
+      case $grc_ii in
+      ::*) grc_def="${grc_ii#::}"; grc_def="${grc_def//:/ }";;
+      @@*) grc_code="${grc_i#@@}"; break;;
+      *)   grc_params+="$grc_ii ";;
+      esac
+      grc_i="${grc_i#$grc_ii}" && grc_i="${grc_i# }"
+    done
+    alias $grc_cmd="__util_grc_f() { arg=\"\$@\"; ${grc_code%;}; $grc_sudo grc --colour=auto $grc_cmd \${arg:-$grc_def}; }; __util_grc_f"
+  done <<<"$(echo -e "$grc_prgs")"
+  unset grc_prgs grc_prgs_cols grc_cmd grc_i grc_ii grc_sudo grc_def grc_code grc_params
+fi # }}}
+
+is-installed -w rlwrap >/dev/null 2>&1 && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
+is-installed -w mc     >/dev/null 2>&1 && alias mc='mc -u'
+is-installed -w cal ncal >/dev/null 2>&1 && alias cal='ncal -M -b'
+# suspend / reboot / shutdown # {{{
+r_s_addCompl=false
+if $IS_WSL; then # {{{
+  alias suspend="$SCRIPT_PATH/bin/oth/utils-root.sh suspend"
+  alias reboot="$SCRIPT_PATH/bin/oth/utils-root.sh reboot"
+  alias shutdown="$SCRIPT_PATH/bin/oth/utils-root.sh shutdown"
+  r_s_addCompl=true # }}}
+elif $IS_DOCKER; then # {{{
+  : # }}}
+elif $IS_MAC; then # {{{
+  : # }}}
+elif [[ ! -z $RUN_AS_ROOT ]]; then # {{{
+  alias suspend="$RUN_AS_ROOT suspend"
+  alias reboot="$RUN_AS_ROOT reboot"
+  alias shutdown="$RUN_AS_ROOT shutdown"
+  r_s_addCompl=true # }}}
+else # {{{
+  alias suspend='sudo systemctl suspend'
+  alias reboot="bash -c 'f() { local k=\${1^}; { [[ \$k == Y ]] || read -t5 -p \"Reboot [NY] ? \" k; } && case \$k in Y) sudo /usr/sbin/reboot;; esac; }; f \$@;' -"
+  alias shutdown="bash -c 'f() { local k=\${1^}; { [[ \$k == Y ]] || read -t5 -p \"Shutdown [NY] ? \" k; } && case \$k in Y) sudo /usr/sbin/shutdown;; esac; }; f \$@;' -"
+  r_s_addCompl=true
+fi # }}}
+if $r_s_addCompl; then # {{{
+  complete $COMPLETE_DEFAULT_PARAMS -W "y" reboot
+  complete $COMPLETE_DEFAULT_PARAMS -W "y" shutdown
+fi # }}}
+unset r_s_addCompl # }}}

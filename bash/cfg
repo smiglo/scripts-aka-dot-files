@@ -52,7 +52,7 @@ fi
 if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
   export FZF_DEFAULT_COMMAND="fzf-find"
   export FZF_ALT_C_COMMAND="fzf-find -d"
-  fzf_exe="$ALIASES_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
+  fzf_exe="$ENV_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
   if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
     export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
   else
@@ -115,10 +115,14 @@ export CD_LAST_DIRS_STORED+=":docs@--cd-spec"
 # }}}
 # Editor # {{{
 if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
-  export EDITOR="vim -c 'set cursorline'"
-  [[ $(which vim 2>/dev/null) == "$HOME/"* ]] && export EDITOR="vim --fast -cl"
+  if is-installed vim-editor; then
+    export EDITOR="vim-editor"
+  elif [[ $(which vim 2>/dev/null) == "$HOME/"* ]]; then
+    export EDITOR="vim --editor"
+  else
+    export EDITOR="vim -c 'set cursorline'"
+  fi
   export VISUAL=$EDITOR
-  export SVN_EDITOR=$EDITOR
 fi
 # }}}
 # }}}
@@ -157,15 +161,6 @@ goto_vi_command() { # {{{
   return 0
 } # }}}
 if [[ ! -z $PS1 ]]; then
-  bind 'set enable-bracketed-paste on'
-  if [[ $BASH_VERSION == '4.4'* || $BASH_VERSION == '5'* ]]; then
-    bind 'set colored-completion-prefix on'
-    if [[ ! -z $INPUTRC_MODE_CHAR ]]; then
-      bind 'set vi-ins-mode-string "\1\e[0;33m\2'"$INPUTRC_MODE_CHAR"'\1\e[0m\2"'
-      bind 'set vi-cmd-mode-string "\1\e[0;34m\2'"$INPUTRC_MODE_CHAR"'\1\e[0m\2"'
-      bind 'set emacs-mode-string  "\1\e[0;31m\2'"$INPUTRC_MODE_CHAR"'\1\e[0m\2"'
-    fi
-  fi
   for i in {emacs,vi-command,vi-insert}; do
     bind "set keymap $i"
     # bind -r '\C-k'    # k for utils
@@ -181,10 +176,12 @@ if [[ ! -z $PS1 ]]; then
       bind -x '"\C-kk": "history -r && echoe -c -m bash history reloaded"'
       bind    '"\C-kil": "\C-g logout\C-m"'
       bind    '"\C-kib": "\C-g byebye\C-m"'
+      if is-installed ranger; then
+        bind    '"\C-w\C-f": "\C-g ranger\C-m"'
+      fi
       if $FZF_INSTALLED; then
         bind -x '"\C-f": "fzfwr iRC"'
         bind -x '"\C-p": "fzf-file-widget"'
-        bind -x '"\C-x": "__env_fzf_autocomplete_inline__"'
       fi
       ;;
     esac
@@ -199,8 +196,7 @@ if [[ ! -z $PS1 ]]; then
   unset i pre
   bind 'set editing-mode vi'
   bind 'set keymap vi-insert'
-fi
-# }}}
+fi # }}}
 # Completion # {{{
 if [[ -f /etc/bash_completion ]] && ! shopt -oq posix && ! declare -F _completion_loader &>/dev/null; then
   source /etc/bash_completion
@@ -257,7 +253,6 @@ export PROMPT_COMMAND+="; bash_phistory; history -a"
 export PROMPT_DIRTRIM=3
 
 ${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_COMMAND="set-title; $PROMPT_COMMAND"
-${PS1_CHECK_ENV:-false} && export PROMPT_COMMAND+="; PS1_envUpdater"
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 

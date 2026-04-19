@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+update-ccache-conf() { # {{{
+  install-ccache-conf
+} # }}}
+update-linux-sudo-keyd() { # {{{
+  is-os-allowed -docker || return 0
+  os-install keyd || return 1
+  sudo cp $SCRIPT_PATH/dot-files/keyd.conf /etc/keyd/default.conf
+  sudo systemctl enable --now keyd
+} # }}}

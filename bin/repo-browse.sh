@@ -50,7 +50,7 @@ _repo-browse() { # @@ # {{{
   }
   export -f git_preview
   # }}}
-  [[ -z $REPO_LAST_LIST && -z $REPO_LAST_PWD ]] && echo "On the first run, all dirty repos are shown" >/dev/stderr && allDirty=true
+  [[ -z $REPO_LAST_LIST && -z $REPO_LAST_PWD ]] && echoe "On the first run, all dirty repos are shown" && allDirty=true
   local listSrc= listDst="$REPO_LAST_LIST" listNew= wasPushd=false i= err=0 br= stat= clean=
   [[ ! -z "$REPO_LAST_PWD" ]] && wasPushd=true && pushd "$REPO_LAST_PWD" >/dev/null 2>&1
   if [[ -z "$REPO_LAST_LIST" ]] || $wereParams; then # {{{
@@ -78,7 +78,7 @@ _repo-browse() { # @@ # {{{
     listSrc="$listDst"
     listDst=""
   fi # }}}
-  [[ -z "$listSrc" ]] && echo "No repos have been found" >/dev/stderr && return 1
+  [[ -n "$listSrc" ]] || eval $(die "No repos have been found")
   while read i; do # {{{
     i="$(echo "$i" | sed 's/\s*@.*//')"
     case $i in # {{{
@@ -121,7 +121,7 @@ _repo-browse() { # @@ # {{{
     listNew+="$i\n"
     i="$(echo "$i" | sed 's/\s*@.*//')"
     cd "${i%% @*}"
-    $SHELL </dev/tty >/dev/tty 2>/dev/stderr
+    $SHELL </dev/tty >/dev/tty 2>&2
     err=$?
     cd - >/dev/null 2>&1
     [[ $err != 0 ]] && break

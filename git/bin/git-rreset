@@ -6,7 +6,7 @@ if [[ $1 == '@@' ]]; then # {{{
   git branch --all | sed -n -e '/\/'"$br"'/s/remotes\///p'
   exit 0
 fi # }}}
-source $ALIASES_D/0.essentials
+source $BASH_PATH/essentials
 ups="" showDiff=false shaHead= shaUps=
 [[ $1 == '-d' ]] && showDiff=true && shift
 if [[ -z $1 ]]; then

@@ -35,7 +35,7 @@ if $BASHRC_COMPLETION_FULL; then # {{{
       cmd="$(<"$cmd")"
     else
       cmd="$(type "$cmd")"
-      if [[ $cmd =~ (\$ALIASES_SCRIPTS/[^ ]*) ]]; then
+      if [[ $cmd =~ (\$ENV_SCRIPTS/[^ ]*) ]]; then
         local f=${BASH_REMATCH[1]}
         f="$(eval echo "$f")"
         cmd="$(<$f)"
@@ -57,6 +57,12 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   }
   alias ch='compl-help'
   compl-add compl-help ch # }}}
+  _completion_vim() { # {{{
+    COMPREPLY=()
+    local cmd=${COMP_WORDS[0]}
+    [[ "$(which $cmd)" != $BIN_PATH/vims/* ]] && return
+    compl-old
+  } # }}}
   _do_vim_completion() { # {{{
     local i=
     for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
@@ -173,6 +179,27 @@ if [[ -e $COMPLETION_BASH_PATH/bash_completion ]]; then # {{{
   fi
 fi # }}}
 # overrides of commons utils # {{{
+_completion_npm() { # {{{
+  COMPREPLY=( "" )
+  [[ -e package.json ]] || return
+  declare -xa opts
+  if (( $COMP_CWORD > 1 )); then
+    case ${COMP_WORDS[COMP_CWORD - 1]} in
+    run) opts=( $(jq -r '.scripts | keys[]' package.json 2>/dev/null) );;
+    exec) opts=( $(jq -r '.devDependencies | keys[] | select(startswith("@") | not)' package.json 2>/dev/null) )
+    esac
+  fi
+  compl-static
+} # }}}
+_completion_npx() { # {{{
+  COMPREPLY=( "" )
+  [[ -e package.json ]] || return
+  declare -xa opts
+  if (( $COMP_CWORD == 1 )); then
+    opts=( $(jq -r '.devDependencies | keys[] | select(startswith("@") | not)' package.json 2>/dev/null) )
+  fi
+  compl-static
+} # }}}
 complete $COMPLETE_DEFAULT_PARAMS -F _completion_npm npm
 complete $COMPLETE_DEFAULT_PARAMS -F _completion_npx npx
 compl-add --old cd

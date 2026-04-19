@@ -54,7 +54,7 @@ if [[ ! -z $region ]]; then # {{{
   if $foldet; then # vim: {
     regionE="^# \(.* \)\?$region\(.* \)\? # }\{3\}"
     if ! grep -q "$regionE" "$f"; then
-      region="$($ALIASES_SCRIPTS/file-tools/matching-section.sh -f $f -p "^# (.* )?$region")"
+      region="$($ENV_SCRIPTS/file-tools/matching-section.sh -f $f -p "^# (.* )?$region")"
       [[ -z $region ]] && echorm 0 "End region [$region] not found" && exit 1
       echo -n "$region" | jira-out.sh
       exit

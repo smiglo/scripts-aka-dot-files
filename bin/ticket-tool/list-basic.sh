@@ -2,7 +2,7 @@
 # vim: fdl=0
 
 if [[ -z $TICKET_PATH || ! -e $TICKET_PATH ]]; then # {{{
-  echo "Cannot access ticket path [$TICKET_PATH]" >/dev/stderr
+  echoe "Cannot access ticket path [$TICKET_PATH]"
   [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 1 ||  return 1
 fi # }}}
 ISSUES=
@@ -17,5 +17,4 @@ done # }}}
 unset i dn
 echo $ISSUES
 unset ISSUES
-# echo "is=[$ISSUES]" >/dev/stderr
-
+# echoe "is=[$ISSUES]"

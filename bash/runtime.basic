@@ -18,9 +18,9 @@ export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 [[ -h $BASHRC_RUNTIME_PATH && ! -e $BASHRC_RUNTIME_PATH ]] && rm $BASHRC_RUNTIME_PATH
 export BIN_PATH="$HOME/.bin"
 export BASH_PATH="$ENV_PATH/scripts/bash"
-export ALIASES="$BASH_PATH/aliases"
 export UGID="$UID:$(id -g)"
-export DISPLAY=$DISPLAY WAYLAND_DISPLAY=$WAYLAND_DISPLAY
+export DISPLAY=$DISPLAY
+export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 # os-kind (mac/docker/wsl/virt-os/vscode # {{{
 if [[ -z $OS_KIND ]]; then
   export OS_KIND="ubuntu"
@@ -65,17 +65,14 @@ if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
 fi # }}}
 declare -a ENV_POST_INVOKE=() # }}}
 # Clear appended variables, init env # {{{
-export ALIASES_MAP=
 export BASH_EXTRA_FEATURES=
 export BASH_UPDATE_REPOS=
 export BASH_UPDATE_TIME=
-export BASH_ALIASES_DUMMY="compl-add"
 export COMPLETION_GENERIC_UTILS="setup-env.sh tmux-sb-worker.sh"
 export COMPLETION_GENERIC_FUNCTIONS=
 export COMPLETION_GENERIC_UTILS_OLD=
 export COMPLETION_GENERIC_FUNCTIONS_OLD=
 export COMPLETION_USE_NEW=
-export COLUMNS=$COLUMNS
 export CD_INTERACTIVE_PREDEFINED_LIST=
 export CD_INTERACTIVE_USER_LIST=
 export CD_INTERACTIVE_EXCLUDE_LIST="tmp* temp *.bck"
@@ -88,6 +85,8 @@ export CLANG_PARAMS="-std=c99"
 export CLANGPP_PARAMS="-std=c++11"
 export CLIP_FILE="$MEM_KEEP/clip"
 export CMAKE_ARGS=
+declare -A ENV_EXT=()
+declare -A ENV_FUNC_GETTER=()
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
@@ -115,7 +114,7 @@ export PHISTORY_IGNORED_COMMANDS=
 export PHISTORY_IGNORED_COMMANDS+="exec"
 export PHISTORY_IGNORED_COMMANDS+=":ls:ll:cd:ps:jobs"
 export PHISTORY_IGNORED_COMMANDS+=":@vi@:@vim@:@gvi@:@gvim@:vim-session"
-export PHISTORY_IGNORED_COMMANDS+=":$BIN_PATH:$BASH_PATH:./bash/aliases\ *"
+export PHISTORY_IGNORED_COMMANDS+=":$BIN_PATH:$BASH_PATH:"
 export PHISTORY_IGNORED_COMMANDS+=":sendMsg"
 export PHISTORY_IGNORED_COMMANDS+=":echo:printf:echor:echorc:echorv:echorm"
 export PHISTORY_IGNORED_COMMANDS+=":cl:clf:printfc:echoc"
@@ -123,7 +122,6 @@ export PHISTORY_IGNORED_COMMANDS+=":dbg:dbgF:FAT:ERR:WRN:INF:DBG:TRC"
 export PHISTORY_IGNORED_COMMANDS+=":time-measure"
 export PHISTORY_IGNORED_COMMANDS+=":type"
 export PS1_ENV_PWD=
-export ROWS=$ROWS
 export SCRIPT_PATH=
 export SHARABLE_PATH=
 export SHARED_BASH_PATH=
@@ -149,8 +147,7 @@ export VIM_PRJ_PARAMS=
 # }}}
 # ENV_PATH setup # {{{
 export SCRIPT_PATH=$ENV_PATH/scripts
-export ALIASES_SCRIPTS="$SCRIPT_PATH/bin/from-aliases"
-export ALIASES_D="$SCRIPT_PATH/bash/aliases.d"
+export ENV_SCRIPTS="$SCRIPT_PATH/bin/from-env"
 export BASH_UPDATE_REPOS="$ENV_PATH/scripts $ENV_PATH/vim"
 export BASH_UPDATE_TIME="$((1*18*60*60))"
 export GIT_REPOS="$BASH_UPDATE_REPOS $ENV_PATH/info"
@@ -164,6 +161,11 @@ export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
 export BASH_PROFILES="$(command cd $PROFILES_PATH 2>/dev/null; echo *)"
 [[ $BASH_PROFILES == '*' ]] && export BASH_PROFILES=""
 export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
+# Static completions # {{{
+if [[ -z ${COMPLETION_STATIC[_placeholder]} ]] || $RCSTUFF_FORCE; then
+  declare -Ag COMPLETION_STATIC
+  COMPLETION_STATIC[_placeholder]="_defined"
+fi # }}}
 # }}}
 if $BASHRC_FULL_START; then # {{{
   command mkdir -p \
@@ -178,10 +180,9 @@ if $BASHRC_FULL_START; then # {{{
   chmod 700 $TMPDIR $TMP_MEM_PATH
 fi # }}}
 # Runtime Path - Setup # {{{
-for profi in $BASH_PROFILES; do
-  [[ -e $RUNTIME_PATH/runtime-pre.bash.$profi ]] && source $RUNTIME_PATH/runtime-pre.bash.$profi
+for profi in $($BASH_PATH/env-ext.sh get-plugins runtime-pre.bash); do
+  source $profi
 done
-[[ -e $RUNTIME_PATH/runtime-pre.bash ]] && source $RUNTIME_PATH/runtime-pre.bash
 [[ -e $RUNTIME_PATH/runtime-pre.mount ]] && source $RUNTIME_PATH/runtime-pre.mount
 export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
 # }}}

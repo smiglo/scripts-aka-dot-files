@@ -69,7 +69,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
   exit 0
 fi # }}}
 
-import-module time2s time-tools
+import-module time-tools echor dbg
 
 getDefaultParams() { # {{{
   local mode="$1"
@@ -161,7 +161,6 @@ fi # }}}
 
 export REMINDER_DEFAULT_VERBOSE=$verbose
 
-import-module echor
 case $mode in
 add) # {{{
   touch $reminderFile
@@ -450,7 +449,6 @@ monitor) # {{{
       handleKeys=false;; # }}}
     esac; shift
   done # }}}
-  import-module dbg
   [[ -f $monitorLogFile ]] && rm -f $monitorLogFile
   DBG --init $monitorLogLevel --ts=show --ts-abs --out "$monitorLogFile" --prefix
   declare -A Sleeps=( [no-file]=60 [no-next]=30 [too-far]=15 [close-enough]=2 )

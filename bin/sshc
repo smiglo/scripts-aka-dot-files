@@ -27,7 +27,7 @@ _sshc() { # {{{
   dbg D "establishing master connection"
   ssh -q -f -oControlMaster=yes -oControlPath=$t $@ $host "sleep 9999" || return 1
   dbg D "making pipe on remote"
-  ssh -q -S$t $host "[[ -p $fRemote ]] || { mkdir -p \$(dirname $fRemote); mkfifo $fRemote; }" || { __sshc_socket_term $host $t; return 1; }
+  ssh -q -S$t $host "[[ -p $fRemote ]] || { mkdir -p \$(dirname $fRemote); rm -f $fRemote; mkfifo $fRemote; }" || { __sshc_socket_term $host $t; return 1; }
   (
     set -e; set -o pipefail
     dbg I "waiter: start (h: $host, fr: $fRemote, fh: $fHost)"

@@ -205,8 +205,7 @@ saveInHistory() { # {{{
   [[ $err != 0 ]] && l+=" # $err"
   echo "$l" >>"$TICKET_CONF_HISTFILE"
 } # }}}
-import-module echor
-import-module progress-dot progress
+import-module echor progress
 echorm --name tt:j
 verbose=$(echorm -f??) issue= wNr= i= do_grep=false do_history=false reset_only=false do_wait=
 loop=false loopTimeout= loopBreakOnTimeout=false loopBreakOnErr=false loopMax=

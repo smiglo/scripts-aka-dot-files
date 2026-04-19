@@ -38,7 +38,7 @@ do-sync() { # {{{
     esac
     shift
   done # }}}
-  [[ -z $repo ]] && repo="$(basename "$PWD")" && echo "Repo name not provided, getting it from dir name [$repo]" >/dev/stderr
+  [[ -z $repo ]] && repo="$(basename "$PWD")" && echoe "Repo name not provided, getting it from dir name [$repo]"
   $verbose && dots=false
   if [[ -z $parBranch ]]; then # {{{
     parBranch="$(git rev-parse --abbrev-ref HEAD)"
@@ -104,13 +104,13 @@ do-sync() { # {{{
             ! $quiet && $dots && { progress --unmark; dots=false; }
             git rebase --abort
             git reset --hard
-            echo "Resolve confilicts and exit shell..." >/dev/stderr
+            echoe "Resolve confilicts and exit shell..."
             $SHELL </dev/tty >/dev/tty
             progress --mark --left --msg "${CBlue}${d}${COff}"
             # }}}
           else # {{{
             ! $quiet && $dots && { progress --unmark;  dots=false; }
-            echo "Rebase was aborted due to conflicts..." >/dev/stderr
+            echoe "Rebase was aborted due to conflicts..."
             git rebase --abort >/dev/null 2>&1
             git reset --hard >/dev/null 2>&1
           fi # }}}
@@ -122,7 +122,7 @@ do-sync() { # {{{
   done
   ! $quiet && $dots && progress --unmark
 } # }}}
-source $ALIASES_D/0.essentials
+source $BASH_PATH/essentials
 remote= branch=
 repos=$PWD repo= r=
 params=

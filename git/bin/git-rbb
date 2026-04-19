@@ -10,7 +10,7 @@ if [[ $1 == '@@' ]]; then # {{{
   esac
   exit 0
 fi # }}}
-source $ALIASES_D/0.essentials
+source $BASH_PATH/essentials
 cnt= dst= branch= verbose=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in

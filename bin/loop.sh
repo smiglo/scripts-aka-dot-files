@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module get-ts time-tools
+import-module time-tools
 
 _loop() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
@@ -94,7 +94,7 @@ _loop() { # @@ # {{{
       [[ $cnt == 0 ]] && break
     fi
   done # }}}
-  echo "$(getMsg)" >/dev/stderr
+  getMsg >&2
   return $err
 } # }}}
 _loop "$@"

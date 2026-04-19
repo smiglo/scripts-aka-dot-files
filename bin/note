@@ -52,13 +52,13 @@ _note() { # {{{
           break
         fi
       done
-      ! $found && echo "Note location not found for $1" >/dev/stderr && return 1;; # }}}
+      $found || eval $(die "Note location not found for $1");; # }}}
     --show-note-file) showNoteFilename=true;;
     -v | -h | -p*)    paramsSplit+="$1 ";;
     -  | --cat)       doCat=true;;
     --tmux) # {{{
       [[ ! -n $TMUX ]] && return 1
-      [[ -z $1 ]] && echo "Missing source paramter" >/dev/stderr && return 1
+      [[ -n $1 ]] || eval $(die "Missing source paramter")
       shift
       [[ -z "$paramsSplit" ]] && paramsSplit="${NOTE_PARAMS_SPLIT:--h -l 50%}"
       [[ " $paramsSplit " == *\ -v\ * && $(tmux display-message -p -F '#{pane_height}') -lt 16 ]] && paramsSplit="${paramsSplit/-v/-h}"
@@ -74,6 +74,7 @@ _note() { # {{{
     --tmux-batch) # {{{
       shift
       fromTmux=true
+      source ~/.bashrc --do-basic
       noteFile="${NOTE_FILE_TMUX:-$NOTE_FILE}"
       [[ -z $1 ]] && set -- $NOTE_PARAMS_TMUX
       case $1 in
@@ -92,11 +93,11 @@ _note() { # {{{
             break
           fi
         done
-        ! $found && echo "Note location not found for $1" >/dev/stderr && return 1;; # }}}
+        $found || eval $(die "Note location not found for $1");; # }}}
       esac
       shift $#;; # }}}
     --help) # {{{
-      cat >/dev/stderr <<-EOF
+      cat >&2 <<-EOF
 				# For encrypted parts use:
 				# ENC.k@KEY-NAME # {{{
 				__content__

@@ -6,7 +6,7 @@ getKey() { # {{{
   local key= IFS=
   read -rsn${1:-1} ${@:2} key
   local res="$(echo -ne "$key" | xxd -g8 | cut -d\  -f2)"
-  $__key_getter_verbose && echo "r:[$res]" >/dev/stderr
+  echoe $__key_getter_verbose "r:[$res]"
   echo "$res"
 } # }}}
 readKey() { # {{{

@@ -164,7 +164,7 @@ _share() { # @@ # {{{
       [[ -z $list ]] && echor "Nothing to put" && return 1
       echormf 1 "To put: $(echo $list | LC_COLLATE=C sort -f | tr '\n' ' ')"
       if [[ $cnt -gt 15 ]]; then
-        progress --wait 10s --key --msg "$(echor -1 "Copy all $cnt files?")" --out /dev/stderr </dev/tty || return 0
+        progress --wait 10s --key --msg "$(echor -1 "Copy all $cnt files?")" </dev/tty || return 0
       fi
       case $copyMode in
       cp)    $dry cp -a --parents $list $fName/;;

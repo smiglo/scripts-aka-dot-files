@@ -141,22 +141,23 @@ reschedule() { # {{{
 } # }}}
 __util_loglast_extra() { # {{{
   local cmd="$1" && shift
+  local ext="$BASH_PATH/env-ext.sh"
   case $cmd in
   @@) # {{{
     echo "reset suspend" ;; # }}}
   set-comment) # {{{
     local DEF_COMMENT= c= comment=
     [[ -e $APPS_CFG_PATH/log-last/log-last.cfg ]] && source $APPS_CFG_PATH/log-last/log-last.cfg
-    for i in $BASH_PROFILES_FULL; do
-      [[ -e "$i/aliases" ]] && c="$($i/aliases __util_loglast_extra "$cmd" "$DEF_COMMENT" $@)"
+    for i in $($ext); do
+      c="$($ext call=$i __util_loglast_extra "$cmd" "$DEF_COMMENT" $@)"
       [[ ! -z $c ]] && comment+=", $c"
     done
     comment="${comment#, }"
     echo "${comment:-$DEF_COMMENT}"
     return 0;; # }}}
   suspend) # {{{
-    $ALIASES_SCRIPTS/tmux/tm.sh --b-dump
-    $ALIASES_SCRIPTS/tmux/tm.sh --l-dump --all --file "susp-$(date +"$DATE_FMT").layout";; # }}}
+    $ENV_SCRIPTS/tmux/tm.sh --b-dump
+    $ENV_SCRIPTS/tmux/tm.sh --l-dump --all --file "susp-$(date +"$DATE_FMT").layout";; # }}}
   reset) # {{{
     if ${LOGLAST_CLEAN_TMP:-false}; then
       local resetFile="$TMP_MEM_PATH/log-last-reset.tmp"
@@ -175,8 +176,8 @@ __util_loglast_extra() { # {{{
   help) # {{{
     ;; # }}}
   esac
-  for i in $BASH_PROFILES_FULL; do
-    [[ -e "$i/aliases" ]] && $i/aliases __util_loglast_extra "$cmd" $@
+    for i in $($ext); do
+    $ext call=$i __util_loglast_extra "$cmd" $@
   done
   [[ -e $APPS_CFG_PATH/log-last/extra-work.sh ]] && $APPS_CFG_PATH/log-last/extra-work.sh "$cmd" $@
 } # }}}
@@ -481,7 +482,7 @@ loglast() { # {{{
       ;; # }}}
     esac
     margin_s=$(( ( $startup_margin + $end_margin + $user_margin - $pause_margin ) * 60))
-    echorm "today=[$TODAY]" >/dev/stderr # DBG
+    echorm "today=[$TODAY]" # DBG
     local cmd=""
     if is_to_be_done 'first' || is_to_be_done 'today'; then # {{{
       cmd+=" | grep '^$TODAY'"
@@ -506,10 +507,10 @@ loglast() { # {{{
       fi # }}}
       is_to_be_done 'full' || gr_cmd+=" | cut -c-16"
       cmd="$gr_cmd | tr -s ' ' $cmd"
-      is_to_be_done 'highlight' && cmd+=" | $ALIASES_SCRIPTS/grep-tools/hl-bash.sh +cY '$TODAY.*'"
+      is_to_be_done 'highlight' && cmd+=" | $ENV_SCRIPTS/grep-tools/hl-bash.sh +cY '$TODAY.*'"
     fi # }}}
     is_to_be_done 'clear-screen' && ! $isDbg && clear -x
-    echorm "[$to_do] [$to_do_extra]" >/dev/stderr # DBG
+    echorm "[$to_do] [$to_do_extra]" # DBG
     local d_cur=$(date +"%H:%M")
     if $paused; then
       [[ -z $paused_time ]] && paused_time=$d_cur
@@ -569,7 +570,7 @@ loglast() { # {{{
       printf -- "${CMsg}------------${COff}\n"
     fi # }}}
     if is_to_be_done 'logins'; then # {{{
-      echorm "cmd=[$(echo $cmd | tr '\n' ' ')]" >/dev/stderr # DBG
+      echorm "cmd=[$(echo $cmd | tr '\n' ' ')]" # DBG
       ! is_to_be_done 'nested' && is_to_be_done 'first' && printf "Start: ${CGold}"
       local str="$(eval $cmd)"
       printf "%s" "$str"
@@ -789,7 +790,7 @@ loglast() { # {{{
       __util_loglast_extra 'send' >/dev/null
     fi # }}}
     if is_to_be_done 'plot' || is_to_be_done 'plot-full'; then # {{{
-      ! type gnuplot 1>/dev/null 2>&1 && echo "\"gnuplot\" not installed" >/dev/stderr && return 1
+      type gnuplot 1>/dev/null 2>&1 || eval $(die "\"gnuplot\" not installed")
       local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot='cat -'
       is_to_be_done 'plot' && full_plot='tail -n100'
       printf "%6s %2s %6s %6s\n" 'No' '8h' 'W' 'A' >$FILE_PLOT
@@ -912,11 +913,11 @@ loglast() { # {{{
           [[ $ts -gt 60 ]] && echo "pause-mod -$((ts / 60))" >>$CMD_FILE
         else
           notify-send "Time Tracker: Unpaused after $tsHMS due to inactivity" -u 'critical'
-          local currId=$($ALIASES_SCRIPTS/tmux/tm.sh --switch --get $(tmux list-panes -a -F '#S:#I.#P :: #{pane_title} :: #{pane_id}' | sed -n '/^MAIN.* :: Working Time :: /s/.* :: //p' | head -n1))
+          local currId=$($ENV_SCRIPTS/tmux/tm.sh --switch --get $(tmux list-panes -a -F '#S:#I.#P :: #{pane_title} :: #{pane_id}' | sed -n '/^MAIN.* :: Working Time :: /s/.* :: //p' | head -n1))
           if ! progress --wait 20s --key --msg "Accept a pause of $tsHMS due to inactivity" --no-err; then
             [[ $ts -gt 60 ]] && echo "pause-mod -$((ts / 60))" >>$CMD_FILE
           fi
-          $ALIASES_SCRIPTS/tmux/tm.sh --switch $currId
+          $ENV_SCRIPTS/tmux/tm.sh --switch $currId
         fi # }}}
       elif [[ $lastUnlock_s -gt $pt_s ]]; then # {{{
         if $pause_auto_unpause; then
@@ -1321,11 +1322,7 @@ loglast() { # {{{
   mutex-deinit
   unset is_to_be_done
 } # }}}
-import-module do-action actions
-import-module mutex-init mutex-locking
-import-module dbgF dbg
-import-module echor
-import-module time2s time-tools
+import-module actions mutex-locking dbg echor time-tools
 export -f loglast
 
 export DBG_ID=loglast

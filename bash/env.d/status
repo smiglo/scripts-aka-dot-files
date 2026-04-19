@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+status-wait-for() { # @@ # {{{
+  $ENV_SCRIPTS/status/status-wait-for.sh "$@"
+} # }}}
+status() { # @@ # {{{
+  $ENV_SCRIPTS/status/status.sh "$@"
+} # }}}
+export -f status-wait-for status
+

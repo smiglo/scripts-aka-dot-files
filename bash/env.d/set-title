@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+set-title() { # @@ # {{{
+  $ENV_SCRIPTS/set-title.sh "$@"
+} # }}}
+set-title-pane() { # {{{
+  if ${SET_TITLE_PANE_FULL:-false}; then
+    set-title "$@"
+    return 0
+  fi
+  local force=false lock_in=false getTitle=false
+  while [[ ! -z $1 ]]; do
+    case $1 in
+    -f) force=true;;
+    -l) lock_in=true;;
+    -u) unset PANE_TITLE_LOCKED;;
+    --get) getTitle=true;;
+    *) break;;
+    esac; shift
+  done
+  if $force || $getTitle || ( ! ${PANE_TITLE_LOCKED:-false} && ( [[ -n $TMUX ]] || ${SET_TITLE_PANE_NO_TMUX:-false} ) ); then
+    local title="$@"
+    if [[ -z $title && -n $SET_TITLE_PANE_EXT ]]; then
+      local ext= t=
+      for ext in $SET_TITLE_PANE_EXT; do
+        type $ext >/dev/null 2>&1 || continue
+        t="$($ext)"
+        [[ -n $t ]] && title="$t" && break
+      done
+    fi
+    [[ -z $title ]] && title="${PWD/$HOME/\~}" && title="${title##*/}"
+    ! $getTitle || { echo "$title"; return 0; }
+    printf ']2;%s\\' "$title" >&2
+  fi
+  if $lock_in; then
+    export PANE_TITLE_LOCKED=true
+  fi
+} # }}}
+export -f set-title set-title-pane
+

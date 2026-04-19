@@ -6,7 +6,7 @@ encryptor() { # @@ # {{{
   local cipher="aes-256-cbc" params= encode="-e" use_base64="-a" use_hash_pass=true pass= edit=false persistent=false make_link=false key=
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
-    --key)  keep-pass --list-all-keys;;
+    --key)  keep-pass --list-all;;
     *) # {{{
       if [[ " $@ " == *\ -d\ * || " $@ " == *\ --edit\ * ]]; then
         get-file-list '*.enc' | sed -e 's|^|./|'
@@ -47,12 +47,8 @@ encryptor() { # @@ # {{{
   if [[ ! -z $src ]]; then # {{{
     if [[ -z $pass && $src =~ ^.*\.k@([^.]*)(\..*){0,1}$ ]]; then
       if [[ ! -z ${BASH_REMATCH[1]} ]]; then
-        if keep-pass --has-key "${BASH_REMATCH[1]}"; then
-          pass="$(keep-pass --key "${BASH_REMATCH[1]}")"
-        else
-          echo "No key '${BASH_REMATCH[1]}' in keep-pass journals" >/dev/stderr
-          return 1
-        fi
+        keep-pass --has "${BASH_REMATCH[1]}" || eval $(die "No key '${BASH_REMATCH[1]}' in keep-pass journals")
+        pass="$(keep-pass --key "${BASH_REMATCH[1]}")"
       fi
     fi
     if [[ -z $dst && -t 1 ]]; then
@@ -73,17 +69,17 @@ encryptor() { # @@ # {{{
       if [[ $encode == '-e' ]]; then # {{{
         local p1= p2=
         while [[ -z $pass ]]; do
-          read -s -p "Pass  : " p1 >/dev/stderr </dev/tty
-          echo >/dev/stderr
-          read -s -p "Retype: " p2 >/dev/stderr </dev/tty
-          echo >/dev/stderr
+          read -s -p "Pass  : " p1 >&2 </dev/tty
+          echo >&2
+          read -s -p "Retype: " p2 >&2 </dev/tty
+          echo >&2
           [[ $p1 == $p2 ]] && pass=$p1$p2 || echoe -w "Do not match"
         done
         p1=
         p2=
       else
-        read -s -p "Pass: " pass >/dev/stderr </dev/tty
-        echo >/dev/stderr
+        read -s -p "Pass: " pass >&2 </dev/tty
+        echo >&2
         pass=$pass$pass
       fi # }}}
     else
@@ -94,12 +90,8 @@ encryptor() { # @@ # {{{
   # echoe -w "$cmd $encode $([[ ! -z $src ]] && echo "-in $src") $([[ ! -z $dst ]] && echo "-out $dst")"
   $use_hash_pass && cmd+=" -pass file:<(echo $pass | $shaCmd | cut -c1-64)"
   if [[ ! -z $src && ! -e $src ]]; then # {{{
-    if ! $edit; then
-      echo "Source file [$src] does not exist" >/dev/stderr
-      return 1
-    else
-      err=0
-    fi
+    $edit || eval $(die "Source file [$src] does not exist")
+    err=0
   else
     eval $cmd $encode $([[ ! -z $src ]] && echo "-in $src") $([[ ! -z $dst ]] && echo "-out $dst") 2>/dev/null || err=1
   fi # }}}

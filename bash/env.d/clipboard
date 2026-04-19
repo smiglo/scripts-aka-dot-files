@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+__xclip() { # {{{
+  local mode="$CLIP_MODE" doSet=false updateClipFileOnPut=${CLIP_UPDATE_CLIP_FILE_ON_PUT:-true}
+  [[ $1 == '--set' ]] && shift && doSet=true
+  if [[ -z $mode ]] || $doSet; then # {{{
+    export CLIP_CMD_PUT=
+    export CLIP_CMD_GET=
+    if $IS_VIRTUAL_OS; then # {{{
+      mode='virtos'
+      if $IS_WSL; then
+        CLIP_CMD_PUT="/mnt/c/Windows/System32/clip.exe"
+        CLIP_CMD_GET="/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -noprofile Get-Clipboard | sed 's/\\s*$//' | sed -z -e 's/\s*\r\?\n$/\n/' -s'/\n\+$/\n/'"
+      fi # }}}
+    elif $IS_ARCH && is-installed -w wl-copy; then
+      mode='wlclip'
+      CLIP_CMD_PUT="command wl-copy"
+      CLIP_CMD_GET="command wl-paste"
+    elif is-installed -w xclip;then # {{{
+      mode='xclip'
+      CLIP_CMD_PUT="command xclip -in -selection clipboard"
+      CLIP_CMD_GET="command xclip -out -selection clipboard" # }}}
+    elif $IS_MAC && is-installed -w pbcopy; then # {{{
+      mode='pbcopy'
+      export CLIP_REATTACH=
+      is-installed -w reattach-to-user-namespace && ${CLIP_USE_REATTACH:-false} && CLIP_REATTACH="reattach-to-user-namespace"
+      CLIP_CMD_PUT="$CLIP_REATTACH pbcopy"
+      CLIP_CMD_GET="$CLIP_REATTACH pbpaste" # }}}
+    elif [[ -n $TMUX ]]; then # {{{
+      mode='tmux'
+      CLIP_CMD_GET="tmux show-buffer -b clip 2>/dev/null"
+    else
+      mode='plain'
+    fi # }}}
+    if [[ -z $CLIP_CMD_PUT ]]; then # {{{
+      CLIP_CMD_PUT="command cat - >$CLIP_FILE"
+      CLIP_UPDATE_CLIP_FILE_ON_PUT=false
+    else
+      CLIP_UPDATE_CLIP_FILE_ON_PUT=true
+    fi # }}}
+    if [[ -z $CLIP_CMD_GET ]]; then # {{{
+      [[ -e $CLIP_FILE ]] || touch $CLIP_FILE
+      CLIP_CMD_GET="if [[ -e $CLIP_FILE ]]; then command cat $CLIP_FILE; fi"
+    fi # }}}
+    export CLIP_MODE="$mode"
+    $doSet && return
+  fi # }}}
+  if [[ -z $DISPLAY && $mode == "xclip" ]]; then
+    export DISPLAY="$(who | awk '/'"$USER"'/ {print $2}' | command grep "^:" | head -n1)"
+  fi
+  local tmuxP=
+  [[ -n $TMUX ]] || tmuxP="-S ${TMUX_TMPDIR:-$HOME/.tmux/socket}/tmux-$UID/default"
+  case $1 in
+  --put) # {{{
+    shift
+    local f="-" checkSsh=true
+    while [[ ! -z $1 ]]; do
+      case $1 in
+      --no-ssh) checkSsh=false;;
+      *) f=$1;;
+      esac; shift
+    done
+    command cat $f | sed 's/\s*$//' | sed -z 's/\n\+$/\n/' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
+    $updateClipFileOnPut && command cat $CLIP_FILE.put >$CLIP_FILE
+    local clipSsh=$HOME/.tmp/clip.ssh
+    if $checkSsh && [[ -p $clipSsh ]]; then
+      if is-installed timeout; then
+        timeout 0.5 sh -c "cat $CLIP_FILE.put >$clipSsh"
+        (( $? == 124 )) && rm -f $clipSsh
+      else
+        cat $CLIP_FILE.put >$clipSsh
+      fi
+    fi;; # }}}
+  --get) # {{{
+    eval $CLIP_CMD_GET | tee >(tmux $tmuxP load-buffer -b clip /dev/stdin 2>/dev/null)
+    ;; # }}}
+  *) # {{{
+    [[ $mode == 'plain' ]] && return 1
+    case $1 in
+    --tmux | -t) tmux $tmuxP save-buffer $CLIP_FILE 2>/dev/null;;
+    --tmux-to | -tt | -) tmux $tmuxP load-buffer -b clip $CLIP_FILE 2>/dev/null;;
+    --save | -s) # {{{
+      local cnt="$(tmux list-buffers -F '#{buffer_name}' | command grep "^clip[0-9]\+" | wc -l)"
+      local name="$2"
+      [[ -z $name ]] && name="$(printf "clip%003d" $((cnt + 1)))"
+      eval $CLIP_CMD_GET > >(tmux $tmuxP load-buffer -b "$name" /dev/stdin 2>/dev/null);; # }}}
+    *) # {{{
+      [[ $1 == '-' ]] && shift
+      case $mode in
+      wlclip) wl-copy "$@";;
+      xclip) xclip "$@";;
+      pbcopy) $CLIP_REATTACH pbcopy "$@";;
+      *) return 1;;
+      esac;; # }}}
+    esac;; # }}}
+  esac
+} # }}}
+xclip() { # @@ # {{{
+  if [[ $1 == @@ ]]; then # {{{
+    case ${4:-$3} in
+    --put) echo "--no-ssh @@-f FILE";;
+    --save | -s) echo "BUFFER"; tmux list-buffers -F '#{buffer_name}';;
+    *) echo "--put --get --save -s --tmux -t --tmux-to -tt -";;
+    esac
+    return 0
+  fi # }}}
+  if [[ -z $1 ]]; then # {{{
+    if [[ ! -t 0 ]]; then
+      xclip --put
+    else
+      xclip --get
+    fi
+    return 0
+  fi # }}}
+  __xclip "$@"
+} # }}}
+[[ -z $CLIP_MODE ]] && __xclip --set
+xc()     { xclip "$@"; }
+xs()     { # @@ # {{{
+  if [[ $1 == '@@' ]]; then
+    echo "BUFFER"
+    tmux list-buffers -F '#{buffer_name}'
+    return 0
+  fi
+  xclip --save "$@"
+} # }}}
+export -f xclip __xclip
+

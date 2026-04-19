@@ -29,8 +29,7 @@ case $todo in
 save) # {{{
   if ! $use_stdout; then
     if ! grep -q "^# j-info: -*$entry:" "$f"; then
-      $quiet || ( echo "No '$entry' section in the header"; echo "Add '# j-info: -$entry:' there first"; ) >/dev/stderr
-      exit 1
+      die -s=$quiet "No '$entry' section in the header"; echo "Add '# j-info: -$entry:' there first"
     fi
     sed -i "s|^# j-info: -*$entry:.*$|# j-info: $entry: |" "$f"
     sed -i "s|^\(# j-info: $entry:\).*$|\1 $layout|" "$f"
@@ -43,8 +42,7 @@ restore) # {{{
   layout_old="$layout"
   if ! $use_stdin; then
     if [[ -z "$layoutSaved" ]]; then
-      $quiet || ( echo "Layout not defined"; ) >/dev/stderr
-      exit 1
+      die -s=$quiet "Layout not defined"
     fi
     layout="$layoutSaved"
   else
@@ -53,7 +51,7 @@ restore) # {{{
   [[ -z "$layout" ]] && exit 1
   if [[ "$layout" != "$layout_old" ]]; then
     $quiet || echo "layout=\"$layout_old\""
-    echo "$layout" | $ALIASES_SCRIPTS/tmux/tm.sh --l-restore
+    echo "$layout" | $ENV_SCRIPTS/tmux/tm.sh --l-restore
     exit $?
   fi
   exit 0

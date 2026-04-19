@@ -23,7 +23,7 @@ while [[ ! -z $1 ]]; do # {{{
   esac
   shift
 done # }}}
-[[ $# == 0 ]] && echo "Arguments are missing" >/dev/stderr && exit 1
+(( $# )) || die "Arguments are missing"
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   @@*) phrase+=("${1#@}");;
@@ -36,18 +36,18 @@ while [[ ! -z $1 ]]; do # {{{
       v="$(echo -e "$TICKET_CONF_WAIT_ON_PHRASES_SHORT" | grep "^$p:")"
       v="${v#*:}"
     fi
-    [[ -z $v ]] && echo "No configuration for '$p'" >/dev/stderr && exit 1
+    [[ -n $v ]] || die "No configuration for '$p'"
     phrase+=("$v") ;; # }}}
   *) phrase+=("$1");;
   esac
   action+=("${2:-"$TICKET_CONF_WAIT_ON_ACTION_DEF"}")
   shift; shift
 done # }}}
-[[ -z ${#action[*]} ]] && echo "Arguments illformed, should be a set of pairs 'phrase' 'action'" >/dev/stderr && exit 1
-[[ ! -e $f ]] && echo "Source file '$f' does not exist" >/dev/stderr && exit 1
+(( ${#action[*]} )) || die "Arguments illformed, should be a set of pairs 'phrase' 'action'"
+[[ -e $f ]] || die "Source file '$f' does not exist"
 phrases="${phrase[*]}" && phrases="${phrases//\\}"
 while true; do
-  $silent || { eval progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots --out /dev/stderr; pid=$PPID; }
+  $silent || { eval progress --mark $($showTmuxProgress && echo "--tmux '$tmuxText'") --msg "'Waiting for [$phrases]'" --dots; pid=$PPID; }
   trap '$silent || { progress --unmark $pid; echo; }; exit;' INT TERM EXIT
   ( sleep $delay ) &
   tailPid=$!
@@ -55,7 +55,7 @@ while true; do
     for ii in ${!phrase[*]}; do
       if echo "$l" | grep -q "${phrase[ii]}"; then # {{{
         $silent || progress --unmark $pid
-        [[ $dbg -gt 0 ]] && echo "WaitOn: Matched [${phrase[ii]}]:[${action[ii]}]$([[ $dbg -gt 1 ]] && echo " [$l]")" >/dev/stderr
+        (( dbg )) && echoe "WaitOn: Matched [${phrase[ii]}]:[${action[ii]}]$( (( dbg > 1 )) && echo " [$l]")"
         a="${action[ii]}"
         case $a in # {{{
         @*)   eval ${a#@};;

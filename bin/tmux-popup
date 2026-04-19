@@ -121,6 +121,7 @@ _tmux-popup() { # @@ # {{{
     [[ -z $params ]] && params="-EE"
     silent=true
   else
+    cmd="$TMUX_POPUP_SHELL"
     [[ -z $params ]] && params="-E"
   fi # }}}
   [[ $params == '-e' ]] && params=

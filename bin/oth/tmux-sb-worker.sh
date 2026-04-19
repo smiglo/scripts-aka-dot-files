@@ -31,51 +31,66 @@ weather_interval=${TMUX_SB_WEATHER_DELTA:-$((1 * 60 * 60))}
 
 # }}}
 battery_tmux_sb_worker() { # @@ # {{{
-  is_ac() { # {{{
-    if $IS_MAC; then
-      pmset -g batt  | grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true'
-    else
-      upower -i /org/freedesktop/UPower/devices/line_power_AC | grep -q "online: *yes" && echo 'true' || echo 'false'
-    fi
+  if $IS_MAC; then # {{{
+    batt-info() {
+      case $1 in
+      is-ac)
+        pmset -g batt  | grep 'InternalBattery' | grep -q 'discharging' && echo 'false' || echo 'true';;
+      get-lvl)
+        local v="$(pmset -g batt | awk '/InternalBattery/ {print $3}')"
+        echo "${v%\%;}";;
+      get-lvl-max)
+        echo "${TMUX_SB_BATTERY_MAX:-100}";;
+      esac
+    } # }}}
+  else # {{{
+    batt-info() {
+      case $1 in
+      is-ac)
+        upower -i /org/freedesktop/UPower/devices/line_power_AC | grep -q "online: *yes" && echo 'true' || echo 'false' ;;
+      get-lvl)
+        local v="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | awk '/percentage:/ {print $2}')"
+        echo "${v%\%}";;
+      get-lvl-max)
+        local v="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | awk '/charge-end-threshold:/ {print $2}')"
+        echo "${v%\%}";;
+      esac
+    }
+  fi # }}}
+  get-color() { # {{{
+    local perc=$1 i= c=${colors[-1]} showPerc=${TMUX_SB_BATTERY_SHOW_PERC:-false}
+    local icons=( "battery-low" "battery-med" ) iconDef="battery" icon=
+    for i in ${!thresholds[*]}; do
+      (( perc < ${thresholds[i]%%:*} )) || continue
+      if [[ ${thresholds[i]} == *:* ]]; then
+        showPerc="${thresholds[i]#*:}"
+      fi
+      c="${colors[i]}"
+      icon="${icons[i]:-$iconDef}"
+      break
+    done
+    echo "$c $showPerc $icon"
   } # }}}
-  get_percentage() { # {{{
-    local perc=
-    if $IS_MAC; then
-      perc="$(pmset -g batt  | grep 'InternalBattery' | awk '{print $3}')"
-      perc="${perc%\%;}"
-    else
-      perc="$(upower -i /org/freedesktop/UPower/devices/battery_BAT0 | grep -F "percentage:" | awk '{print $2}')"
-      perc="${perc%\%}"
-    fi
-    echo "${perc%\%}"
-  } # }}}
-  local thresholds="${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95}" colors="1 3 2 14"
-  local value=
-  local ac_on="$(is_ac)" perc="$(get_percentage)" max=${thresholds##* }
-  if ! $ac_on || [[ $perc -lt ${max%%:*} ]]; then
+  declare -a thresholds=( ${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95} )
+  declare -a colors=( ${TMUX_SB_BATTERY_COLORS:-196 208 220 070} )
+  local value= c= showPerc= icon=
+  local ac_on="$(batt-info is-ac)" perc="$(batt-info get-lvl)" max=${thresholds[-1]}
+  battery_interval="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}"
+  if ! $ac_on && (( $perc < ${max%%:*} )); then
     battery_interval=30
-    local c= i= showPerc=
-    # Colors  # {{{
-    for i in $thresholds; do
-      showPerc=${TMUX_SB_BATTERY_SHOW_PERC:=false}
-      if [[ $i == *:* ]]; then # {{{
-        showPerc="${i#*:}"
-        i="${i%%:*}"
-      fi # }}}
-      [[ $perc -lt $i ]] && c="${colors%% *}" && break
-      colors="${colors#* }"
-    done # }}}
-    value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[battery]}"
+    read c showPerc icon < <(get-color $perc)
+    value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[$icon]}"
     if ! $ac_on; then
       $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra-bar]}"
     fi
-    $showPerc && { value+="#[fg=colour$c]${perc}%"; $ac_on && value+=" "; }
+    $showPerc && { value+="#[fg=colour${c:5}]$perc%"; $ac_on && value+=" "; }
     $ac_on && value+="#[fg=colour2]${UNICODE_EXTRA_CHARS[power]}"
+  elif $ac_on && (( $perc < $(batt-info get-lvl-max) )); then
+    read c _ _ < <(get-color $perc)
+    value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[power]}$perc%"
   else
     value=
-    battery_interval="${TMUX_SB_BATTERY_DELTA:-$((2 * 60))}"
   fi
-  unset is_ac get_percentage
   printf "%b" "$value"
 } # }}}
 cpu_tmux_sb_worker() { # @@ # {{{
@@ -257,11 +272,11 @@ ssh_tmux_sb_worker() { # {{{
   local lines="$(echo "$w" | wc -l)"
   echo "$w" | grep -q "^root" && isRoot=true
   local weAreOverSSH=false
-  $ALIASES_SCRIPTS/tmux/tm.sh --is-ssh && weAreOverSSH=true
+  $ENV_SCRIPTS/tmux/tm.sh --is-ssh && weAreOverSSH=true
   if ! $IS_MAC && [[ $lines -gt 1 ]] && ! $weAreOverSSH; then
     w="$(echo "$w" | cut -c19- | grep -v "^$d")"
     if [[ ! -z $w ]]; then
-      sshCnt=$(who | grep -v "(:\|tmux(.*%\|seat0" | sort -k5,5 -u | wc -l)
+      sshCnt=$(who | grep -v "(:\|tmux(.*%\|seat0\|tty[0-9]" | sort -k5,5 -u | wc -l)
       moreThanOne=true
       [[ $sshCnt -gt 1 ]] && isSsh=true
     fi
@@ -437,10 +452,10 @@ tryToDo() { # {{{
   if declare -f ${var}_tmux_sb_worker &>/dev/null; then
     isFunction=true
   elif [[ -z "$(vGet $var tmux_sb_worker)" ]]; then
-    local found=false i=
-    for i in $BASH_PROFILES_FULL; do
-      if [[ -e $i/aliases ]] && $i/aliases __util_tmux_sb_worker --defined $var; then
-        vSet $var tmux_sb_worker "'$i/aliases __util_tmux_sb_worker $var'"
+    local found=false i= ext="$BASH_PATH/env-ext.sh"
+    for i in $($ext); do
+      if $ext call=$i __util_tmux_sb_worker --defined $var; then
+        vSet $var tmux_sb_worker "'$ext call=$i __util_tmux_sb_worker $var'"
         found=true
         break
       fi
@@ -465,16 +480,8 @@ tryToDo() { # {{{
   fi
   vSet $var last $now
 } # }}}
-fromAliases() { # {{{
-  local f=$1 justSource=false
-  [[ $1 == '--source' ]] && shift && f=$1 && justSource=true
-  ! declare -F $f >/dev/null 2>&1 && source <($ALIASES --source $f)
-  $justSource && return 0
-  "$@"
-} # }}}
 worker() { # {{{
   source "$UNICODE_EXTRA_CHARS_FILE"
-  # fromAliases --source get-unicode-char
   local fTmpSingle=$info_file.single.tmp
   local i= now=
   declare -A data
@@ -537,7 +544,7 @@ case $1 in # {{{
   now=${EPOCHSECONDS:-$(epochSeconds)}
   DBG --init --ts-add --prefix D
   source "$UNICODE_EXTRA_CHARS_FILE"
-  fromAliases --source get-unicode-char
+  source <($BASH_PATH/env-ext.sh get --source get-unicode-char)
   $xv && set -xv
   w="$($f $@)"; err=$?
   $xv && set +xv

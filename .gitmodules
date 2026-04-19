@@ -23,7 +23,7 @@
 # 	url = https://github.com/alols/xcape.git
 # 	branch = master
 [submodule "bash/inits/fzf"]
-	path = bash/inits/fzf
+	path = inits/fzf
 	url = https://github.com/junegunn/fzf.git
 [submodule "bash/personalities"]
 	path = bash/personalities
