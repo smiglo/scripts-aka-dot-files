@@ -46,12 +46,10 @@ reboot) # @@: -y # {{{
       /mnt/c/Windows/System32/shutdown.exe /r /t 0 /f
     elif [[ -e /usr/sbin/reboot.ask ]]; then
       /usr/sbin/reboot.ask
-    elif [[ -e /usr/sbin/reboot ]]; then
-      /usr/sbin/reboot
     elif which reboot >/dev/null 2>&1; then
       reboot
     else
-      echo "Reboot command not found" >&2
+      echo "reboot command not found" >&2
       exit 1
     fi
   fi;; # }}}
@@ -69,12 +67,10 @@ shutdown) # @@: -y # {{{
       /mnt/c/Windows/System32/shutdown.exe /s /hybrid /t 0 /f
     elif [[ -e /usr/sbin/shutdown.ask ]]; then
       /usr/sbin/shutdown.ask now
-    elif [[ -e /usr/sbin/shutdown ]]; then
-      /usr/sbin/shutdown now
     elif which shutdown >/dev/null 2>&1; then
       shutdown now
     else
-      echo "Reboot command not found" >&2
+      echo "shutdown command not found" >&2
     fi
   fi;; # }}}
 *) # {{{

@@ -18,7 +18,7 @@ export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 [[ -h $BASHRC_RUNTIME_PATH && ! -e $BASHRC_RUNTIME_PATH ]] && rm $BASHRC_RUNTIME_PATH
 export BIN_PATH="$HOME/.bin"
 export BASH_PATH="$ENV_PATH/scripts/bash"
-export UGID="$UID:$(id -g)"
+export UGID="$UID:$(command id -g)"
 export DISPLAY=$DISPLAY
 export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 # os-kind (mac/docker/wsl/virt-os/vscode # {{{
@@ -30,25 +30,25 @@ if [[ -z $OS_KIND ]]; then
   export IS_WSL=false
   export IS_VIRTUAL_OS=false
   export IS_VSCODE=false
-  if [[ $(uname) == 'Darwin' ]]; then
+  if [[ $OSTYPE == darwin* ]]; then # {{{
     OS_KIND="mac"
-    IS_MAC=true
-  else
+    IS_MAC=true # }}}
+  else # {{{
     case $(source /etc/os-release; echo $ID) in
     arch) OS_KIND="arch"; IS_ARCH=true;;
     esac
-  fi
-  if [[ -e /.dockerenv ]]; then
-    IS_DOCKER=true
-    export HOST="/home/host"
-  elif which clip.exe >/dev/null 2>&1; then
-    IS_WSL=true
-  fi
-  ( $IS_DOCKER || $IS_WSL ) && IS_VIRTUAL_OS=true
-  if [[ $TERM_PROGRAM == "vscode" ]]; then
+    if [[ -e /.dockerenv ]]; then # {{{
+      IS_DOCKER=true
+      export HOST="/home/host" # }}}
+    elif which clip.exe >/dev/null 2>&1; then # {{{
+      IS_WSL=true
+    fi # }}}
+    ( $IS_DOCKER || $IS_WSL ) && IS_VIRTUAL_OS=true
+  fi # }}}
+  if [[ $TERM_PROGRAM == "vscode" ]]; then # {{{
     export IS_VSCODE=true
     [[ $ENV_SNAPSHOT == *.main ]] && unset ENV_SNAPSHOT
-  fi
+  fi # }}}
 fi # }}}
 export ENV_SNAPSHOT_PRE=$MEM_KEEP/snapshot
 [[ $UID != 0 ]] || ENV_SNAPSHOT_PRE+="-root"
@@ -57,14 +57,26 @@ if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
     export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.tpopup
   elif $IS_VSCODE; then
     export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.vscode
+  elif [[ -n $TMUX ]]; then
+    export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
   else
     export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.main
-    [[ -n $TMUX ]] && export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
+    if $BASHRC_FULL_START && [[ -e $ENV_SNAPSHOT && -e /usr/bin/stat ]]; then # {{{
+      bootTime="$(date +%s -d "$(who -b | awk '{print $3, $4}')")"
+      envTime=
+      if $IS_MAC; then
+        envTime="$(/usr/bin/stat -f %B $ENV_SNAPSHOT)"
+      else
+        envTime="$(/usr/bin/stat -c %W $ENV_SNAPSHOT)"
+      fi
+      (( envTime >= bootTime )) || rm -rf $ENV_SNAPSHOT_PRE.*
+      unset bootTime envTime
+    fi # }}}
   fi
   [[ -e $ENV_SNAPSHOT ]] || command mkdir -p $ENV_SNAPSHOT
 fi # }}}
 declare -a ENV_POST_INVOKE=() # }}}
-# Clear appended variables, init env # {{{
+# System-Wide env configuration + cleaning up appended variables # {{{
 export BASH_EXTRA_FEATURES=
 export BASH_UPDATE_REPOS=
 export BASH_UPDATE_TIME=
@@ -90,16 +102,29 @@ declare -A ENV_FUNC_GETTER=()
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
-export GREP_EXCLUDES=
-export HISTIGNORE=
+export GLOBIGNORE=".:.."
+export GREP_COLORS='mt=38;5;214:ne:fn=36'
+export GROFF_NO_SGR="1" # required for colors in less/man
+export HISTCONTROL="erasedups:ignoreboth"
+export HISTFILESIZE=1000
+export HISTFILE=$HOME/.bash_history
+unset HISTTIMEFORMAT
+export HISTIGNORE= # {{{
 export HISTIGNORE+=":reset:clear:exit"
 export HISTIGNORE+=":keep-pass:kp-pp:kp-env:keep-pass-env.sh"
 export HISTIGNORE+=":encryptor"
 export HISTIGNORE+=":vim-enc.sh"
-export HISTIGNORE+=":reboot:shutdown"
+export HISTIGNORE+=":reboot:shutdown" # }}}
 export HISTIGNORE_WILD_WHITELIST=
 export HISTIGNORE_WILD_WHITELIST+=" echo"
-export HL_DEFAULTS=
+export HL_DEFAULTS= # {{{
+export HL_DEFAULTS+=" +cB@'\<TB\]'"
+export HL_DEFAULTS+=" +cGold@'\<\(AA|BB|TT\)\>\( |$\)'"
+export HL_DEFAULTS+=" +cRed@'\<\(EE|FF\)\>\( |$\)'"
+export HL_DEFAULTS+=" +cGreen@'\<II\>\( |$\)'"
+export HL_DEFAULTS+=" +cCyan@'\<IMP\>\( |$\)'"
+export HL_DEFAULTS+=" +c'38;5;9' '# {{{|# }}}'"
+export HL_DEFAULTS+=" +cGreen@'\<[a-z0-9]\{40\}\>'" # }}}
 export IFACE_IGNORED=
 export INFO_FILE="$TMP_MEM_PATH/info.txt"
 export J2_SECTION_DEFAULT="setup"
@@ -109,8 +134,29 @@ export KB_PATHS=
 export KEEP_PASS_JOURNALS=
 export KEEP_PASS_ENV_KEY_MAP=
 [[ -z $KEEP_PASS_MASTER_KEY ]] && export KEEP_PASS_MASTER_KEY="$MEM_KEEP/keep-pass.mkey"
+if [[ -z $LESS ]]; then # {{{
+  export LESS="-diJRSwX -# 4 -x4 -z-4 -+F -~ --save-marks --rscroll=• --use-color"
+  export LESS="-diJRSwX -# 4 -x4 -z-4 -+F -~ --follow-name --save-marks --rscroll=• --use-color"
+  export LESS+=" -Dub -Dd+y -DPm -DS0.214 -DEr -DNK -Dkg -DWM* -DMR* -DRm"
+  export LESSCHARSET='utf-8'
+  case $OS_KIND in
+  ubuntu)
+    LESSPIPE_PATH=${LESSPIPE_PATH:-"/usr/bin/lesspipe"}
+    if [[ -x "$LESSPIPE_PATH" ]]; then
+      eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
+    fi
+    if which -w dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
+      export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
+    fi;;
+  arch)
+    if which source-highlight-esc.sh >/dev/null 2>&1; then
+      export LESSOPEN="| source-highlight-esc.sh %s 2>/dev/null"
+    fi;;
+  esac
+fi # }}} # }}}
 export MANPATH=
-export PHISTORY_IGNORED_COMMANDS=
+export PAGER="less"
+export PHISTORY_IGNORED_COMMANDS= # {{{
 export PHISTORY_IGNORED_COMMANDS+="exec"
 export PHISTORY_IGNORED_COMMANDS+=":ls:ll:cd:ps:jobs"
 export PHISTORY_IGNORED_COMMANDS+=":@vi@:@vim@:@gvi@:@gvim@:vim-session"
@@ -120,8 +166,9 @@ export PHISTORY_IGNORED_COMMANDS+=":echo:printf:echor:echorc:echorv:echorm"
 export PHISTORY_IGNORED_COMMANDS+=":cl:clf:printfc:echoc"
 export PHISTORY_IGNORED_COMMANDS+=":dbg:dbgF:FAT:ERR:WRN:INF:DBG:TRC"
 export PHISTORY_IGNORED_COMMANDS+=":time-measure"
-export PHISTORY_IGNORED_COMMANDS+=":type"
+export PHISTORY_IGNORED_COMMANDS+=":type" # }}}
 export PS1_ENV_PWD=
+export QUOTING_STYLE='literal'
 export SCRIPT_PATH=
 export SHARABLE_PATH=
 export SHARED_BASH_PATH=
@@ -130,21 +177,54 @@ export SSH_KEYS=
 export TICKET_J_PREDEFINED=
 export TICKET_TOOL_POST_ENV=
 export TMP_PATHS_CLEAN=
+# tmux # {{{
 export TMUX_FINGERS_REGEX=
-export TMUX_INIT_SESSIONS=
+export TMUX_INIT_SESSIONS="MAIN"
 export TMUX_INIT_SESSIONS_SKIP=
+export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
+[[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
 export TMUX_NEST="$MEM_KEEP/tmux.nest"
+export TMUX_PREFIX_2='C-q'
 [[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
 export TMUX_REMOTE_PREFIXES=
 export TMUX_STATUS_LEFT_EXTRA_MAP=
 export TMUX_STATUS_RIGHT_EXTRA=
 export TMUX_SWITCH_CLIENT_MAP=
 export TMUX_TM_PATH_MAP=
+export TMUX_STATUS_GIT_BRANCH_CLEAN=
+export TMUX_STATUS_GIT_BRANCH_MAP=
+export TMUX_STATUS_GIT_REPO_MAP=
+export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux-main]}\n"
+export TMUX_STATUS_RIGHT_EXTRA+=" 001:tmux_info 002:cpu 003:net 005:ssh 008:reminder 010:weather 015:usb 025:time 035:progress_bar"
+export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
+export TMUX_TMPDIR=$HOME/.tmux/socket
+[[ -d $TMUX_TMPDIR ]] || { command mkdir -p $TMUX_TMPDIR >/dev/null 2>&1; chmod 700 $TMUX_TMPDIR; }
+if [[ -n $TMUX ]]; then
+  [[ -n $TMUX_SESSION ]] || export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
+  export TMUX_SESSION_PATH="$APPS_CFG_PATH/tmux/sessions/$TMUX_SESSION"
+  [[ $UID == 0 ]] && export TMUX_SESSION_PATH="/root/tmux/sessions/$TMUX_SESSION"
+  [[ -e $TMUX_SESSION_PATH ]] || command mkdir -p $TMUX_SESSION_PATH
+  export HISTFILE=$TMUX_SESSION_PATH/bash_history
+fi
+[[ -n $TMUX_VERSION ]] || export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
+# }}}
+export HISTFILE_ORIG=$HISTFILE # must be after tmux set up
 export TOOLS_PATH="$HOME/tools"
 export VIM_CTRLP_IGNORE_DIRS="NOT_EXISTING_DIR_PATTERN_TO_IGNORE"
 export VIM_PRJ_EXCLUDE=
 export VIM_PRJ_PARAMS=
-# }}}
+# Editor # {{{
+if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
+  if which vim-editor >/dev/null 2>&1; then
+    export EDITOR="vim-editor"
+  elif [[ $(which vim 2>/dev/null) == "$HOME/"* ]]; then
+    export EDITOR="vim --editor"
+  else
+    export EDITOR="vim -c 'set cursorline'"
+  fi
+  export VISUAL=$EDITOR
+  export SUDO_EDITOR="vim"
+fi # }}}
 # ENV_PATH setup # {{{
 export SCRIPT_PATH=$ENV_PATH/scripts
 export ENV_SCRIPTS="$SCRIPT_PATH/bin/from-env"
@@ -152,10 +232,15 @@ export BASH_UPDATE_REPOS="$ENV_PATH/scripts $ENV_PATH/vim"
 export BASH_UPDATE_TIME="$((1*18*60*60))"
 export GIT_REPOS="$BASH_UPDATE_REPOS $ENV_PATH/info"
 [[ -e $RUNTIME_PATH/.git ]] && GIT_REPOS+=" $RUNTIME_PATH"
+export CD_LAST_DIRS=($PWD)
 export CD_LAST_DIRS_STORED+=":s@$SCRIPT_PATH"
 [[ -e $ENV_PATH/vim  ]] && export CD_LAST_DIRS_STORED+=":vim@$ENV_PATH/vim"
 [[ -e $ENV_PATH/info ]] && export CD_LAST_DIRS_STORED+=":info@$ENV_PATH/info"
-[[ -e $ENV_PATH/.ticket-data.sh ]] && KB_PATHS+=" env:$ENV_PATH"
+[[ -e $HOME/Downloads ]] && export CD_LAST_DIRS_STORED+=":Dw@$HOME/Downloads"
+[[ -e $HOME/Desktop   ]] && export CD_LAST_DIRS_STORED+=":De@$HOME/Desktop"
+export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
+export CD_LAST_DIRS_STORED+=":docs@--cd-spec"
+# }}}
 # }}}
 # Profiles # {{{
 export BASH_PROFILES="$(command cd $PROFILES_PATH 2>/dev/null; echo *)"

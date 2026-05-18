@@ -19,6 +19,7 @@ _docker() { # {{{
       echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";; # }}}
     exec) echo "$containers";;
     i | image) echo "prune";;
+    inspect-vm) echo "---";;
     irm) echo "$images";;
     ls) echo "---";;
     replace) echo "--no-start -s --start";;
@@ -34,7 +35,7 @@ _docker() { # {{{
     *) # {{{
       echo "-c -i --dbg"
       echo "c i"
-      echo "s start stop root exec clean rm irm replace ls build run commit advance"
+      echo "s start stop root exec clean rm irm replace ls build run commit advance inspect-vm"
       echo "container image images";; # }}}
     esac
     return 0
@@ -117,6 +118,8 @@ _docker() { # {{{
     $cSet || { cName=${1:-$cName}; shift; }
     [[ -z $cName ]] && eval $(die "no container specified")
     $dockerCmd exec "${@:--it}" $cName /bin/bash;; # }}}
+  inspect-vm) # {{{
+    docker run --rm -it --privileged --pid=host alpine nsenter -t 1 -m -u -n -i sh;; # }}}
   irm) # {{{
     $iSet || iName= # mandatory: container name on removal
     [[ -z $iName ]] || set -- $iName
@@ -193,12 +196,10 @@ _docker() { # {{{
       fi
       paramsPorts=
       if $addPorts; then
-        paramsPorts="$(cat <<EOF
+        paramsPorts="
 -p 127.0.0.1:3030-3032:3030-3032
 -p 127.0.0.1:${DOCKER_PORT_OU:-3033}:${DOCKER_PORT_OU:-3033}
--p 127.0.0.1:4022:${DOCKER_PORT_SSH:-22}
-EOF
-        )"
+-p 127.0.0.1:4022:${DOCKER_PORT_SSH:-22}"
       fi
       [[ -z $doStart ]] && doStart=true
       local dockerShare=${DOCKER_SHARE_PATH:-$HOME/share} hDir="/home/tom"
@@ -216,6 +217,7 @@ EOF
       ${DOCKER_RUN_UBU_CAPS_TCPDUMP:-false} && caps+=" --cap-add=NET_ADMIN --cap-add=NET_RAW"
       $dockerCmd run \
         $platform \
+        --log-opt max-size=10m --log-opt max-file=3 \
         -u $(id -u):$(id -g) \
         --hostname $iName \
         --add-host=host.docker.internal:host-gateway \

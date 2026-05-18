@@ -73,6 +73,7 @@ _net() { # @@ # {{{
     shift
   done # }}}
   local ping="ping" pingParams="-c1 -i0.5 -W0.5" ts= err=0 colorsOn=
+  $IS_WSL && pingParams="-c1 -i1 -W1"
   [[ ! -t 2 ]] && colorsOn=false
   [[ ! -t 1 ]] && fix=false
   if $waitFor; then # {{{

@@ -323,7 +323,7 @@ setMasterKey() { # {{{
 getMasterKey() { # {{{
   local mkey="$KEEP_PASS_MASTER_KEY" interactive="${1:-true}"
   if [[ ! -z $mkey && $mkey == /* && $mkey != //*  ]]; then
-    [[ -e $mkey ]] && mkey="$(cat "$mkey")" || mkey=
+    [[ -e $mkey ]] && mkey="$(< "$mkey")" || mkey=
   elif [[ $mkey == //* ]]; then
     mkey="${mkey:1}"
   fi

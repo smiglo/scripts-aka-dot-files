@@ -66,7 +66,7 @@ parseFile() { # {{{
     else
       rawInput+="$l\n"
     fi
-  done < <(cat "$in") >"$out"
+  done <"$in" >"$out"
 } # }}}
 
 in= out= removeOut=true edit= otherFiles= addHeader= plain= pattern= batchMode=false copy=false fromNote=false gui=false vimGuiCmd="gvim" isGui=
@@ -131,12 +131,12 @@ fi # }}}
 
 if $copy; then # {{{
   [[ -z $pattern ]] && exit 1
-  v="$(cat "$in" | $0 | sed -n '/^'$pattern': */s/'$pattern': *//p')"
+  v="$( $0 < "$in" | sed -n '/^'$pattern': */s/'$pattern': *//p')"
   [[ ! -z "$v" ]] && echo "$v" | { if [[ -t 1 ]]; then xclip --put; else cat -; fi; }
   exit 0
   # }}}
 elif $gui; then # {{{
-  cat "$in" | $0 \
+  $0 < "$in" \
     | { [[ ! -z $pattern ]] && sed -n '/^'$pattern': */p' || cat -; } \
     | { sed 's/^\([^#]\+\): \(.*\)/\1\n\2\n/' | sed -e '/^$/d' -e '/^# /d'; } \
     | { [[ ! -z $pattern ]] && sed '/^'$pattern' */d' || cat -; } \
@@ -155,15 +155,12 @@ else
   echo >"$out"
 fi
 if $addHeader; then # {{{
-  info="$(cat <<-EOF
-				# enc-info: For encrypted sections use the following syntax:
-				# enc-info: # ENC.k@KEY-NAME # {{{
-				# enc-info: __content__
-				# enc-info: # ENC # }}}
-				# enc-info:
-				
-			EOF
-  )"
+  info="
+# enc-info: For encrypted sections use the following syntax:
+# enc-info: # ENC.k@KEY-NAME # {{{
+# enc-info: __content__
+# enc-info: # ENC # }}}
+# enc-info:"
   sed -i '1i '"$(echo "$info" | sed 's/$/\\/')" "$out"
   sed -i '/^# enc-info:/s/\\$//' "$out"
 fi # }}}

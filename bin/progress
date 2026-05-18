@@ -17,6 +17,7 @@ _progress() { # @@ # {{{
     --out)     retVal="/dev/stdout /dev/stderr";;
     --steps)   retVal="STEPS";;
     --msg | --end-msg) retVal="MSG";;
+    --wait | --wait-pv) echo "10 15s 30s 1m 10m";;
     --unmark)  retVal="--err=0 --err=1 --err=true --err=false -c";;
     *) # {{{
       retVal+=" --msg --end-msg --out --color --end-color --clean"
@@ -130,7 +131,7 @@ _progress() { # @@ # {{{
                     echo "retVal=$err"
                     [[ ! -z $end_color ]] && echo "end_color=\"$end_color\""
                   ) >"${mark_file%.tmp}.err.tmp"
-                  [[ -e $mark_file ]] && set -- $(cat $mark_file)
+                  [[ -e $mark_file ]] && set -- $(< $mark_file)
                   while [[ ! -z $1 ]]; do # {{{
                     case $1 in
                     --delay) delay=$2; shift;;
@@ -249,7 +250,7 @@ _progress() { # @@ # {{{
     echo -n "${COff}" >>$out
     stty echo 2>/dev/null
     retVal=0 pressed_key=
-    [[ -e "$fName" ]] && { read retVal pressed_key <<< $(cat "$fName"); rm -f "$fName"; }
+    [[ -e "$fName" ]] && { read retVal pressed_key <"$fName"; rm -f "$fName"; }
     if ! $report_error; then # {{{
       case $retVal in
       11) $report_error_timeout || retVal=0;;

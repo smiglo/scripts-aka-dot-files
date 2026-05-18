@@ -121,7 +121,7 @@ if [[ ! -t 0 || "$load" == 'true' ]]; then # {{{
       done
     fi # }}}
     execute "$cmd $input"
-  done <<<"$(cat "$histFile")"
+  done <"$histFile"
   exit 0
 fi # }}}
 is-installed -w rlwrap || die "rlwrap not installed, cannot continue"

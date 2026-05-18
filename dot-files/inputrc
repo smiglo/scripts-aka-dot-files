@@ -63,6 +63,8 @@ set keymap vi-command
 "\e[6~":    history-search-forward
 "\e[":      vi-prev-word
 "\e]":      vi-next-word
+"JJ":       vi-insertion-mode
+"\e":       vi-insertion-mode
 
 set keymap vi-insert
 "JJ":       vi-movement-mode

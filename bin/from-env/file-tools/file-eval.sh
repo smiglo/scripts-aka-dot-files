@@ -24,7 +24,6 @@ file-eval() { # @@ # {{{
   [[ -z $f && ! -t 0 ]] && f="-"
   [[ -z $f ]] && return 1
   [[ ! -e $f && $f != '-' ]] && return 1
-  cat "$f" | \
   while read l; do
     if [[ $l =~ ' ## eval '(.*) ]]; then
       ev="${BASH_REMATCH[1]}"
@@ -37,8 +36,7 @@ file-eval() { # @@ # {{{
       fi
     fi
     echo "$l"
-  done
+  done <"$f"
   return 0
 } # }}}
 file-eval "$@"
-

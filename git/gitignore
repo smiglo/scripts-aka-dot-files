@@ -16,6 +16,8 @@ Session*.vim
 *.out
 *.o
 *.pyc
+*.secrets
+*.secrets.*
 *.swo
 *.swp
 *.tmp

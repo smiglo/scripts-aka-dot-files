@@ -5,7 +5,8 @@
 [core] # {{{
   fsmonitor = false
   editor = vim --fast-save
-  pager = less -RXx4
+  # pager = less -RXx4
+  pager = delta
   excludesfile = ~/.gitignore
   autocrlf = input
   safecrlf = warn
@@ -15,6 +16,9 @@
   defaultBranch = main # }}}
 [include] # {{{
   path = ~/.runtime/gitconfig # }}}
+[interactive] # {{{
+  singleKey = true
+  diffFilter = delta --color-only # }}}
 [color] # {{{
   ui = auto # }}}
 [diff] # {{{
@@ -22,7 +26,7 @@
   guitool = kdiff3 # }}}
 [merge] # {{{
   tool = vimdiff
-  conflictstyle = diff3
+  conflictStyle = zdiff3
   ff = false # }}}
 [alias] # {{{
   adp = add -p
@@ -42,6 +46,7 @@
   dffp = diffp --relative
   dffw = diff --relative --word-diff
   diffc = diff --cached
+  d-sbs = -c delta.features=side-by-side diff
   dc    = diffc
   dl    = diff tmp/sync/last
   dp    = diffp
@@ -71,6 +76,9 @@
   pulo = "!git push -f local && git push origin"
   r = reset
   rb = rebase
+  rbA = rebase --abort
+  rbC = rebase --continue
+  rbS = rebase --skip
   root = rev-parse --show-toplevel
   rH = !"git tag-sync resetH && git reset --hard"
   s = stash-toggle
@@ -155,6 +163,13 @@
   trustExitCode = true # }}}
 # }}}
 # external # {{{
+[delta] # {{{
+  hyperlinks = true
+  line-numbers = true
+  navigate = true
+  true-color = always
+  width = -4
+  theme = zenburn # }}}
 [svn] # {{{
   # push empty directory removals back to svn as directory deletes
   rmdir = true

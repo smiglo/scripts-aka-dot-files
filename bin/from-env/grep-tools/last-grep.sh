@@ -60,7 +60,7 @@ _last-grep() { # @@ # {{{
       echo ${i/$HOME/\~}": $(head -n1 $i)" >>$out
     done
     if $use_fzf; then
-      cat $out | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
+      <$out fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
     else
       vim --scratch -c 'setlocal conceallevel=2' $out
     fi
@@ -84,7 +84,7 @@ _last-grep() { # @@ # {{{
       return 0
     fi
     if $use_fzf; then
-      cat $($follow_link && echo $(readlink -f $f) || echo $f) | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
+      fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100% < "$($follow_link && echo $(readlink -f $f) || echo $f)"
     else
       vim --scratch -c 'setlocal conceallevel=2' $($follow_link && echo $(readlink -f $f) || echo $f)
     fi
@@ -104,7 +104,7 @@ _last-grep() { # @@ # {{{
           return 0
         fi
         if $use_fzf; then
-          cat $($follow_link && echo $(readlink -f $f) || echo $f) | fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100%
+          fzf --prompt 'last-finds> ' --exit-0 --no-sort --no-multi --height 100% < "$($follow_link && echo $(readlink -f $f) || echo $f)"
         else
           vim --scratch -c 'setlocal conceallevel=2' $($follow_link && echo $(readlink -f $f) || echo $f)
         fi

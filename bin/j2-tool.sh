@@ -26,7 +26,7 @@ j2-tool() { # {{{
     if [[ -e $TICKET_FILE ]]; then
       ticketFile="$TICKET_FILE"
     else
-      ticketFile="$(find-up $J2_TICKET_FILE 2>/dev/null)"
+      ticketFile="$(find-up.sh $J2_TICKET_FILE 2>/dev/null)"
       [[ -e $ticketFile ]] || ticketFile="${J2_TICKET_FILE##* }"
     fi
   fi
@@ -37,7 +37,7 @@ j2-tool() { # {{{
       [[ -d $TICKET_TOOL_PATH && -n $TICKET_PATH && -n $TMUX && "$TMUX_SESSION" == "$TICKET_TMUX_SESSION" && $PWD == $TICKET_PATH* ]] && echo "--use-full-j"
       return 0
     fi # }}}
-    fileContent="$(cat "$ticketFile")" lastArg=${@: -1}
+    fileContent="$(< "$ticketFile")" lastArg=${@: -1}
     sections="$(__j2_getSections)"
     if [[ -z $4 ]]; then # {{{
       section="$3"
@@ -67,7 +67,7 @@ j2-tool() { # {{{
     fi # }}}
     section_bash="$(__j2_getSection "$section")"
     section_bash_case="$(echo "$section_bash" | file-part -rS "^case \$cmd" -rE "^esac")"
-    local sectionLine="$(cat "$ticketFile" | sed -n "/^# S@$section .*# {\{3\}$/p")" compl=
+    local sectionLine="$(sed -n "/^# S@$section .*# {\{3\}$/p" "$ticketFile")" compl=
     if [[ ! -z $3 && $2 != 1 && $sectionLine == *"@@"* ]]; then # {{{
       export cmd="@@"
       local last=$3
@@ -82,7 +82,7 @@ j2-tool() { # {{{
     echo "$compl"
     return 0
   fi # }}}
-  [[ -e "$ticketFile" ]] && fileContent="$(cat "$ticketFile")"
+  [[ -e "$ticketFile" ]] && fileContent="$(< "$ticketFile")"
   sections="$(__j2_getSections)"
   ${J2_DBG:-false} && echormf +
   while [[ ! -z $1 ]]; do # {{{

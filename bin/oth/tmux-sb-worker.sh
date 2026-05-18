@@ -97,7 +97,7 @@ cpu_tmux_sb_worker() { # @@ # {{{
   local thresholds="${TMUX_SB_CPU_THRESHOLDS:-9 7 5 3}"  colors="196 202 208 226"
   local value= cpu_1m= cpu_5m= c= i=
   if ! $IS_MAC; then # {{{
-    read cpu_1m cpu_5m < <(cat /proc/loadavg | awk '{print int($1), int($2)}')
+    read cpu_1m cpu_5m < <(awk '{print int($1), int($2)}' /proc/loadavg)
   else
     read cpu_1m cpu_5m < <(uptime | awk '{print int($11), int($12)}')
   fi # }}}
@@ -376,7 +376,7 @@ weather_tmux_sb_worker() { # @@ # {{{
     local line=
     while read line; do
       WEATHER_INFO+=("$line")
-    done < <(cat $STORAGE_FILE)
+    done <$STORAGE_FILE
     [[ ! -z ${WEATHER_INFO[0]} && $now -ge $(( ${WEATHER_INFO[0]} + $((7 * 24 * 60 * 60)) )) ]] && WEATHER_INFO=()
     [[ -z ${WEATHER_INFO[0]} ]] && WEATHER_INFO[0]="$now"
   fi # }}}
@@ -496,7 +496,7 @@ worker() { # {{{
       [[ ${data[$i]} == "$markIgn" ]] && DBG "$i: ignored" && continue
       TRC "$i: checking"
       if tryToDo $i >$fTmpSingle; then
-        data[$i]="$(cat $fTmpSingle)"
+        data[$i]="$(< $fTmpSingle)"
         INF "$i: updated"
       elif isIgnored $i; then
         DBG "$i: ignored"

@@ -19,7 +19,7 @@ aawk() { # @@ # {{{
     case $1 in
     split)
       shift
-      cat - | awk -v RS="${1:-:}" -v ORS='\n' '{print}'
+      awk -v RS="${1:-:}" -v ORS='\n' '{print}'
       return 0;;
     /*)      pre="$1";;
     [0-9]*)  print+=",\$$1";;

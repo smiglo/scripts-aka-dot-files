@@ -45,7 +45,7 @@ _vims() { # @@ # {{{
   done
   [[ $dst =~ .*\..* ]] || dst+=".1"
   if [[ ! -t 0 ]]; then
-    f="$(cat - | xargs -n1 | __vims__find_files | fzf)"
+    f="$(xargs -n1 | __vims__find_files | fzf)"
   elif [[ -z $f ]]; then
     f="$(fzf -m -1 -0 --prompt='vim> ')"
   fi

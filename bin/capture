@@ -14,8 +14,9 @@ _capture() { # {{{
     -f | --file)
       get-file-list --pwd "$(dirname "$captureFile")" '*.txt'
       get-file-list --pwd "$(dirname "$captureFile")" '*.out';;
-    *) echo "-f --file -t --title -m --mode -e --edit -n --new -i --in-place -s --silent -v --verbose -r --raw -? -p --pane --pane-only -nh --clear --at-end --at-beginning"
-       echo ". .. ./cap.tmp~"
+    *)
+      type _capture | compl-get-args
+      echo "./cap.tmp~"
     esac
     return 0
   fi # }}}
@@ -28,9 +29,18 @@ _capture() { # {{{
     -n | --new)  mode="override";;
     -p | --pane) mode="pane";;
     -r | --raw) raw=true;;
+    --restore) mode="restore";;
     -s | --silent)  out="/dev/null";;
     -t | --tile) title="$2"; shift;;
     -v | --verbose) out="/dev/stdout";;
+    -h | --help)
+      cat <<EOF
+to have just stderr in a separate pane and in terminal, invoke as:
+- (echo abc; echo efg >/dev/stderr; echo hij) 2> >(capture -p)
+- (echo abc; echo efg >/dev/stderr; echo hij) 2> >(tee >(capture -p -s))
+(NOTE: order is not guaranteed)
+EOF
+      exit 0;;
     -nh) addHeader=false;;
     --at-beginning) putAtBeginning=true;;
     --at-end) putAtBeginning=false;;
@@ -76,6 +86,9 @@ _capture() { # {{{
   append | override) [[ ! -t 0 ]] || eval $(die "not in pipie");;
   esac # }}}
   case $mode in
+  restore) # {{{
+    [[ -e $captureFile ]] || return 1
+    cat $captureFile;; # }}}
   edit) # {{{
     vim $captureFile;; # }}}
   append | override) # {{{
@@ -86,22 +99,21 @@ _capture() { # {{{
     [[ ! -z $title ]] && msg="$title #"
     $addHeader && echo "# $msg$ts # {{{" >>$tmp
     if [[ -z $capturePane ]]; then
-      cat - | tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >$out
+      tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >$out
     else
       $paneClear || ! $addHeader || echo -e "# $msg$ts # {{{" | tmux display -It $capturePane
-      cat - | tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >(tmux display -It $capturePane) >$out
+      tee >(if ! $raw; then clean-ansi; else cat -; fi >>$tmp) >(tmux display -It $capturePane) >$out
       $paneClear || ! $addHeader || echo "# }}}" | tmux display -It $capturePane
     fi
     $addHeader && sleep 0.1 && echo "# }}}" >>$tmp
     if [[ ! -z $captureFile ]]; then
       if [[ $captureFile != '-' ]]; then
-        if [[ -e $captureFile ]]; then
-          if ${putAtBeginning:-true}; then
-            cat $captureFile >>$tmp
-            mv $tmp $captureFile
-          else
-            cat $tmp >>$captureFile
-          fi
+        [[ -z $putAtBeginning ]] && putAtBeginning=false
+        if [[ -e $captureFile ]] && $putAtBeginning; then
+          cat $captureFile >>$tmp
+          mv $tmp $captureFile
+        else
+          cat $tmp >>$captureFile
         fi
       else
         cat $tmp

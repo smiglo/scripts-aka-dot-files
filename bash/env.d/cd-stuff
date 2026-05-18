@@ -210,8 +210,8 @@ __cd_util_mode_stored() { # {{{
       [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
       dst="env:export CD_LAST_DIRS_STORED='$CD_LAST_DIRS_STORED';$dst"
       if [[ $param == ':++' ]]; then
-        sed -i "/export CD_LAST_DIRS_STORED+=:$p/ d" $RUNTIME_FILE
-        echo "export CD_LAST_DIRS_STORED+=:$p@$path" >> $RUNTIME_FILE
+        sed -i "/export CD_LAST_DIRS_STORED+=:$p/ d" $RUNTIME_PATH/cd-list
+        echo "export CD_LAST_DIRS_STORED+=:$p@$path" >>$RUNTIME_PATH/cd-list
       fi
       return 0;; # }}}
     :-) # {{{

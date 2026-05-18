@@ -61,16 +61,16 @@ __xclip() { # {{{
       *) f=$1;;
       esac; shift
     done
-    command cat $f | sed 's/\s*$//' | sed -z 's/\n\+$/\n/' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    sed 's/\s*$//' "$f" | sed -z 's/\n\+$/\n/' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
     tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
-    $updateClipFileOnPut && command cat $CLIP_FILE.put >$CLIP_FILE
+    $updateClipFileOnPut && cp $CLIP_FILE.put $CLIP_FILE
     local clipSsh=$HOME/.tmp/clip.ssh
     if $checkSsh && [[ -p $clipSsh ]]; then
       if is-installed timeout; then
-        timeout 0.5 sh -c "cat $CLIP_FILE.put >$clipSsh"
+        timeout 0.5 sh -c "cp $CLIP_FILE.put $clipSsh"
         (( $? == 124 )) && rm -f $clipSsh
       else
-        cat $CLIP_FILE.put >$clipSsh
+        cp $CLIP_FILE.put $clipSsh
       fi
     fi;; # }}}
   --get) # {{{

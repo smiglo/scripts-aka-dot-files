@@ -8,6 +8,7 @@ if not pwnDbgConf:
     pwnDbgConf = os.environ["SCRIPT_PATH"] + '/bash/inits/gdb/pwn-dbg/gdbinit.py'
 if os.path.exists(pwnDbgConf):
     gdb.execute('source ' + pwnDbgConf)
+    main()
 
 end
 

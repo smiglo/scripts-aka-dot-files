@@ -64,7 +64,7 @@ _ded() { # @@ # {{{
           echo "# }}}"
         ) >>$dedInfoF
       fi # }}}
-      $isOut && cat $dedInfoF.tmp | sed "s/'s/''s/g" | $BAT_PRG $lang -p
+      $isOut && sed "s/'s/''s/g" "$dedInfoF.tmp" | $BAT_PRG $lang -p
       rm $dedInfoF.tmp
     done <<<"$(echo "$r")"
   done # }}}

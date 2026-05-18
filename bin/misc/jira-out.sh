@@ -69,12 +69,7 @@ if [[ -z $forSlack ]]; then
   grep -q "https://.*/browse/.*" $f && forSlack=false
   [[ -z $forSlack ]] && forSlack=${JIRA_OUT_SLACK_DEFAULT:-true}
 fi
-cat $f | \
-if [[ -z $region ]]; then
-    cat -
-  else
-    sed -n '/'"$regionS"'/,/'"$regionE"'/p' | sed -e '1 d' -e '$ d'
-fi | \
+{ if [[ -z $region ]]; then cat "$f"; else sed -n '/'"$regionS"'/,/'"$regionE"'/p' "$f" | sed -e '1 d' -e '$ d'; fi; } | \
 while IFS= read -r l; do
   $dbg && echorm -m $module 5 "$l"
   l="${l%# IGN}"

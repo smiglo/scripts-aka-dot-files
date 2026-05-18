@@ -29,18 +29,19 @@ alias ll*="smart_alias --store 'SMART_AL_LL_ASTER' --cmd 'ls -Alhv | command gre
 # }}}
 alias vv='vim --Fast'
 alias v='vim --Fast +files'
+alias te='vim --Fast +files'
+alias suvi='sudoedit'
 alias vd='vimdiff' # @@
 alias vdf='vimdiff-from' # @@:new
 alias vp='tmux capture-pane -p -J -S- -E- | /bin/cat -s | { if [[ -t 1 ]]; then vim --Fast -c "normal G"; else /bin/cat -; fi; }'
 export PHISTORY_IGNORED_COMMANDS+=":vf:v:vp"
-if is-installed -w cmatrix >/dev/null 2>&1; then # {{{
+if is-installed -w cmatrix; then # {{{
   export CMATRIX_COLORS=( 'red' 'green' 'yellow' 'blue' 'magenta' 'cyan' )
   alias cmatrix="cmatrix -u ${CMATRIX_SPEED:-5} -b -C "'${CMATRIX_COLORS[$(($RANDOM % ${#CMATRIX_COLORS[*]}))]}'
 fi # }}}
 # Enable color support of ls and also add handy aliases # {{{
-if [[ -x /usr/bin/dircolors ]] || ( $IS_MAC && [[ -e /usr/local/opt/coreutils/libexec/gnubin/ls ]] ); then
-  test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-  export LS_COLORS="$LS_COLORS:di=36;40:ln=35;40:so=37;40:pi=33;40:ex=32;40:bd=0;43:cd=0;43:su=0;45:sg=0;45:tw=4;36:ow=4;36:"
+if is-installed -w dircolors || ( $IS_MAC && ls --help | grep -q GNU ); then
+  [[ -e $HOME/.dircolors ]] && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   alias ls='ls --color=auto -B'
 else
   alias ls='ls -B'
@@ -87,7 +88,7 @@ alias bck="$ENV_SCRIPTS/file-tools/bck.sh" # @@
 # }}}
 # find-tools # {{{
 alias f="$ENV_SCRIPTS/find-tools/find-short.sh" # @@
-alias ff="$ENV_SCRIPTS/find-tools/find-short.sh +find" # @@
+alias ff="$ENV_SCRIPTS/find-tools/find-short.sh +f" # @@
 # }}}
 # fzf-tools # {{{
 alias F="fzf"
@@ -98,11 +99,8 @@ alias vimf='set -f;$ENV_SCRIPTS/fzf-tools/vimf.sh' # @@
 export PHISTORY_IGNORED_COMMANDS+=":vimg:vims:ffwr:vimf"
 # }}}
 # grep-tools # {{{
-alias grepf="$ENV_SCRIPTS/grep-tools/grep-wrapper.sh --cmd-grep -E"
-
 alias hl-bash="$ENV_SCRIPTS/grep-tools/hl-bash.sh" # @@
 if ${HL_USE_PYTHON_VER:-true}; then
-  export HL_CONFIG_DIR="$SCRIPT_PATH/inits/hl-python"
   alias hl="$ENV_SCRIPTS/grep-tools/hl-python.sh"
   compl-add hl
 else
@@ -110,18 +108,13 @@ else
   compl-add hl
 fi
 
-alias output-to-file="$ENV_SCRIPTS/grep-tools/output-to-file.sh" # @@
-alias last-grep="$ENV_SCRIPTS/grep-tools/last-grep.sh" # @@
-
 alias xaa="$ENV_SCRIPTS/grep-tools/xaa.sh" # @@
 alias xa='xargs -r -I{}'
 export PHISTORY_IGNORED_COMMANDS+=":xaa:xa"
 # }}}
 # cpp-tools # {{{
-alias gdb-core-enable='ulimit -c unlimited; echo "core-%e-%p-%t.dmp" >/proc/sys/kernel/core_pattern'
+alias gdb-core-enable='ulimit -c unlimited; echo "%e-%p-%t.core" >/proc/sys/kernel/core_pattern'
 # }}}
-alias kb-open="$TICKET_TOOL_PATH/kb-open.sh" # @@
-alias kb="$TICKET_TOOL_PATH/kb-open.sh" # @@
 # }}}
 # very short # {{{
 alias C="capture ." # @@:new
@@ -170,12 +163,10 @@ alias time2s="$BASH_PATH/env.modules/time-tools time2s" # @@
 alias time-measure="$BASH_PATH/env.modules/time-tools time-measure" # @@
 alias sleep-precise="$BASH_PATH/env.modules/time-tools sleep-precise" # @@
 # }}}
-if is-installed -w fdfind; then
-  alias fd='fdfind'
-fi
+is-installed -w fdfind && alias fd='fdfind'
 alias more='less'
 alias cp='cp -R'
-alias du='du -sh'
+alias du='2>/dev/null du'
 alias chr='$SCRIPT_PATH/bin/misc/chroma-effects-wrapper.sh'
 alias cap="capture" # @@:new
 export PHISTORY_IGNORED_COMMANDS+=":cap"
@@ -218,7 +209,7 @@ alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
 alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
 alias scp='scp -r'
 
-if is-installed -w lolcat >/dev/null 2>&1; then # {{{
+if is-installed -w lolcat; then # {{{
   export LOLCAT_PARAMS="-F 0.2 -p 3"
   export LOLCAT_PARAMS_A="-F 0.2 -a -d 7 -s 18"
   lc() {
@@ -232,9 +223,8 @@ if is-installed -w lolcat >/dev/null 2>&1; then # {{{
   }
   alias lll='ll | lc'
 fi # }}}
-if is-installed -w r2 >/dev/null 2>&1; then # {{{
-  alias r2help="r2 -q -c '?*~...' -"
-fi # }}}
+is-installed -w r2 && alias r2help="r2 -q -c '?*~...' -"
+is-installed -w ts && alias ts='ts -s %.S'
 
 ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
 case $OS_KIND in # {{{
@@ -272,20 +262,23 @@ if is-installed -w grc >/dev/null 2>&1; then # {{{
   grc_prgs_cols=''
   grc_prgs_cols+="mount\n"
   GRC_ALIASES=false
-  if [[ -e /etc/profile.d/grc.sh ]] && ${GRC_USE_DEFAULTS:-true}; then
+  grcFile="/etc/profile.d/grc.sh"
+  $IS_MAC && grcFile="$(brew --prefix)/etc/grc.sh"
+  if [[ -e $grcFile ]] && ${GRC_USE_DEFAULTS:-true}; then
     GRC="$(which grc)"
     aliases_list="$(echo "${!BASH_ALIASES[@]}" | sed '/\.[0-9]\+/d')"
     aliases_list="${aliases_list// /\\|}"
     [[ ! -z $aliases_list ]] && aliases_list="\|$aliases_list"
-    source <(sed -n '/^\s*alias/p' /etc/profile.d/grc.sh | sed '/\(head\|tail'"$aliases_list"'\)=/d')
+    source <(sed -n '/^\s*alias/p' $grcFile | sed '/\(head\|tail'"$aliases_list"'\)=/d')
     alias diffc='colourify diff'
     alias df="colourify ${BASH_ALIASES[df]#colourify }"
-    alias du="colourify du -sh"
+    alias du="2>/dev/null colourify ${BASH_ALIASES[du]#colourify }"
     is-installed -w lsof && alias lsof='colourify lsof'
     unset aliases_list
   else
     grc_prgs+="configure\ngcc\nnetstat\nwdiff\nlast\nps\ndig\nip\nifconfig\n"
   fi
+  unset grcFile
   if type column >/dev/null 2>&1; then
     for grc_cmd in $(echo -e "$grc_prgs_cols"); do
       is-installed -w $grc_cmd || continue
@@ -327,6 +320,8 @@ if $IS_WSL; then # {{{
 elif $IS_DOCKER; then # {{{
   : # }}}
 elif $IS_MAC; then # {{{
+  : # }}}
+elif $IS_ARCH; then # {{{
   : # }}}
 elif [[ ! -z $RUN_AS_ROOT ]]; then # {{{
   alias suspend="$RUN_AS_ROOT suspend"

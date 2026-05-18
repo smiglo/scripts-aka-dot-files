@@ -7,6 +7,7 @@ UNICODE_EXTRA_CHARS[array-double]="➾"
 UNICODE_EXTRA_CHARS[array-l]="←"
 UNICODE_EXTRA_CHARS[array-lr]="↔︎"
 UNICODE_EXTRA_CHARS[array-r]="→"
+UNICODE_EXTRA_CHARS[array-r-oth]="➙➛"
 UNICODE_EXTRA_CHARS[battery-icon]="🔋"
 UNICODE_EXTRA_CHARS[battery]=" "
 UNICODE_EXTRA_CHARS[battery-med]=" "
@@ -29,7 +30,7 @@ UNICODE_EXTRA_CHARS[dot-small]="•"
 UNICODE_EXTRA_CHARS[envelope]="✉ "
 UNICODE_EXTRA_CHARS[exclamation]="❢"
 UNICODE_EXTRA_CHARS[extra-bar]="◼ "
-UNICODE_EXTRA_CHARS[faces]="🤓🤔🥸"
+UNICODE_EXTRA_CHARS[faces]="🤓🤔🥸🫪"
 UNICODE_EXTRA_CHARS[fire]="🔥"
 UNICODE_EXTRA_CHARS[high-cpu]="⚛ "
 UNICODE_EXTRA_CHARS[home]="🏡"
@@ -75,7 +76,7 @@ UNICODE_EXTRA_CHARS[yin-yang]="☯"
 UNICODE_EXTRA_CHARS[zoom-left]="🔍"
 UNICODE_EXTRA_CHARS[zoom-right]="🔎"
 UNICODE_EXTRA_CHARS[zoom]="${UNICODE_EXTRA_CHARS[zoom-right]}"
-if $IS_MAC; then
+if $IS_MAC || $IS_ARCH; then
   TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true
 elif [[ -z $TERMINAL_HAS_SUPPORT_FOR_2W_CHARS ]]; then
   TERMINAL_HAS_SUPPORT_FOR_2W_CHARS=true

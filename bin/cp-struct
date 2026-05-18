@@ -41,7 +41,7 @@ _cp-struct() { # @@ # {{{
     local i=
     while read i; do
       rm -rf "$i"
-    done <<<$(cat $contentFile)
+    done <$contentFile
   fi # }}}
   $userCF || rm -f $contentFile
 } # }}}

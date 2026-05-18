@@ -189,7 +189,7 @@ remember() { # {{{
     --) shift; p="$@"; shift $#; set -- "$p"; as_file=false; break;;
     -)  shift; break;;
     --help | --help-all) # {{{
-      command cat <<-EOF >/dev/stdout
+      cat <<-EOF >/dev/stdout
 					Switches:
 					  -1 | -2 | ...      - shows particular entry
 					  --append | -a      - append to temporary file
@@ -215,7 +215,7 @@ remember() { # {{{
 					  -- | -             - separate inputs from arguments, "-" does not threat inputs as files
 				EOF
       if [[ $1 == '--help-all' ]]; then # {{{
-        command cat <<-EOF >/dev/stdout
+        cat <<-EOF >/dev/stdout
 						  --no-*
 						    --no-append
 						    --no-abs
@@ -233,7 +233,7 @@ remember() { # {{{
 					EOF
       fi # }}}
       echo
-      command cat <<-EOF >/dev/stdout
+      cat <<-EOF >/dev/stdout
 					Defaults are:
 					  --no-reset -f --no-edit --keep --append --no-fzf --no-quiet --no-list --no-abs --no-restore --no-browse --no-cmd --no-ign
 				EOF
@@ -261,7 +261,7 @@ remember() { # {{{
     files+=" $(get-file-list "$store_dir/${mask_file}*.txt")"
     files+=" $(get-file-list "$store_dir/${mask_file}*.txt-*.bck")"
     local res=
-    res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | command cat -n")"
+    res="$(echo -e "$files" | sed -e 's/ /\n/g' | sed -e '/^\s*$/d' | fzf --height 100% --no-multi --preview-window 'right' --preview="sed 's/%20/ /g' {1} | cat -n")"
     [[ $? != 0 || -z $res ]] && return 0
     if [[ $res == *.bck ]]; then
       do_restore=true
@@ -374,11 +374,11 @@ remember() { # {{{
     fi # }}}
     if $do_use_file; then # {{{
       (
-        $do_append && [[ -e $file ]] && command cat $file
+        $do_append && [[ -e $file ]] && cat $file
         echo -e "$var"
       ) \
       | sed '/^\s*$/ d' \
-      | command cat -n - | sort -k2,2 -u | sort -k1,1 | cut -c8- \
+      | cat -n - | sort -k2,2 -u | sort -k1,1 | cut -c8- \
       >$file.tmp
       mv $file.tmp $file
       echo >>$file
@@ -411,14 +411,14 @@ remember() { # {{{
     if $do_fzf; then
       fzf --height 100% --prompt "$fzf_prompt"
     else
-      command cat -
+      cat -
     fi | \
     if $do_cmd; then
       xargs -rI{} $cmd
     elif [[ ! -z $line_no ]]; then
       sed -n -e "${line_no}p"
     else
-      command cat -
+      cat -
     fi
     # }}}
     if ! $do_keep; then # {{{

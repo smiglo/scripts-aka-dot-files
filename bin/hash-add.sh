@@ -71,15 +71,15 @@ $IS_MAC && source-basic
 # }}}
 dateSsum() { # {{{
   local l=
-  cat - | while read l; do
+  while read l; do
     date +%s -d "$l"
-  done
+  done </dev/stdin
 } # }}}
 dateUSsum() { # {{{
   local l=
-  cat - | while read l; do
+  while read l; do
     echo "$(date +%s -d "${l%.*}")${l##*.}"
-  done
+  done </dev/stdin
 } # }}}
 cksum() { # {{{
   local r=$(cksum)
@@ -92,7 +92,7 @@ worker() { # {{{
     $dbgFull && echorm --name hash-add-$num -M + 2
   fi # }}}
   [[ -e "$fin" ]] || { echorm 0 "File [$fin] not found, $$" && return 0; }
-  $dbgFull && echor -M 2 "fin: '$fin' lines-in: $(cat "$fin" | wc -l)"
+  $dbgFull && echor -M 2 "fin: '$fin' lines-in: $(wc -l <"$fin")"
   local sum_cmd=$sum_cmd isHashrat=false sumEmpty="$(printf "%${n}s" " ")"
   if [[ $sum_cmd == hashrat* ]]; then # {{{
     isHashrat=true
@@ -166,7 +166,7 @@ worker() { # {{{
         echo "${aryOut[$i]}"
       fi
     done # }}} # }}}
-  done < <(cat "$fin" | eval "$sed_filter") # }}}
+  done < <(<"$fin" eval "$sed_filter") # }}}
 } # }}}
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -288,7 +288,7 @@ fi # }}}
 echorv -M inFile foHash isStdin doCat doRemove keepFo foMap
 if ! $mapUseExisting || [[ ! -e "$foHash" || ! -e "$foMap" ]]; then # {{{
   rm -f "$foHash" "$foMap"
-  lines="$(cat "$inFile" | wc -l)"
+  lines="$(wc -l <"$inFile")"
   echorv -M lines
   ! $singleCPU && [[ $lines -gt $linesForSingleCpu ]] && echorm "Using parallel mode, cpu: $cpu"
   progressShown=false
@@ -309,12 +309,11 @@ if ! $mapUseExisting || [[ ! -e "$foHash" || ! -e "$foMap" ]]; then # {{{
     # }}}
   fi >"$foHash"
   if $makeMap; then # {{{
-    cat "$foHash" \
-    | if ! $hashAtEnd; then
-        grep -v "^ \+$separator "
-      else
-        rep -v "$separator *$"
-      fi \
+    if ! $hashAtEnd; then
+      grep -v "^ \+$separator "
+    else
+      rep -v "$separator *$"
+    fi < "$foHash" \
     | if ! $mapSort; then
         cat -n | sort -k2,2 -s | uniq -c -s8 -w$n | sort -k2,2n -s | cut -c1-8,16-
       else
@@ -325,7 +324,7 @@ if ! $mapUseExisting || [[ ! -e "$foHash" || ! -e "$foMap" ]]; then # {{{
 fi # }}}
 if $mapBrowseMode; then # {{{
   while true; do
-    l="$(cat "$foMap" | fzf | awk '{print $2}' | sed 's/~://' | tr "\n" " " | sed -e 's/ $//' -e 's/ /\\|/g')"
+    l="$(< "$foMap" fzf | awk '{print $2}' | sed 's/~://' | tr "\n" " " | sed -e 's/ $//' -e 's/ /\\|/g')"
     [[ -z $l ]] && break
     cp "$foHash" "$foHash.tmp"
     vim --fast -c "/$l/" $($mapBrowse_ignoreOthers && echo "-c :g!//d") "$foHash.tmp" </dev/tty

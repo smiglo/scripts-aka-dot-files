@@ -35,7 +35,7 @@ _sshc() { # {{{
       dbg I "waiter: waiting"
       ssh -q -S$t -tt $host "cat $fRemote" 2>/dev/null >$fHost
       dbg I "waiter: new data: $(head -n1 $fHost)"
-      cat $fHost | xclip --put
+      <$fHost xclip --put
     done &
   ) </dev/null
   dbg I "connecting"

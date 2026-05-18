@@ -84,7 +84,7 @@ _fzf-exe() { # @@ # {{{
       done < <(tmux list-panes -F '#P #{pane_pid}')
       $found && pane=".$paneTmp" # }}}
     else # {{{
-      pid=$(tmux display-message -t $pane -p -F '#P #{pane_pid}')
+      pid=$(tmux display-message -t $pane -p -F '#{pane_pid}')
       if ! $IS_MAC; then
         pstree -Ac $pid | grep -q -e '---vim'
       else

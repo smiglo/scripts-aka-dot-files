@@ -78,8 +78,14 @@ if [[ -z $FZF_INSTALLED || -z $VIM_FZF_RUNTIME_PATH ]]; then
 fi
 unset fzfPath # }}}
 # tools # {{{
-# ChtSh # {{{
-CHTSH_QUERY_OPTIONS="style=paraiso-light" # }}}
+# phistory # {{{
+[[ -z $BASH_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
+if $BASHRC_FULL_START && [[ -e "$BASH_PHISTORY_FILE" ]]; then
+  sed -i '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+  sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
+fi
+[[ -z $BASH_PHISTORY_SUM_CMD ]] && export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64" # }}}
+export CHTSH_QUERY_OPTIONS="style=paraiso-light"
 # CMake # {{{
 if [[ -z $CMAKE_BUILD_PARALLEL_LEVEL ]] && is-installed nproc; then
   export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
@@ -90,6 +96,11 @@ if is-installed ccache; then
 fi
 # export MAKEFILE_COMMON="$SCRIPT_PATH/inits/Makefile"
 # # }}}
+# ack # {{{
+export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match=yellow"
+export ACK_PAGER="less"
+export ACK_PAGER_COLOR="less" # }}}
+export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;214"
 # AIder # {{{
 if false && is-installed -w aider; then
   export AIDER_DARK_MODE=true
@@ -101,6 +112,52 @@ if false && is-installed -w aider; then
   export AIDER_CHAT_LANGUAGE="English"
   export AIDER_EDITOR="vim --fast -cl"
 fi # }}}
+# Bat # {{{
+if [[ -z $BAT_INSTALLED ]]; then
+  export BAT_INSTALLED=false
+  if is-installed -w bat >/dev/null 2>&1; then
+    BAT_INSTALLED=true
+    export BAT_PRG="bat"
+  elif is-installed -w batcat >/dev/null 2>&1; then
+    BAT_INSTALLED=true
+    export BAT_PRG="batcat"
+  fi
+  if $BAT_INSTALLED; then
+    export BAT_THEM2="Solarized (dark)"
+    export BAT_THEME="TwoDark"
+    help() {
+      "$@" --help 2>&1 | $BAT_PRG -p -l help --theme "$BAT_THEM2"
+    }
+  else
+    help() {
+      "$@" --help
+    }
+  fi
+fi # }}}
+# FZF # {{{
+if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
+  export FZF_DEFAULT_COMMAND="fzf-find"
+  export FZF_ALT_C_COMMAND="fzf-find -d"
+  fzf_exe="$ENV_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
+  export FZF_DEFAULT_OPTS="$(< $SCRIPT_PATH/dot-files/fzf.opts)"
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+  export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
+  export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
+  declare -A +x fzfUsageA=([ack-ag]=true [mg]=true [grep]=false [out2file]=true [last-grep]=false [phist]=true [cd]=true)
+  export FZF_USAGE="$(declare -p fzfUsageA)"
+  unset fzf_exe fdfindCmd fzfUsageA
+elif ! $FZF_INSTALLED; then
+  [[ ! -z "$PS1" ]] && echoe -s "FZF not found"
+fi # }}}
+# Git # {{{
+export GIT_PS1_SHOWDIRTYSTATE=true
+export GIT_PS1_SHOWSTASHSTATE=true
+export GIT_PS1_SHOWUNTRACKEDFILES=true
+export GIT_PS1_SHOWUPSTREAM="auto"
+export GIT_PS1_DESCRIBE_STYLE="branch"
+unset GIT_PS1_SHOWCOLORHINTS
+[[ -n $PERS_EMAIL ]] && export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
+[[ -n $PERS_EMAIL_123 ]] && export GIT_USER_123="${PERS_USER_SHORT}:${PERS_EMAIL_123}" # }}}
 # Tmux - local # {{{
 if false; then
   if [[ ! -e $HOME/.bin/tmux-local-bin && -e $HOME/.config/tmux-local/.use-local && -e $HOME/.config/tmux-local/local/bin/tmux ]]; then
@@ -117,8 +174,12 @@ export _RR_TRACE_DIR="./.rr"
 export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
 [[ -e $RLWRAP_HOME ]] || mkdir -p $RLWRAP_HOME &>/dev/null
 export RLWRAP_OPTS="-A -b '' -e '' -D 2"
+export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
+export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
+export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
 # # }}}
 # Env - not grouped # {{{
+export COLUMNS LINES
 export DATE_FMT="%Y%m%d-%H%M%S"
 export TIME_FMT="%H:%M:%S"
 export DATE2_FMT="%Y%m%d"
@@ -211,7 +272,7 @@ if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
             [[ -e $SHARABLE_PATH/.mounted ]] || { echoe -m runtime "Starting sharable-gd"; command systemctl --user start sharable-gd; }
           fi
           if [[ -e $HOME/.config/systemd/user/sharable-gd-tb.service ]] && ${SHARABLE_MOUNT_TB:-false}; then
-            mntDir="$(cat $HOME/.config/systemd/user/sharable-gd-tb.service | awk '/ExecStart=google-drive-ocamlfuse/{print $4}')"
+            mntDir="$(awk '/ExecStart=google-drive-ocamlfuse/{print $4}' "$HOME/.config/systemd/user/sharable-gd-tb.service")"
             if [[ -d $mntDir ]]; then
               [[ -e $mntDir/.mounted ]] || { echoe -m runtime "Starting sharable-gd-tb"; command systemctl --user start sharable-gd-tb; }
             fi
@@ -255,7 +316,7 @@ if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
 fi # }}}
 export SHARABLE_PATH SHARED_BASH_PATH
 # }}}
-# TMP setup # {{{
+# Tmp/Mem setup # {{{
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
 export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
 [[ -e $HOME/Desktop/mem ]] && export CD_LAST_DIRS_STORED+=":m@$HOME/Desktop/mem"
@@ -316,14 +377,8 @@ set-utils() { # {{{
   done # }}}
 } # }}}
 # }}}
-# TMP Subentries # {{{
-export TMUX_TMPDIR=$HOME/.tmux/socket
-[[ ! -d $TMUX_TMPDIR ]] && command mkdir -p $TMUX_TMPDIR >/dev/null 2>&1 && chmod 700 $TMUX_TMPDIR
+# Mem Subentries # {{{
 if [[ -n $TMUX ]]; then
-  [[ ! -z $TMUX_SESSION ]] || export TMUX_SESSION="$(tmux display-message -p -t $TMUX_PANE -F '#S')"
-  export TMUX_SESSION_PATH="$APPS_CFG_PATH/tmux/sessions/$TMUX_SESSION"
-  [[ $UID == 0 ]] && export TMUX_SESSION_PATH="/root/tmux/sessions/$TMUX_SESSION"
-  [[ ! -e $TMUX_SESSION_PATH ]] && command mkdir -p $TMUX_SESSION_PATH
   set-utils -d
   export TMUX_RUNTIME="$UTILS_PATH/runtime"
   if [[ $UID != 0 ]]; then
@@ -338,8 +393,7 @@ else
   export TMUX_RUNTIME="$TMP_MEM_PATH/runtime"
   [[ $UID == 0 ]] && export TMUX_RUNTIME="/root/tmux/runtime"
   [[ ! -e $TMUX_RUNTIME ]] && command mkdir -p $TMUX_RUNTIME
-fi
-# }}}
+fi # }}}
 # Clean TMP # {{{
 if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]] && ! $IS_DOCKER && ! ${TMUX_POPUP:-false} ) || [[ $1 == '--clean-tmp'* ]]; then
   now=${EPOCHSECONDS:-$(epochSeconds)}
@@ -357,7 +411,7 @@ if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]]
     fi
   fi
   delta=$(( 7 * 24 * 60 * 60 ))
-  (( ${TMP_PATH_LAST_CHECK:-0} < now - delta )) && export TMP_PATH_LAST_CHECK=$(cat $check_file)
+  (( ${TMP_PATH_LAST_CHECK:-0} < now - delta )) && export TMP_PATH_LAST_CHECK=$(< $check_file)
   if (( $TMP_PATH_LAST_CHECK < now - delta )) || [[ $do_clean != 'false' ]]; then # {{{
     if [[ $do_clean == 'true' ]]; then
       [[ -n $TMUX ]] && do_clean='silent' || do_clean='no-silent'
@@ -488,9 +542,10 @@ if [[ -e $RUNTIME_PATH/runtime-common.bash ]]; then
 elif $IS_DOCKER && [[ -e ${RUNTIME_PATH/$HOME/\/home\/host}/runtime-common.bash ]]; then
   source ${RUNTIME_PATH/$HOME/\/home\/host}/runtime-common.bash
 fi
-export RUNTIME_FILE=$RUNTIME_PATH/runtime.bash
-[[ ! -e $RUNTIME_FILE ]] && touch $RUNTIME_FILE
-source $RUNTIME_FILE
+[[ ! -e $RUNTIME_PATH/runtime.bash ]] && touch $RUNTIME_PATH/runtime.bash
+for profi in $($BASH_PATH/env-ext.sh get-plugins runtime.bash); do
+  source $profi
+done
 if $IS_VIRTUAL_OS && [[ -e $BASH_PATH/runtime-virtos.bash ]]; then # {{{
   source $BASH_PATH/runtime-virtos.bash
 fi # }}}

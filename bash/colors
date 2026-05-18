@@ -451,4 +451,3 @@ fi # }}}
 export -f get-color color-cache-init color-list cl printfc echoc
 source $COLORS_FILE
 true
-

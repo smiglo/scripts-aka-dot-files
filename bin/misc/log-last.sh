@@ -76,7 +76,7 @@ reschedule() { # {{{
   local dow=$(date +'%w') today=$((10#$(date +%m%d)))
   local dbg=false
   local t= w= cond= action= checkForRemval= extraLLCmd=
-  cat "$schedule_f" | sed -n -e '/^\s*#/d' -e '/^'"${days[dow]}"':/,/^[^ ]/p' | sed -e '/^[^ ]/d' | \
+  sed -n -e '/^\s*#/d' -e '/^'"${days[dow]}"':/,/^[^ ]/p' "$schedule_f"| sed -e '/^[^ ]/d' | \
   while read t w; do
     [[ -z $t ]] && continue
     checkForRemval= extraLLCmd=
@@ -371,7 +371,7 @@ loglast() { # {{{
     shift
   done # }}}
   to_do=" $to_do "
-  source $RUNTIME_FILE
+  source $RUNTIME_PATH/runtime.bash
   if ! $colors; then
     export colorsOn=false
     unset $($BASH_PATH/colors --list)
@@ -791,10 +791,10 @@ loglast() { # {{{
     fi # }}}
     if is_to_be_done 'plot' || is_to_be_done 'plot-full'; then # {{{
       type gnuplot 1>/dev/null 2>&1 || eval $(die "\"gnuplot\" not installed")
-      local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot='cat -'
-      is_to_be_done 'plot' && full_plot='tail -n100'
+      local FILE_PLOT=$TMP_MEM_PATH/work-plot.data line= i= res= full_plot="cat $LOGLAST_FILE"
+      is_to_be_done 'plot' && full_plot="tail -n100 $LOGLAST_FILE"
       printf "%6s %2s %6s %6s\n" 'No' '8h' 'W' 'A' >$FILE_PLOT
-      cat $LOGLAST_FILE | $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
+      $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
         printf "%-6s" '8'
         for i in $line; do
           local res="$(calc -q -- ${i/:*}+${i/*:}/60 | sed -e 's/~//' -e 's/\s//' | cut -c-5)"
@@ -840,7 +840,7 @@ loglast() { # {{{
         *) to_do_extra="${to_do_extra/suspend/shutdown}";;
         esac;; # }}}
       0 | *) # {{{
-        local uptimeTime="$(cat /proc/uptime | awk '{print $1}' | sed 's/\..*//')"
+        local uptimeTime="$(awk '{print $1}' /proc/uptime | sed 's/\..*//')"
         if [[ $(date +%w) == 5 && $uptimeTime -gt $(( 1 * 24 * 60 * 60 )) ]]; then
           if progress --wait $end_delay_ask --no-err --msg "${cOk}It's Friday${cOff}, maybe ${cImp}shutdown${cOff}?"; then
             to_do_extra="${to_do_extra/suspend/shutdown}"
@@ -961,7 +961,7 @@ loglast() { # {{{
     while true; do # Wait for a key or input LOGLAST_FILE # {{{
       tput rc
       if [[ -e $CMD_FILE ]]; then # {{{
-        key="$(cat $CMD_FILE)"
+        key="$(< $CMD_FILE)"
         rm -rf $CMD_FILE
         [[ ! -z $key ]] && break
       fi # }}}

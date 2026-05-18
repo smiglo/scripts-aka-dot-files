@@ -631,7 +631,7 @@ rm -rf $TMUX_INIT_LOCK
 if $do_attach; then # {{{
   # Choose current session # {{{
   if [[ -z $sessionName ]] || ! tmux has-session -t $sessionName 1>/dev/null 2>&1; then
-    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && sessionName="$(cat $TMP_PATH/.tmux_last_session.$USER)"
+    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && sessionName="$(< $TMP_PATH/.tmux_last_session.$USER)"
   fi
   if [[ $TMUX_INIT_SESSIONS == 'REMOTE' ]]; then
     sessionName="$(getRemoteSessionName)"

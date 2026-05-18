@@ -55,7 +55,7 @@ _repo-browse() { # @@ # {{{
   [[ ! -z "$REPO_LAST_PWD" ]] && wasPushd=true && pushd "$REPO_LAST_PWD" >/dev/null 2>&1
   if [[ -z "$REPO_LAST_LIST" ]] || $wereParams; then # {{{
     $cleanRepoFile && rm -f "$repoList"
-    [[ -e "$repoList" ]] && listSrc="$(cat "$repoList")"
+    [[ -e "$repoList" ]] && listSrc="$(< "$repoList")"
     if [[ -z "$listSrc" ]]; then
       $wasPushd && wasPushd=false && popd >/dev/null 2>&1
       local d= i=
@@ -68,7 +68,7 @@ _repo-browse() { # @@ # {{{
         done
         popd >/dev/null
       done | sort >"$repoList"
-      listSrc="$(cat "$repoList")"
+      listSrc="$(< "$repoList")"
     else
       echo -e "$listSrc" >"$repoList"
     fi
@@ -109,7 +109,7 @@ _repo-browse() { # @@ # {{{
         case $br in
         master) [[ $i != tmp/* && $i != tb-* ]] && continue;;
         devel | next | origin/* | HEAD) continue;;
-        home-work | tb/mods) $clean && continue;;
+        tb/mods) $clean && continue;;
         *) [[ "$br" =~ master(~[0-9]*)? || ( ! -z $REPO_BROWSE_MASTER_BRANCH && "$br" =~ $REPO_BROWSE_MASTER_BRANCH ) ]] && continue;;
         esac
       fi

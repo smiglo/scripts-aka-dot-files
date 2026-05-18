@@ -12,9 +12,12 @@ get-plugins) # {{{
   file="$1"; shift
   [[ -n $file ]] || die " file is empty"
   [[ -e $RUNTIME_PATH/$file ]] && ret+=" $RUNTIME_PATH/$file"
+  inProfiles=
   for i in $PROFILES_PATH/*; do
-    [[ -e $i/$file ]] && ret+=" $i/$file"
+    [[ -e $RUNTIME_PATH/$file.${i##*/} ]] && ret+=" $RUNTIME_PATH/$file.${i##*/}"
+    [[ -e $i/$file ]] && inProfiles+=" $i/$file"
   done
+  ret+=" $inProfiles"
   [[ -e $APPS_CFG_PATH/$file ]] && ret+=" $APPS_CFG_PATH/$file"
   echo "$ret"
   exit 0;; # }}}

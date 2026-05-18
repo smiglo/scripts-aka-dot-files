@@ -238,6 +238,7 @@ status_git() { # @@ # {{{
   esac
   local nonFF="$(getIcon exclamation)"
   stat="${stat/<>/$nonFF}"
+  [[ -e $RUNTIME_PATH/tmux-git.sh ]] && source $RUNTIME_PATH/tmux-git.sh
   if ${PS1_CFG_GIT_USE_CACHE:-false}; then # {{{
     local statF=$MEM_KEEP/tmux-git
     declare -A git_stat
@@ -251,56 +252,75 @@ status_git() { # @@ # {{{
   # TMUX_STATUS_GIT_BRANCH_MAP+=' feature/(.*):F/${BASH_REMATCH[1]}'
   # TMUX_STATUS_GIT_BRANCH_MAP+=' fix/(.*):F/${BASH_REMATCH[1]}'
   # TMUX_STATUS_GIT_BRANCH_MAP+=' test/(.*):T/${BASH_REMATCH[1]}'
+  # TMUX_STATUS_GIT_BRANCH_MAP+=' topic/(.*):T/${BASH_REMATCH[1]}'
   TMUX_STATUS_GIT_BRANCH_MAP+=" master:m main:m home-work:hw next:n devel:d trunk:t"
-  local changed=false
-  for i in $TMUX_STATUS_GIT_BRANCH_MAP; do # {{{
-    [[ $b =~ ^${i%%:*}$ ]] || continue
-    b="$(echo "$(eval echo "${i#*:}")")"
+  local changed=false ignoreChanged=false bGitConfig="$(cd $pPath; git config branch.$b.short-name 2>/dev/null)"
+  if [[ -n $bGitConfig ]]; then # {{{
+    b="$bGitConfig"
     changed=true
-    break
-  done # }}}
+  fi # }}}
   if ! $changed; then # {{{
-    if [[ $b == */* ]]; then
-      b=${b,,}
-      local bShort= i= p=
-      declare -a p1 p2
-      IFS='/' read -ra p1 <<< "$b"
-      for ((i=0; i<${#p1[*]}-1; i++)); do
-        if [[ ${p1[i]} =~ ^([a-zA-Z0-9]+)-([0-9]+)$ ]]; then
-          bShort+="${BASH_REMATCH[1]:0:1}-${BASH_REMATCH[2]}/"
-        else
-          IFS='-_' read -ra p2 <<< "${p1[i]}"
-          for p in ${p2[*]}; do bShort+="${p:0:1}"; done
-          bShort="${bShort%-}/"
-        fi
+    for i in $TMUX_STATUS_GIT_BRANCH_CLEAN; do # {{{
+      b="${b//${i//\//\\/}}"
+    done # }}}
+    for i in $TMUX_STATUS_GIT_BRANCH_MAP; do # {{{
+      [[ $i == -* ]] && i="${i#-}" && ignoreChanged=true
+      [[ $b =~ ^${i%%:*}$ ]] || continue
+      b="$(echo "$(eval echo "${i#*:}")")"
+      $ignoreChanged || changed=true
+      break
+    done # }}}
+  fi # }}}
+  if ! $changed; then # {{{
+    ticketGetter() { # {{{
+      local in="$1" tId= tNo= tDescr= i= found=false
+      [[ $in =~ ^([A-Z][A-Z0-9]+)-([0-9]+)([-_](.*))? ]] || { echo "${in,,}"; return 1; }
+      tId=${BASH_REMATCH[1]}; tNo=${BASH_REMATCH[2]}; tDescr=${BASH_REMATCH[4]}
+      for i in $TMUX_STATUS_GIT_ID_MAP; do
+        [[ ${i%%:*} == $tId ]] && tId="${i#*:}" && found=true && break
       done
-      local last=${p1[-1]}
-      bShort="${bShort%/}/"
-      if [[ $last =~ ^([a-zA-Z0-9]+)-([0-9]+)$ ]]; then
-        bShort+="${BASH_REMATCH[1]:0:1}-${BASH_REMATCH[2]}"
-      elif [[ $last =~ .+[-_].+ ]]; then
-        local l=${last%[-_]*}
-        IFS='-_' read -ra p2 <<< "$l,,"
-        for p in ${p2[*]}; do bShort+="${p:0:1}"; done
-        bShort+="-${last##*[-_]}"
-      else
-        bShort+="$last"
+      $found || ${TMUX_STATUS_GIT_BRANCH_FULL_TICKET:-false} || tId=${tId:0:1}
+      echo "$tId-$tNo ${tDescr,,}"
+    } # }}}
+    firstLetters() { # {{{
+      declare -a p=()
+      IFS='-_' read -ra p <<< "$1"
+      local i=
+      for i in ${p[*]}; do echo -n "${i:0:1}"; done
+    } # }}}
+    local i= tId= tDescr=
+    if [[ $b == */* ]]; then # {{{
+      declare -a p
+      IFS='/' read -ra p <<< "$b"; b=
+      for ((i=0; i<${#p[*]}-1; i++)); do # {{{
+        if p[i]=$(ticketGetter "${p[i]}"); then
+          read tId tDescr <<< "${p[i]}"
+          [[ -z $tDescr ]] && b+="$tId/" && continue
+          ${TMUX_STATUS_GIT_BRANCH_ADD_TICKET_INFO:-false} || { b+="$tId/"; continue; }
+          b+="$tId-"; p[i]="$tDescr"
+        fi
+        b+="$(firstLetters ${p[i]})/"
+      done # }}}
+      if last=$(ticketGetter "${p[-1]}"); then
+        read tId tDescr <<< "$last"
+        b+="$tId"
+        ${TMUX_STATUS_GIT_BRANCH_ADD_TICKET_INFO:-false} && last="$tDescr" || last=
       fi
-      b="$bShort"
-    fi
+      [[ $last =~ .+[-_].+ ]] && last="$(firstLetters "${last%[-_]*}")-${last##*[-_]}"
+      if [[ -n $last ]]; then
+        [[ $b == */ ]] && b+="$last" || b+="-$last"
+      fi # }}}
+    else # {{{
+      if b=$(ticketGetter "$b"); then
+        read b tDescr <<< "$b"
+        ${TMUX_STATUS_GIT_BRANCH_ADD_TICKET_INFO:-false} && [[ -n $tDescr ]] && b+="-$tDescr"
+      fi
+    fi # }}}
   fi # }}}
-  local pre=
-  [[ $b == */* ]] && pre="${b%/*}/" && b="${b##*/}"
-  if [[ $b =~ ^([A-Z]+-[0-9]+)([_/-].*)? ]]; then # {{{
-    b="${BASH_REMATCH[1]}"
-    for i in $TMUX_STATUS_GIT_ID_MAP; do
-      [[ ${i%%:*} == ${b%%-*} ]] && b="${i#*:}-${b#*-}" && break
-    done
-  fi # }}}
-  local len=${TMUX_STATUS_GIT_BRRANCH_LEN:-15}
-  [[ ${#b} -lt $len ]] || b="${b:0:$len}.."
-  [[ ! -z $stat ]] && stat=" $stat"
-  stat="$pre$b$stat"
+  local len=${TMUX_STATUS_GIT_BRRANCH_LEN:-17}
+  (( ${#b} < $len )) || b="${b:0:$((len-2))}.."
+  [[ -n $stat ]] && stat=" $stat"
+  stat="$b$stat"
   # }}}
   # repo mapping  # {{{
   local repoName="$(cd $pPath; git config utils.repo-name)"
@@ -330,7 +350,7 @@ status_right_extra() { # @@ # {{{
   local tm_info="$1" tm_time="$2"
   [[ -e $TMP_MEM_PATH/.tz.changed ]] && tm_time= # force to use current TZ
   [[ -z $tm_info ]] && tm_info="$(tmux display-message -pF '#S:#I.#P#D')"
-  [[ -e $RUNTIME_PATH/date.tz ]] && tm_time="$(TZ=$(cat $RUNTIME_PATH/date.tz) date +"%H:%M")"
+  [[ -e $RUNTIME_PATH/date.tz ]] && tm_time="$(TZ=$(< $RUNTIME_PATH/date.tz) date +"%H:%M")"
   [[ -z $tm_time ]] && tm_time="$(date +'%H:%M')"
   local session="${tm_info%%:*}" l= ret= pane_id="%${tm_info##*%}"
   tm_info="${tm_info%\%*}"
@@ -769,13 +789,13 @@ pasteKey() { # @@ # {{{
   done
   if [[ -e "$f" ]]; then # {{{
     local delta=30 keep= count= fTime="$(stat -c "%Y" "$f")" cTime="${EPOCHSECONDS:-$(epochSeconds)}"
-    source <(cat "$f" | grep "^\(delta\|keep\|count\)=")
+    source <(grep "^\(delta\|keep\|count\)=" "$f")
     if [[ true == true \
       && ( $delta == 0 || $fTime -gt $((cTime-delta)) ) \
       && ( -z $keep    || $fTime -gt $((cTime-keep)) ) \
       && ( -z $count   || $count -gt 0 ) \
        ]]; then
-      key="$(cat "$f" | head -n1)"
+      key="$(head -n1 "$f")"
       if [[ ! -z $count ]]; then
         count=$((count-1))
         [[ $count -gt 0 ]] && sed -i -e '/^count=/s/=.*/='$count'/' "$f"

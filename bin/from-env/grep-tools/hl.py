@@ -89,7 +89,7 @@ def insert_markups(text, regex_map):
         keys.append(regex)
         if item.get("name") in to_skip: continue
         if item.get("case-match", False) or regex != regex.lower(): ignoreCaseFlag = 0
-        t_repl = re.sub(f"({regex})", f"<<S:{i}>>\\1<<E:{i}>>", text, 0, ignoreCaseFlag)
+        t_repl = re.sub(f"({regex})", f"<<S:{i}>>\\1<<E:{i}>>", text, flags=ignoreCaseFlag)
         if t_repl != text:
             text_with_markups.append(t_repl)
             skip = item.get("skip")
@@ -182,19 +182,25 @@ if not config_dir:
     if not cfgHome: cfgHome = f"{os.getenv('HOME')}/.config"
     config_dir = f"{cfgHome}/hl-python"
 
-if os.path.exists(f"{config_dir}"):
+if os.path.exists(config_dir):
+    log.debug(f"config dir: {config_dir}")
+elif os.path.exists(f"{os.getenv("APPS_CFG_PATH")}/hl-python"):
+    config_dir = f"{os.getenv("APPS_CFG_PATH")}/hl-python"
     log.debug(f"config dir: {config_dir}")
 else:
     config_dir = None
 
 config.update(load("config.json", config_dir))
 
-for a_dir in [config_dir, os.getenv("BASHRC_RUNTIME_PATH")]:
+for a_dir in [f"{os.getenv("SCRIPT_PATH")}/inits/hl-python", config_dir]:
+    if not a_dir: continue
+    if not os.path.exists(a_dir): continue
     colors.update(load("colors.json", a_dir))
+    regex_def.update(load("regs-default.json", a_dir))
+
 colors.update(load(config["colors_file"]))
 config["colors_basic"] = [c for c in config["colors_basic"] if c in colors]
 
-regex_def.update(load("regs-default.json", config_dir))
 regex_file_default.update(load(config["regex_file"]))
 
 last_reg = None
@@ -318,4 +324,3 @@ for l in sys.stdin:
     (out, modified) = colorize_text(l, regex_map)
     if modified or not only_matching:
         print(out)
-

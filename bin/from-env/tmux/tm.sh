@@ -481,7 +481,7 @@ tm() { # @@ # {{{
         read l paths <<<$(echo -e "$out" | sed -n -e '/^#/d' -e '/^ /d' -e '/^'"$entry"' /p' | head -n1 | cut -d' ' -f2,4-)
       fi # }}}
     else
-      read l paths <<<$(cat - | sed -n -e 's/\s\s\+/ /g' -e '/.* # .*/s|\(.* \)\{0,1\}\(.*\) # \(.*\)|\2 \3|p;t;' -e 's|\(.* \)\{0,1\}\(.*\)|\2|p')
+      read l paths <<<$(sed -n -e 's/\s\s\+/ /g' -e '/.* # .*/s|\(.* \)\{0,1\}\(.*\) # \(.*\)|\2 \3|p;t;' -e 's|\(.* \)\{0,1\}\(.*\)|\2|p')
     fi
     [[ -z "$l" ]] && echor -cn $silent "No layout found (entries: $entries)" && return 1
     local err=0
@@ -605,7 +605,7 @@ tm() { # @@ # {{{
     while read line; do
       lines[$i]="$line"
       i=$(($i+1))
-    done < <(cat $tmp_buffer_file | sed -e '/^\s*$/ d' -e '/^#.*/ d')
+    done < <(sed -e '/^\s*$/ d' -e '/^#.*/ d' $tmp_buffer_file)
     i=0
     while [[ $i -lt ${#lines[*]} ]]; do # {{{
       line=${lines[$i]}
@@ -679,11 +679,7 @@ tm() { # @@ # {{{
       a | add  )
         tail -n +4 $tmp_buffer_file >$tmp_buffer_file.tmp
         mv $tmp_buffer_file.tmp $tmp_buffer_file
-        if [[ $(wc -l $tmp_buffer_file | cut -d\  -f1) -le 3 ]]; then
-          tmux set-buffer -b $b_name "$(echo -n "$(cat $tmp_buffer_file)")"
-        else
-          tmux load-buffer -b $b_name $tmp_buffer_file
-        fi
+        tmux load-buffer -b $b_name $tmp_buffer_file
         ;;& # }}}
       # Common: save/edit/rename/add: Save buffer # {{{
       s | save   | \
@@ -707,7 +703,7 @@ tm() { # @@ # {{{
   attach) # {{{
     var=${1^^}
     if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
-      [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && var="$(cat $TMP_PATH/.tmux_last_session.$USER)"
+      [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && var="$(< $TMP_PATH/.tmux_last_session.$USER)"
       if [[ -z $var ]] || ! tmux has-session -t $var 1>/dev/null 2>&1; then
         var=${TMUX_SESSION_DEFAULT:-'MAIN'}
       fi

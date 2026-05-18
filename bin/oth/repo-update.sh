@@ -38,7 +38,7 @@ while [[ ! -z $1 ]]; do # {{{
     [[ ! -e $fManifest ]] && exit 1
     listRev=
     if [[ ! -z $fManifest ]]; then # {{{
-      listRevMani="$(cat $fManifest | sed -n '/<project/s/.*\(path=[^ ]*\) .*\(revision=[^ ]*\).*/\1 \2/p' | sed 's|../onemw/|./|')"
+      listRevMani="$(sed -n '/<project/s/.*\(path=[^ ]*\) .*\(revision=[^ ]*\).*/\1 \2/p' $fManifest | sed 's|../onemw/|./|')"
       listRev=
       while read l; do
         [[ "$l" =~ path=\"(.*)\".*revision=\"(.*)\" ]] || continue
@@ -88,7 +88,7 @@ if $tag && [[ -z $tagName || $tagName == '-' ]]; then
 fi
 $dump && rm -f manifest-{new,dump}.xml
 
-list="$(cat $fManifest | grep -v '^!' | sed -n '/<project/s/.*\(path=[^ ]*\) .*\(revision=[^ ]*\).*/\1 \2/p' | sed 's|../onemw/|./|')"
+list="$(sed -n -e '/^!/d/' -e '/<project/s/.*\(path=[^ ]*\) .*\(revision=[^ ]*\).*/\1 \2/p' $fManifest | sed 's|../onemw/|./|')"
 $verbose && echo "List:" && echo "$list" | column -t | sed 's/^/* /'
 
 while read l; do
@@ -127,7 +127,7 @@ while read l; do
   if $verify; then # {{{
     if [[ $r != $rHead ]]; then
       echo "$d: Log: ${r:0:7}..${rHead:0:7} ($head)"
-      git ld $r..$rHead | cat -
+      git --no-pager ld $r..$rHead
       differs=true
     else
       echo "$d: Log: ${r:0:7}..${rHead:0:7} ($head) : the same"
@@ -136,7 +136,7 @@ while read l; do
   if $showDiff; then # {{{
     if [[ $r != $rHead ]]; then
       echo "$d: Diff: ${r:0:7}..${rHead:0:7} ($head)"
-      git diff $r..$rHead | cat -
+      git --no-pager diff $r..$rHead
     else
       echo "$d: Diff: ${r:0:7}..${rHead:0:7} ($head) : the same"
     fi

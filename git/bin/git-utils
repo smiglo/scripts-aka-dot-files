@@ -50,7 +50,7 @@ check-repo() { # {{{
   [[ ! -e $dir/.git ]] && echo -e "$msg[${CRed}.GIT${COff}]" && return
   pushd $dir > /dev/null
   local git=".git"
-  [[ -f $git ]] && git=$(cat $git | awk '{print $2}')
+  [[ -f $git ]] && git=$(awk '{print $2}' $git)
   (
     unset -f $(declare -F | awk '{print $3}')
     ! $skipSubmodules && git submodule --quiet foreach "git utils check-repo \$PWD --skipSubmodules $(! $display_status && echo '--silent') || true" 2>/dev/null

@@ -69,7 +69,7 @@ progress-dot() { # @@ # {{{
           fi;;
         esac; shift
       done
-      if $aling; then # {{{
+      if $align; then # {{{
         local max=2
         while true; do
           [[ $max == 0 ]] && break

@@ -170,7 +170,7 @@ while [[ ! -z $1 ]]; do # {{{
   --load) # {{{
     [[ -e $APPS_CFG_PATH/notifier/schedule.txt ]] || return 0
     list=$($0 --list)
-    cat $APPS_CFG_PATH/notifier/schedule.txt | sed -e '/^#/d' -e '/^\s*$/d' | while read at tmp params; do
+    sed -e '/^#/d' -e '/^\s*$/d' "$APPS_CFG_PATH/notifier/schedule.txt" | while read at tmp params; do
       echo "$list" | grep -q "^$at " && continue
       eval $0 $params $at
     done
@@ -198,8 +198,7 @@ while [[ ! -z $1 ]]; do # {{{
         *Su*) days_active[0]=true;;&
         esac
       } # }}}
-      cat $data_file \
-      | while read -r pid at loop bell_cnt bell_sleep margin days; do
+      while read -r pid at loop bell_cnt bell_sleep margin days; do
         map_days
         read wake_in wake_at wake_at_exact < <(timeToWakeUp $at)
         line="$(printf "%-8s" $at) / $(printf "%6d" $wake_in) $(printf "%10d" $wake_at_exact) / $(printf "%5d" $pid)$($loop && echo " / $days")"
@@ -209,7 +208,7 @@ while [[ ! -z $1 ]]; do # {{{
           continue
         fi
         echo "$line"
-      done | sort -k3,3n)"
+      done <"$data_file" | sort -k3,3n)"
     [[ ! -z $list ]] || exit 0
     case $1 in
     --list) # {{{

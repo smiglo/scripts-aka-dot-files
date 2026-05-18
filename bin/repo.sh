@@ -66,7 +66,7 @@ if [[ -t 0 ]]; then
     repos=$this_dir
   else
     repos="${REPO_LIST:-$REPO_LIST_DEFAULT} $REPOS_TO_INCLUDE"
-    [[ -e $repos && ! -d $repos ]] && repos="$(cat $repos)"
+    [[ -e $repos && ! -d $repos ]] && repos="$(< $repos)"
   fi
 else
   repos="$(cat -)"
@@ -99,7 +99,7 @@ while [[ ! -z $1 ]]; do # {{{
     if [[ $repos == '-' ]]; then
       repos="$($0 --dump-rev -l)"
     elif [[ -e $repos && ! -d $repos ]]; then
-      repos="$(cat $repos)"
+      repos="$(< $repos)"
     fi
     shift;; # }}}
   -R)              repos=;;
@@ -230,7 +230,7 @@ for repo in $repos; do # {{{
         master)                         $isClean && break;;
         b/*)                            $isClean && break;;
         devel | next | origin/* | HEAD) $isClean && break;;
-        home-work | tb/mods)            $isClean && break;;
+        tb/mods)                        $isClean && break;;
         *)
           while true; do
             [[ "$br" =~ [a-z]{2,}/[a-z]+-[0-9]+/ ]] && break

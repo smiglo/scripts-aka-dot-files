@@ -47,7 +47,7 @@ case $mode in
 info) # {{{
   echo "$fn";; # }}}
 put) # {{{
-  in="$(cat -)"
+  in="$(< /dev/stdin)"
   $new && rm -f $fn
   sS="{" sE="}"
   if [[ ! -e $fn ]]; then # {{{
@@ -77,6 +77,6 @@ edit) # {{{
   vim "$fn";; # }}}
 copy) # {{{
   [[ -e $fn ]] || die "no file '$fn'"
-  cat $fn | xclip --put;; # }}}
+  < $fn xclip --put;; # }}}
 esac
 

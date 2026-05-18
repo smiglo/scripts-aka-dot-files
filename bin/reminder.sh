@@ -132,7 +132,7 @@ narrowToMinutes=${REMINDER_NARROW_TO_MINUTES:-true}
 mode=
 now=$EPOCHSECONDS
 tzOrig=$TZ
-[[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(cat $RUNTIME_PATH/date.tz)
+[[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(< $RUNTIME_PATH/date.tz)
 
 case $1 in # {{{
 lfe) shift; set -- list -fe "$@";;
@@ -171,11 +171,10 @@ add) # {{{
     [[ ! -z $tsOrig ]] || die -s=!$verbose "missing entry: [date.]time [info]"
     schedule "$tsOrig" "$info" >$tmpFile
   elif [[ ! -t 0 ]]; then
-    cat - \
-    | while read -r tsOrig info; do
+    while read -r tsOrig info; do
         [[ ! -z $tsOrig ]] || eval $(die -c -s=!$verbose  "missing entry: [date.]time [info]")
         schedule "$tsOrig" "$info"
-    done >$tmpFile
+    done </dev/stdin >$tmpFile
   fi
   if [[ -e $tmpFile ]]; then
     [[ -e $reminderFile ]] && cat $reminderFile >>$tmpFile
@@ -468,7 +467,7 @@ monitor) # {{{
     now=$EPOCHSECONDS timeout=1
     (( now - heartbeatTS < heartbeatInterval )) || { DBG - "heartbeat after $((now - heartbeatTS))s"; heartbeatTS=$now; }
     TZ=$tzOrig
-    [[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(cat $RUNTIME_PATH/date.tz)
+    [[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(< $RUNTIME_PATH/date.tz)
     while true; do # {{{
       [[ -e $reminderFile ]] || { DBG "no-file"; timeout=${Sleeps[no-file]}; break; }
       IFS=$'\t' read ts info < <(getNext)

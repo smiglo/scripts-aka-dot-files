@@ -2,11 +2,61 @@
 # vim: fdl=0
 
 update-ccache-conf() { # {{{
+  local _ts=1776624151
   install-ccache-conf
 } # }}}
 update-linux-sudo-keyd() { # {{{
-  is-os-allowed -docker || return 0
+  local _ts=1776624151
+  is-os-allowed -virt-os || return 0
   os-install keyd || return 1
   sudo cp $SCRIPT_PATH/dot-files/keyd.conf /etc/keyd/default.conf
   sudo systemctl enable --now keyd
+} # }}}
+update-linux-fonts() { # {{{
+  is-os-allowed -virt-os || return 0
+  local _ts=1776624151
+  fc-cache -fv
+} # }}}
+update-arch-sudo-time-ntp() { # {{{
+  sudo timedatectl set-ntp true
+} # }}}
+update-arch-sudo-wlsunset() { # {{{
+  sudo pacman -S wlsunset
+} # }}}
+update-arch-sudo-swayosd() { # {{{
+  local _ts=1777327542
+  sudo pacman -S swayosd
+} # }}}
+update-bin-misc() { # {{{
+  local _ts=1776624151
+  rm -f $HOME/.bin/setup-env.sh
+} # }}}
+update-misc() { # {{{
+  local _ts=1778478811
+  [[ -e ~/.lesskey ]] || ln -sf $SCRIPT_PATH/dot-files/lesskey ~/.lesskey
+  case $OS_KIND in
+  arch)
+    if is-os-allowed +sudo; then
+      sudo pacman -S --needed \
+        cups cups-pdf cups-filters avahi nss-mdns ghostscript gutenprint \
+        foomatic-db foomatic-db-engine foomatic-db-nonfree \
+        loupe \
+        nmap \
+        nwg-drawer \
+        grim slurp
+      install-arch-sudo-misc
+    fi
+    install-arch-mime;;
+  esac
+} # }}}
+update-arch-hypr-lua() { # {{{
+  local _ts="260514000159"
+  rm $HOME/.config/hypr/{hyprland.conf,monitors.conf}
+  ln -sf $SCRIPT_PATH/dot-files/arch/hyprland/hyprland.lua $HOME/.config/hypr/
+  case $HOSTNAME in
+  $HOST_HOME_T14)
+    ln -sf $RUNTIME_PATH/profiles/home/dot-files/arch/hyprland/monitors-t14.lua $HOME/.config/hypr/monitors.lua;;
+  *)
+    ln -sf $SCRIPT_PATH/dot-files/arch/hyprland/monitors.lua $HOME/.config/hypr/;;
+  esac
 } # }}}

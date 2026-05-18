@@ -1,0 +1,22 @@
+--multi
+--exact
+--no-sort
+--exit-0
+--algo=v2
+--no-mouse
+--height 80%
+--border
+--tabstop=2
+--color=dark,fg:15,fg+:15,bg+:238,hl:214,hl+:208,marker:3,pointer:2
+--layout=reverse-list
+--preview '$ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c prev --prev 10 -f {1}'
+--preview-window 'hidden'
+--bind 'f1:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c less -f {1})'
+--bind 'f2:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c vim -f {1})'
+--bind 'f3:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f {1})'
+--bind 'esc:cancel'
+--bind 'ctrl-a:select-all'
+--bind '?:toggle-preview'
+--bind 'ctrl-s:toggle-sort'
+--bind 'ctrl-y:preview-up'
+--bind 'ctrl-e:preview-down'

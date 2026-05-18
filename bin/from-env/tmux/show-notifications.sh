@@ -128,7 +128,7 @@ _show-notifications() { # @@ # {{{
           l="$($TMUX_NOTIFICATION_PRODUCER --convert-message "$l")"
           [[ ! -z $l ]] && last_msgs="$l,$last_msgs"
         fi # }}}
-      done < <(cat "$ntf_file" | awk '!x[$0]++' | tail -n 20) # }}}
+      done < <(awk '!x[$0]++' "$ntf_file" | tail -n 20) # }}}
       [[ ! -z $last_msgs ]] && last_msgs="$(echo "$last_msgs" | cut -d',' -f 1-5)" && last_msgs="${last_msgs%,}"
       if [[ ( ! -z $last_msgs || ! -z $prev_msgs ) && -n $TMUX ]]; then # {{{
         if [[ ! -z $last_msgs ]]; then

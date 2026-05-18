@@ -87,7 +87,7 @@ reminder() { # @@ # {{{
           echo "# GH :: go-home :: GH msg"
         ) >$tmpFile # }}}
         vim --fast-save -1l $tmpFile || { rm $tmpFile; return 0; }
-        readarray -t listN <<<$(cat $tmpFile | sed -e '/^#/d' -e '/^\s*$/d')
+        readarray -t listN < <(sed -E '/^#|^\s*$/d' "$tmpFile")
         rm $tmpFile
         for i in ${!listN[*]}; do # {{{
           for j in ${!listC[*]}; do

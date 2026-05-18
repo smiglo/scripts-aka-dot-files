@@ -40,7 +40,7 @@ writer() { # {{{
     dbg I "writing: [${sumLast:0:7} > ${sum:0:7}]: $(head -n1 $fTmp)..."
     sumLast=$sum
     case $mode in
-    TCP)  cat $fTmp | netcat $ncP $pOHost $dataOu;;
+    TCP)  < $fTmp netcat $ncP $pOHost $dataOu;;
     FIFO) cat $fTmp >$dataOu;;
     esac
     dbg D "written"
@@ -71,7 +71,7 @@ reader() { # {{{
     [[ $sum == $sumLast ]] && continue
     dbg I "updating: [${sumLast:0:7} > ${sum:0:7}]: $(head -n1 $fTmp)..."
     sumLast=$sum
-    cat $fTmp | xclip --put
+    < $fTmp xclip --put
   done
 } # }}}
 
@@ -84,7 +84,7 @@ while [[ ! -z $1 ]]; do # {{{
   --dbg=*) dbgLvl=${1#--dbg=}; dbg --set -v=$dbgLvl;;
   -k | --kill) # {{{
     [[ -e $fPid ]] || exit 0
-    pid=$(cat $fPid)
+    pid=$(< $fPid)
     ps ax -o pid= | grep -q "^\s*$pid$" || exit 0
     dbg I "killing on pid: $pid"
     kill-rec $pid

@@ -462,24 +462,35 @@ brun-clang() { # @@:new # {{{
     [[ $2 == '?' ]] && { $isOk; return; }
     $isOk || { echo "---"; return; }
     echo "f fix"
-    [[ $cur == -* ]] && $isGit && [[ $PWD == $gitRoot/* ]] && echo "-r --root"
+    if $isGit && [[ $PWD =~ ^$gitRoot(/.*)? ]]; then
+      [[ $cur == -* ]] && echo "-r --root --all"
+      echo "@" "REV"
+    fi
     return
   fi # }}}
   $isOk || eval $(die "no clang-formatter file")
-  local dry=${BRUN_DRY:-true} goRoot=false
+  local dry=${BRUN_DRY:-true} goRoot=false rev="@"
   while [[ -n $1 ]]; do # {{{
     case $1 in
     f | fix) dry=false;;
     -r | --root) goRoot=true;;
+    --all) rev=;;
+    *) rev="$1"; break
     esac; shift
   done # }}}
   local params=
   $dry && params+=" --dry-run --Werror" || params+=" -i"
-  $isGit && $goRoot && cd "$gitRoot"
-  if $isGit; then
-    git ls-files -- '*.cpp' '*.c' '*.h' '*.hpp'
+  if [[ ! -t 0 ]]; then
+    cat -
+  elif [[ -n $rev ]]; then
+    git diff $rev~..$rev --name-only
   else
-    fdfind --type f ".*\.(c|cpp|h|hpp)$"
+    $isGit && $goRoot && cd "$gitRoot"
+    if $isGit; then
+      git ls-files -- '*.cpp' '*.c' '*.h' '*.hpp'
+    else
+      fdfind --type f ".*\.(c|cpp|h|hpp)$"
+    fi
   fi | xargs clang-format $params
   if (( $? == 0 )); then
     echoe "clang: ok"
@@ -660,7 +671,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
   fi # }}}
   if $onlySwitches; then # {{{
     for cmd in $(getCommands); do
-      $cmd @@ ? && getCommands $cmd
+      $cmd @@ '?' && getCommands $cmd
     done
     getCommands --external
     [[ $cur == -* ]] && echo "--dry --verbose --dump --shell --log-file"

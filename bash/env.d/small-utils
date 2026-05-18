@@ -367,22 +367,6 @@ mapShortCutToFull() { # @@ # {{{
     fi
   fi # }}}
 } # }}}
-restore() { # @@ # {{{
-  if [[ $1 == @@ ]]; then
-    echo "-?"
-    return 0
-  fi
-  local captureFile=$CAPTURE_FILE
-  if [[ -z $CAPTURE_FILE ]]; then
-    captureFile="$TMP_MEM_PATH/capture.txt"
-    [[ -n $TMUX ]] && captureFile="$TMP_MEM_PATH/capture-$(tmux display-message -pF '#S-#W').txt"
-  fi
-  [[ -e ./cap.tmp~ ]] && captureFile="./cap.tmp~"
-  [[ $1 == '-?' ]] && echo "$captureFile" && return 0
-  [[ -e $captureFile ]] || return 1
-  /bin/cat $captureFile
-}
-export PHISTORY_IGNORED_COMMANDS+=":capture:restore" # }}}
 rpath() { # {{{
   local pwd="." src= p="-s"
   while [[ ! -z $1 ]]; do # {{{
@@ -471,6 +455,52 @@ else
     echoe -f "Not implemented"
   } # }}}
 fi
+if $IS_ARCH; then # {{{
+  rebootF() { # {{{
+    if [[ $(tty) == /dev/tty* ]]; then
+      sudo /root/bin/utils.sh reboot "$@"
+      return
+    fi
+    case ${1,,} in
+    y | -y) ;;
+    *)
+      local k=
+      read -t5 -p "Reboot [NY] ? " k || { echo; return 2; }
+      [[ $k == 'Y' ]] || return 1;;
+    esac
+    hyprshutdown -t 'Rebooting...' --post-cmd "sudo -E /root/bin/utils.sh reboot -y"
+  } # }}}
+  shutdownF() { # {{{
+    if [[ $(tty) == /dev/tty* ]]; then
+      sudo /root/bin/utils.sh reboot "$@"
+      return
+    fi
+    case ${1,,} in
+    y | -y) ;;
+    *)
+      local k=
+      read -t5 -p "Shutdown [NY] ? " k || { echo; return 2; }
+      [[ $k == 'Y' ]] || return 1;;
+    esac
+    hyprshutdown -t 'Shutting down...' --post-cmd "sudo -E /root/bin/utils.sh shutdown -y"
+  } # }}}
+  LogoutF() { # {{{
+    if [[ $(tty) == /dev/tty* ]]; then
+      return
+    fi
+    case ${1,,} in
+    y | -y) ;;
+    *)
+      local k=
+      read -t5 -p "Logout [NY] ? " k || { echo; return 2; }
+      [[ $k == 'Y' ]] || return 1;;
+    esac
+    hyprshutdown -t 'Logging out...'
+  } # }}}
+  alias reboot='rebootF'
+  alias shutdown='shutdownF'
+  alias Logout='LogoutF'
+fi # }}}
 # }}}
 export -f bash-trace change-monitor clean-ansi mapShortCutToFull rpath
 

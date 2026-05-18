@@ -33,17 +33,15 @@ _matching-sections() { # @@ # {{{
     fi
   } # }}}
   local err=
-  cat $file | \
-    case $method in # {{{
-    vim-fold) __pcregrep "$prefix"' *# \{\{(\{([^{}]++|(?1))*(# )?\})\}\}' ;;
-    '{')      __pcregrep "$prefix"' *(\{([^{}]++|(?1))*\})';;
-    '(')      __pcregrep "$prefix"' *(\(([^()]++|(?1))*\))';;
-    '<')      __pcregrep "$prefix"' *(<([^<>]++|(?1))*>)';;
-    '[')      __pcregrep "$prefix"' *(\[([^\[\]]++|(?1))*\])';;
-    esac # }}}
+  case $method in # {{{
+  vim-fold) __pcregrep "$prefix"' *# \{\{(\{([^{}]++|(?1))*(# )?\})\}\}' ;;
+  '{')      __pcregrep "$prefix"' *(\{([^{}]++|(?1))*\})';;
+  '(')      __pcregrep "$prefix"' *(\(([^()]++|(?1))*\))';;
+  '<')      __pcregrep "$prefix"' *(<([^<>]++|(?1))*>)';;
+  '[')      __pcregrep "$prefix"' *(\[([^\[\]]++|(?1))*\])';;
+  esac <"$file" # }}}
   err=$?
   unset -f __pcregrep
   return $?
 } # }}}
 _matching-sections "$@"
-

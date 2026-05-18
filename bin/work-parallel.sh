@@ -27,7 +27,7 @@ tester-buffer() { # {{{
   while mapfile -t -n $n aryIn && ((${#aryIn[@]})); do
     mapfile -t -n $n aryOut < <(printf '%s\n' "${aryIn[@]}" | sed 's/^/-b- /')
     printf '%s\n' "${aryOut[@]}"
-  done < <(cat -)
+  done
 } # }}}
 tester() { # {{{
   local n=100 i=
@@ -36,7 +36,7 @@ tester() { # {{{
     for i in ${!aryIn[@]}; do # {{{
       echo "${aryIn[$i]}" | sed 's/^/-s- /'
     done # }}}
-  done < <(cat -)
+  done
 } # }}}
 cmd_wrapper() { # {{{
   local fin="$1"
@@ -49,7 +49,7 @@ cmd_wrapper() { # {{{
   if [[ $cmdWorker == *:* && -e "${cmdWorker%%:*}" ]]; then
     source ${cmdWorker%%:*} && cmdWorker=${cmdWorker#*:} # form: shell-script:function-to-call - for time optimisation
   fi
-  cat "$fin" | eval "$cmdWorker" >"$fin.tmp"
+  <"$fin" eval "$cmdWorker" >"$fin.tmp"
 } # }}}
 f=
 cmdWorker="cat -"
@@ -92,7 +92,7 @@ fi # }}}
 cmdWorker="${cmdWorker#\'}"
 cmdWorker="${cmdWorker%\'}"
 [[ -z $cmdWorker ]] && echorm 0 "Empty command" && exit 1
-lines=$(cat "$f" | wc -l)
+read lines _ < <(wc -l "$f")
 is-installed parallel split || singleCPU=true
 [[ $lines -gt $linesMax ]] || singleCPU=true
 [[ $lines -gt $cpu ]]      || cpu=$lines

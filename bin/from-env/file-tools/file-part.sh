@@ -75,7 +75,7 @@ _file-part() { # @@ # {{{
     [[ -z $regionE ]] && regionE="^$"
   fi # }}}
   echormf 2 regionS regionE foldet
-  cat "$f" | sed -n '/'"$regionS"'/,/'"$regionE"'/p' | { $keep_first_last && cat - || sed -e '1d' -e '$d'; }
+  sed -n '/'"$regionS"'/,/'"$regionE"'/p' "$f" | { $keep_first_last && cat - || sed -e '1d' -e '$d'; }
   if $isStdin; then # {{{
     rm -f "$f"
   fi # }}}

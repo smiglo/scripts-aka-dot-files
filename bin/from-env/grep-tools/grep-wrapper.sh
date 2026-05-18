@@ -3,37 +3,32 @@
 
 grep-wrapper() { # @@ # {{{
   if [[ $1 == '@@' ]]; then
-    echo "+tee=true +tee=false +fzf +-fzf"
+    echo "+fzf +-fzf"
     echo "+i +I"
     echo "+cCOLOR@PHRASE"
     echo +c={Gray,Red,Green,Yellow,Blue,Pink,Cyan,Gold,Hls,Search}
     return 0
   fi
   local cmd="grep"
-  [[ $1 != --cmd-* && $1 != +tee* ]] && { grep "$@";  return $?; }
-  local params="$GREP_DEFAULT_PARAMS -s"
+  local params="-s"
   local args=
-  local oldColors=$GREP_COLORS
-  local gnuGrep="$(grep --version | head -n1 | grep -q 'GNU' && echo 'true' || echo 'false')"
-  $IS_MAC && ! $gnuGrep && oldColors=$GREP_COLOR
   local color=
   local use_colors=
-  local ignoreErr=
   local query="${@: -2}"
-  local use_fzf= fzf_params= fzf_prompt= use_tee= smart_case=true
+  local use_fzf= fzf_params= fzf_prompt= smart_case=true
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --cmd-*) cmd=${1/"--cmd-"}
-              case $cmd in
-              pgrep) cmd="grep"; args+=" -P";;
-              zgrep) ignoreErr='--ignore-err';;
-              esac;;
+    --cmd-*)
+      cmd=${1/"--cmd-"}
+      case $cmd in
+      pgrep) cmd="grep"; args+=" -P";;
+      esac;;
     +c=*)    color=${1/"+c="};;
     +c)      color=$2; shift;;
     +c*@*)   args+=" -e \"${1#*@}\""; color=${1%%@*} && color=${color/"+c"};;
     +c*)     color=${1/"+c"};;
-    +tee=*)  use_tee=${1/+tee=};;
-    +tee)    use_tee=true;;
+    +tee=*)  ;;
+    +tee)    ;;
     +-fzf | +-f) use_fzf=false;;
     +fzf  | +f)  use_fzf=$FZF_INSTALLED;;
     +fzf-prompt) fzf_prompt="$2"; shift;;
@@ -68,14 +63,14 @@ grep-wrapper() { # @@ # {{{
     esac
   fi # }}}
   export GREP_COLORS
-  $IS_MAC && ! $gnuGrep && export GREP_COLOR=${GREP_COLORS/mt=}
-  local exclude=
-  [[ -t 0 && $cmd != z* ]] && exclude=" --exclude-dir=.git --exclude-dir=.hg --exclude=tags --exclude='cscope*' $GREP_EXCLUDES"
+  if $IS_MAC; then
+    grep --version | head -n1 | grep -q 'GNU' || export GREP_COLOR=${GREP_COLORS/mt=}
+  fi
+  case $cmd in
+  *grep) params="--color --binary-files=binary $params";;
+  esac
   if [[ -t 0 ]]; then # {{{
     [[ $args != *-h* ]] && params+=" -Hn"
-  fi # }}}
-  if [[ -z $use_tee ]]; then # {{{
-    [[ -t 0 ]] && use_tee=true || use_tee=false
   fi # }}}
   local err=
   if [[ ! -t 1 ]]; then # {{{
@@ -92,28 +87,28 @@ grep-wrapper() { # @@ # {{{
       use_fzf=${fzfUsageA[grep]:-$FZF_INSTALLED}
     fi
   fi # }}}
-  if [[ ! -z $use_colors ]]; then
+  if [[ ! -z $use_colors ]]; then # {{{
     params=" $params "
     params="${params/--color }"
     params="${params/--color=yes}"
     params="${params/--color=no}"
-  fi
+  fi # }}}
   set - "$args"
-  # echoe -w "$use_tee +fzf=$use_fzf $ignoreErr \"eval $cmd\" $params \"$@\" $exclude"
+  # echoe -w "$use_tee +fzf=$use_fzf \"eval $cmd\" $params \"$@\"
   [[ -z $fzf_prompt ]] && fzf_prompt="grep: $query> "
-  if $use_tee || $use_fzf; then
-    $ENV_SCRIPTS/grep-tools/output-to-file.sh --no-sort $use_tee $use_colors +fzf=$use_fzf +fzf-p "--prompt '$fzf_prompt'" $fzf_params $ignoreErr "eval $cmd" $params "$@" $exclude
+  case $use_colors in
+  --colors) # {{{
+    case $cmd in
+    rg*) params+=" --color=always";;
+    *)   params+=" --color=yes";;
+    esac;; # }}}
+  --no-colors) # {{{
+    params+=" --color=never";; # }}}
+  esac
+  if $use_fzf; then
+    eval $cmd $params "$@" | fzf --prompt "$fzf_prompt" -m --sort --ansi $fzf_params
   else
-    case $use_colors in
-    --colors) params+=" --color=yes";;
-    --no-colors)  params+=" --color=never";;
-    esac
-    eval $cmd $params "$@" $exclude
+    eval $cmd $params "$@"
   fi
-  err=$?
-  export GREP_COLORS=$oldColors
-  $IS_MAC && ! $gnuGrep && export GREP_COLOR=$oldColors
-  return $err
 } # }}}
 grep-wrapper "$@"
-

@@ -42,7 +42,7 @@ gdbenv() { # @@ # {{{
       case $1 in
       +core) # {{{
         ulimit -c unlimited
-        echo "core-%e-%p-%t.dmp" | sudo tee /proc/sys/kernel/core_pattern;; # }}}
+        echo "%e-%p-%t.core" | sudo tee /proc/sys/kernel/core_pattern;; # }}}
       +rr) # {{{
         ulimit -c unlimited
         echo "1" | sudo tee /proc/sys/kernel/perf_event_paranoid

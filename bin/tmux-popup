@@ -51,6 +51,7 @@ _tmux-popup() { # @@ # {{{
       params="-EE"
       declare -p TMUX_POPUP_CMD >$TMP_MEM_PATH/tmux-popup.sh
       cat >>$TMP_MEM_PATH/tmux-popup.sh<<-'EOF'
+				import-module echor
 				err=0
 				addWait=false
 				waitTimeout="-t5"

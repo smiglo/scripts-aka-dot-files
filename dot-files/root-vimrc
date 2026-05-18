@@ -1,0 +1,36 @@
+set nocompatible
+
+filetype plugin on
+syntax on
+
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
+set expandtab
+set autoindent
+set smartindent
+set copyindent
+
+set ignorecase
+set smartcase
+set incsearch
+set gdefault
+set wildignorecase
+set hlsearch
+set showmatch
+set mat=2
+
+set nobackup
+set noswapfile
+
+set pastetoggle=<f5>
+
+set list
+set listchars=tab:»\ ,trail:•
+
+nnoremap <silent> j gj<ignore>
+nnoremap <silent> k gk<ignore>
+nnoremap gh ^
+nnoremap gl $
+vnoremap < <gv
+vnoremap > >gv

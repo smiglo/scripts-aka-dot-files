@@ -36,7 +36,7 @@ else
 fi
 
 printer() { # {{{
-  declare -a zone=(- $(cat /sys/class/thermal/thermal_zone*/type | sed 's/\([^ ]*\)\( .*\)\?/\L\1/' ) )
+  declare -a zone=(- $(sed 's/\([^ ]*\)\( .*\)\?/\L\1/' /sys/class/thermal/thermal_zone*/type) )
   declare -A maxs maxsT minsT maxsAt minsAt avg
   local lineNo=1 cnt=0 len=${#zone[*]}
   local l= i= ts= change= v= t= tUp= tDown= vs=
@@ -128,7 +128,7 @@ getGradientColor() { # {{{
   get-color "white"
 } # }}}
 
-[[ -e $pidFile ]] && ps -p "$(cat $pidFile)" >/dev/null && isRunning=true
+[[ -e $pidFile ]] && ps -p "$(< $pidFile)" >/dev/null && isRunning=true
 [[ -t 1 ]] || isStdout=false
 
 while [[ ! -z $1 ]]; do # {{{
@@ -150,7 +150,7 @@ while [[ ! -z $1 ]]; do # {{{
   -p) doPrint=true;;
   -k) # {{{
     $isRunning || exit 0
-    kill-rec $(cat $pidFile)
+    kill-rec $(< $pidFile)
     rm -f $pidFile
     exit 0;; # }}}
   *) break;;
@@ -175,14 +175,14 @@ if ! $doPrint && ! $oneShot && ! $out2dev; then # {{{
 fi # }}}
 if $doPrint; then # {{{
   if [[ ! -t 0 ]]; then
-    cat -
+    printer -
   elif [[ ! -e $logFile ]]; then
     exit 1
   elif $isRunning; then
-    tail --pid $(cat $pidFile) -f $logFile
+    tail --pid $(< $pidFile) -f $logFile | printer -
   else
-    cat $logFile
-  fi | printer -
+    printer - < $logFile
+  fi
   exit 0
 fi # }}}
 
@@ -209,7 +209,7 @@ fi # }}}
   sp=8
   if $printHeader; then # {{{
     l1= l2=
-    for i in $(cat /sys/class/thermal/thermal_zone*/type | sed 's/\([^ ]*\)\( .*\)\?/\L\1/'); do
+    for i in $(sed 's/\([^ ]*\)\( .*\)\?/\L\1/' /sys/class/thermal/thermal_zone*/type); do
       [[ ${thresholds[$i]} != '-' ]] || continue
       l1+="$(printf "%-${sp}s " "${i:0:$sp}")"
       l2+="$(printf "%-${sp}s " "${thresholds[$i]}")"
@@ -219,8 +219,8 @@ fi # }}}
   fi # }}}
   while true; do # {{{
     sleep-precise -s
-    readarray -t ty <<<$(cat /sys/class/thermal/thermal_zone*/type | sed 's/\([^ ]*\)\( .*\)\?/\L\1/')
-    readarray -t te <<<$(cat /sys/class/thermal/thermal_zone*/temp | sed 's/...$//')
+    readarray -t ty <<<$(sed 's/\([^ ]*\)\( .*\)\?/\L\1/' /sys/class/thermal/thermal_zone*/type)
+    readarray -t te <<<$(sed 's/...$//' /sys/class/thermal/thermal_zone*/temp)
     if $rawFormat; then # {{{
       for i in ${!te[*]}; do
         [[ ${thresholds[${ty[i]}]} != '-' ]] || continue

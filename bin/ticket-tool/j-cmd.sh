@@ -408,16 +408,16 @@ if $do_grep; then # {{{
     ( tail --pid=$$ -q -F $f_dot | while read l; do progress-dot; done; rm -f $f_dot ) &
     s="$TICKET_TOOL_PATH/ticket-tool.sh --issue \$issue"
     echo -e "$issues_newer" | work-parallel.sh --lines-max 6 \
-      "command cat - | while read issue; do [[ -z \$issue ]] && continue; echo '.' >&3; $s ? \$($s ? | tr ' ' '\n' | sort -u | tr '\n' ' ') | sed -e '/^[^:]*:#/d' -e '/# IGN$/d' -e '/:echorm/d' | eval sed -e 's/^/\$issue:/'; done" \
+      "while read issue; do [[ -z \$issue ]] && continue; echo '.' >&3; $s ? \$($s ? | tr ' ' '\n' | sort -u | tr '\n' ' ') | sed -e '/^[^:]*:#/d' -e '/# IGN$/d' -e '/:echorm/d' | eval sed -e 's/^/\$issue:/'; done" \
     >"$tmpFile"
-    [[ -e $kb_file ]] && command cat "$kb_file" >> "$tmpFile"
+    [[ -e $kb_file ]] && cat "$kb_file" >> "$tmpFile"
     mv "$tmpFile" "$kb_file"
     progress-dot --end
     exec 3>&-
   fi
   if [[ -t 1 ]]; then # {{{
     tmpFile="$TMP_MEM_PATH/kb-grep.txt"
-    { [[ -z "$list" ]] && command cat "$kb_file" || grep "^\($list\):" "$kb_file"; } | \
+    { [[ -z "$list" ]] && cat "$kb_file" || grep "^\($list\):" "$kb_file"; } | \
       fzf -i --exit-0 --no-sort --multi --ansi --height 100% --prompt='Tickets> ' \
         --preview "fzf_wrapper {} {q} -c prev --prev 20" \
         --preview-window 'hidden' \
@@ -433,7 +433,7 @@ if $do_grep; then # {{{
         vim --fast "$tmpFile"
       fi
   else
-    [[ -z "$list" ]] && command cat "$kb_file" || grep "^\($list\):" "$kb_file"
+    [[ -z "$list" ]] && cat "$kb_file" || grep "^\($list\):" "$kb_file"
   fi # }}}
   exit 0
 fi # }}}

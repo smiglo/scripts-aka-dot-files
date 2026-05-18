@@ -94,7 +94,7 @@ _status() { # ring buffer a.k.a circular file # @@ # {{{
     local l=
     (
       [[ -e $f ]] || touch $f
-      linesF=0; linesF=$(cat $f | wc -l)
+      read linesF _ < <(wc -l $f)
       while IFS= read -r l; do
         [[ -z $l ]] && break
         if [[ ! -z $n ]]; then # {{{
@@ -130,7 +130,7 @@ _status() { # ring buffer a.k.a circular file # @@ # {{{
           echo "$l" # }}}
         fi >>$f
         linesF=$((linesF + 1))
-      done < <(cat -)
+      done
     ) ;; # }}}
   esac
   return 0

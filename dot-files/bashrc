@@ -54,7 +54,7 @@ __bashrc_exit() { # {{{
   fi # }}}
   if $attach; then
     local lastSession=
-    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && lastSession="$(cat $TMP_PATH/.tmux_last_session.$USER)"
+    [[ -e $TMP_PATH/.tmux_last_session.$USER ]] && lastSession="$(< $TMP_PATH/.tmux_last_session.$USER)"
     tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=${TMUX_SESSION_DEFAULT:-'MAIN'}
     tmux has-session -t $lastSession 1>/dev/null 2>&1 || lastSession=
     [[ -n $lastSession ]] && lastSession="-t $lastSession"
@@ -253,7 +253,7 @@ export PATH="${PATH//@END@:}"
 export PATH="${PATH//:.:/:}"
 export PATH="${PATH//::/:}"
 export PATH="${PATH%:}"
-export PATH="$(remove-dups --check ".:$PATH")"
+export PATH="$(remove-dups ".:$PATH")"
 $IS_WSL && export PATH="$(printf "%s" "$PATH" | awk -v RS=':' -v ORS=':' '!/\/mnt/ {print}')"
 export HISTIGNORE="$(remove-dups "$HISTIGNORE")"
 export PHISTORY_IGNORED_COMMANDS="$(remove-dups "$PHISTORY_IGNORED_COMMANDS")"

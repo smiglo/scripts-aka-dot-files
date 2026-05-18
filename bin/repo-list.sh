@@ -33,7 +33,7 @@ if [[ -t 0 ]]; then
     repos=$this_dir
   else
     repos="${REPO_LIST:-$REPO_LIST_DEFAULT} $REPOS_TO_INCLUDE"
-    [[ -e $repos && ! -d $repos ]] && repos="$(cat $repos)"
+    [[ -e $repos && ! -d $repos ]] && repos="$(< $repos)"
   fi
 else
   repos="$(cat -)"
@@ -55,7 +55,7 @@ while [[ ! -z $1 ]]; do
   -l | --list) show_list=true;;
   -r | --repos) # {{{
     repos="$2"
-    [[ -e $repos && ! -d $repos ]] && repos="$(cat $repos)"
+    [[ -e $repos && ! -d $repos ]] && repos="$(< $repos)"
     shift;; # }}}
   -R) repos=;;
   --show-changed) show_all=false;;

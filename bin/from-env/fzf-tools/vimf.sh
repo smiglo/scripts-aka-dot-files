@@ -15,7 +15,7 @@ _vimf() { # {{{
     local out= i=
     while read i; do
       [[ -f "${i%%:*}" ]] && out+="$i\n"
-    done <<<"$(cat - | tr '\0' '\n' | sort)"
+    done < <(tr '\0' '\n' | sort)
     [[ -z $out ]] && return 0
     files="$(
       { echo -en "$out"; } \

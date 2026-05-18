@@ -11,52 +11,6 @@ ${RCSTUFF_FORCE:-false} && BASHRC_COMPLETION_FULL=true
 export RCSTUFF_COMPLETION_INSTALLED=true
 # }}}
 if $BASHRC_COMPLETION_FULL; then # {{{
-  compl-help() { # {{{
-    if [[ $1 == @@ ]]; then # {{{
-      echo "$EXPORTED_FUNCTIONS"
-      echo "-s --short -l --long @@-f @@-d"
-      declare -Fx | cut -d' ' -f3 | command grep -v "^_"
-      return 0
-    fi # }}}
-    local cmd= short=false
-    while [[ ! -z $1 ]]; do # {{{
-      case $1 in
-      -l | --long)  short=false;;
-      -s | --short) short=true;;
-      *) cmd="$1"; shift $#;;
-      esac; shift
-    done # }}}
-    if [[ -z $cmd && ! -t 0 ]]; then
-      cmd="$(<-)"
-    elif [[ -e "$cmd" ]]; then
-      cmd="$(<"$cmd")"
-    elif ! declare -F "$cmd" >/dev/null 2>&1; then
-      cmd="$(which "$cmd")"
-      cmd="$(<"$cmd")"
-    else
-      cmd="$(type "$cmd")"
-      if [[ $cmd =~ (\$ENV_SCRIPTS/[^ ]*) ]]; then
-        local f=${BASH_REMATCH[1]}
-        f="$(eval echo "$f")"
-        cmd="$(<$f)"
-      fi
-    fi
-    local indent="$(echo "$cmd" | command grep '^ *while \[\[ ! -z $1 \]\]; do' | head -n1 | command grep -o "^ *")"
-    local parser="$(echo "$cmd" | sed -n '/'"^$indent"'while/,/'"^$indent"'done/p' | command cat -n)"
-    local caseS="$(echo "$parser" | command cat | awk '/case/ {print $1}' | head -n1)"
-    local caseE="$(echo "$parser" | tac | awk '/esac/ {print $1}' | head -n1)"
-    caseS=$((caseS+1)) caseE=$((caseE-1))
-    parser="$(echo "$parser" | sed -n "$caseS,$caseE p" | cut -c9-)"
-    indent="$(echo "$parser" | head -n1 | command grep -o "^ *")"
-    parser="$(echo "$parser" | sed 's/^'"$indent"'//')"
-    if $short; then
-      echo "$parser" | command grep "^[^ ][^)]*)" | sed 's/).*//' | { if [[ -t 1 ]] && is-installed column; then column -t; else command cat -; fi; }
-    else
-      echo "$parser" | sed -e '/^;;/d' -e 's/;$//' | hl-bash +c=Search "^[^ ][^)]*)"
-    fi
-  }
-  alias ch='compl-help'
-  compl-add compl-help ch # }}}
   _completion_vim() { # {{{
     COMPREPLY=()
     local cmd=${COMP_WORDS[0]}
@@ -76,12 +30,12 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   # }}}
   # Completion for git aliases defined in git-extra-completion.sh # {{{
   for ii in $($SCRIPT_PATH/git/git-extra-completion.sh --list); do
-    eval "_git_${ii}() { compl-gen; }"
+    eval "_git_${ii}() { compl-new; }"
   done
   for ii in $(cd $SCRIPT_PATH/git/bin; ls *); do
     f=${ii#git-} && f=${f//[-]/_}
     grep -q "@@" $SCRIPT_PATH/git/bin/$ii || continue
-    eval "_git_$f() { compl-gen; }"
+    eval "_git_$f() { compl-new; }"
   done
   # }}}
   # Set generic completion # {{{
@@ -107,16 +61,10 @@ if $BASHRC_COMPLETION_FULL; then # {{{
     fi
   done # }}}
   unset COMPLETION_GENERIC_UTILS COMPLETION_GENERIC_FUNCTIONS COMPLETION_GENERIC_UTILSCOMPLETION_GENERIC_FUNCTIONS_OLD
-  for ii in $BIN_PATH/*.sh; do # {{{
-    case $(readlink -f $ii) in
-    $SCRIPT_PATH/* | $RUNTIME_PATH/* | $PRJ_PATH/* | $TOOLS_PATH/*)
-      compl-add "${ii##*/}";;
-    esac
-  done # }}}
   # }}}
   # Hosts # {{{
   if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command grep -vq "^|1|"; then
-    complete -D -W "$( echo `command cat ~/.ssh/known_hosts | cut -f 1 -d ' ' | sed -e s/,.*//g | uniq | command grep -v "\["`;)" ssh
+    complete -D -W "$(cut -f 1 -d ' ' $HOME/.ssh/known_hosts | sed -e s/,.*//g | uniq | command grep -v "\[")" ssh
   fi # }}}
   # Vim # {{{
   _do_vim_completion
@@ -134,13 +82,17 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   # all from own bins/ # {{{
   add_for_all() { # {{{
     local a_dir=$1 a_file=
+    [[ -e $a_dir ]] || return
     for a_file in $a_dir/*; do
+      [[ -e $a_file ]] || continue
       a_file="$(realpath "$a_file")"
       [[ -f $a_file && -x $a_file ]] || continue
       case $a_file in
       $RUNTIME_PATH/bin/* | $SCRIPT_PATH/*);;
+      $BIN_PATH/*.sh);;
       *) continue
       esac
+      [[ $(file -b "$a_file") =~ "ASCII text" ]] || continue
       compl-add $a_file
     done
   } # }}}
@@ -150,6 +102,7 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   done
   unset pp
   add_for_all $BIN_PATH
+  add_for_all $RUNTIME_PATH/bin
   unset -f add_for_all
   # }}}
 fi # }}}

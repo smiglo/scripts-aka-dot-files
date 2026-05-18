@@ -52,6 +52,16 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
         [[ -e $p/cfg ]] && ret+=" ${p##*/}"
       done
       echo "${ret:----}";; # }}}
+    --update) # {{{
+      steps=
+      [[ -f $SCRIPT_PATH/inits/setup-env.to-apply ]] && steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")"
+      for p in $PROFILES_PATH/*; do # {{{
+        f="$p/inits/setup-env.to-apply"
+        [[ -f $f ]] && steps+=" $(get-steps $f "update")"
+      done # }}}
+      [[ -f $appPath/setup-env.to-apply ]] && steps+=" $(get-steps $appPath/setup-env.to-apply "update")"
+      echo "$steps"
+      exit 0;; # }}}
     *) # {{{
       steps="$(get-steps $thisFile)"
       steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.conf)"
@@ -64,7 +74,7 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
         echo "$steps"
         exit 0
       fi
-      echo "--clean -p --no-sudo --gui --no-gui -v --verbose -f --force --easy --core-env --all --just-mark - --update --notes --add-note --add-update"
+      compl-get-args "@@:main" < "$0"
       log() { : ; }
       declare -A stepsList=()
       useSudo=${SETUP_ENV_USE_SUDO:-true}
@@ -145,7 +155,9 @@ mark-done() { # {{{
   local varName="stepsDone" prefix="install" file="$stepsDoneF" IFS=$IFS
   [[ -n $DONE_PROPERTIES ]] && IFS=$':' read -r varName prefix file <<<"$DONE_PROPERTIES"
   local -n ref=$varName
-  ref[$1]="$(type $prefix-$1 | get-fingerprint)"
+  local s=$(type $prefix-$1 | tail -n+2 | get-fingerprint)
+  ref[$1]="$s"
+  ref[zzz:$s]=
   (
     echo "declare -A $varName=()"
     for i in $(echo ${!ref[*]} | tr ' ' '\n' | sort); do
@@ -155,10 +167,14 @@ mark-done() { # {{{
 } # }}}
 is-done() { # {{{
   local varName="stepsDone" prefix="install" file="$stepsDoneF" IFS=$IFS
-  [[ -n $DONE_PROPERTIES ]] && IFS=$':' read -r varName prefix file <<<"$DONE_PROPERTIES"
+  if [[ -n $DONE_PROPERTIES ]]; then
+    IFS=$':' read -r varName prefix file <<<"$DONE_PROPERTIES"
+  else
+    [[ -e $confDir/step-$1.done ]] && return 1
+  fi
   local -n ref=$varName
-  [[ -e $confDir/step-$1.done ]] && return 1
-  [[ ${ref[$1]} == $(type $prefix-$1 | get-fingerprint) ]]
+  local s=$(type $prefix-$1 | tail -n+2 | get-fingerprint)
+  [[ -v ref[zzz:$s] || ${ref[$1]} == $s ]]
 } # }}}
 check-fingerprint() { # {{{
   local sumNew="$(echo "$1" | get-fingerprint)" sumF="$confDir/step-$2.done" sumOld=0
@@ -201,7 +217,7 @@ bck() { # {{{
   esac
 } # }}}
 appender() { # {{{
-  local src=$1 dst=$2 p= foundCount=0 lastFound= subPath="dot-files"
+  local src=$1 dst=$2 doLink=${3:-true} p= foundCount=0 lastFound= subPath="dot-files"
   bck $dst
   if [[ -e $SCRIPT_PATH/$subPath/$src ]]; then
     log -s=$verbose "$src - in root"
@@ -241,9 +257,13 @@ appender() { # {{{
   fi
   [[ ! -e $dst ]] || [[ -s $dst ]] || { log -s=$verbose "$src - not created or empty, ignoring"; return 1; }
   if (( foundCount == 1 )); then
-    log -s=$verbose "$src - just one found in $lastFound, linking"
-    rm -f $dst
-    ln -sf $lastFound $dst
+    if $doLink; then
+      log -s=$verbose "$src - just one found in $lastFound, linking"
+      rm -f $dst
+      ln -sf $lastFound $dst
+    else
+      ln -sf $lastFound $dst.lnk
+    fi
   fi
   bck --clean $dst
 } # }}}
@@ -319,7 +339,7 @@ install-packages() { # {{{
     is-installed brew || { log "no brew"; return 1; };; # }}}
   esac
   log -s=$verbose "$list"
-  os-install "$list" || return 1
+  os-install $list || return 1
 } # }}}
 install-basics() { # {{{
   check-fingerprint "$(declare -p dotFilesBasicList)" basics || { log -s=$verbose "nothing new to install"; return 0; }
@@ -434,7 +454,8 @@ install-dot-files() { # {{{
   local i=
   log -s=$verbose "list: $(declare -p list)"
   for i in ${!list[*]}; do
-    local dst="${list[$i]:-.$i}" dstForSudo= src="$i"
+    local dst="${list[$i]:-.$i}" dstForSudo= src="$i" doLink=true
+    [[ $dst == @* ]] && doLink=false && dst="${dst#@}"
     [[ $dst == *:* ]] && src=${dst%%:*} && dst=${dst#*:}
     if [[ $dst == /* && $dst != $HOME/* ]]; then
       is-os-allowed +sudo || { log "$i - missing sudo perms"; return 1; }
@@ -455,8 +476,16 @@ install-dot-files() { # {{{
       dst="$HOME/$dst"
     fi
     case $src in
-    /*) bck $dst; ln -sf $src $dst; bck --clean $dst;;
-    *) appender $src $dst || { log "$i - file not found ($src)"; return 1; }
+    /*)
+      bck $dst
+      if $doLink; then
+        ln -sf $src $dst
+      else
+        cp $src $dst
+      fi
+      bck --clean $dst;;
+    *)
+      appender $src $dst $doLink || { log "$i - file not found ($src)"; return 1; }
     esac
     [[ -z $dstForSudo ]] || sudo mv $dst $dstForSudo
   done
@@ -467,20 +496,25 @@ install-ext-update() { # {{{
     declare -A updateApplied=()
     local updateAppliedF="$confDir/step-ext-update.applied"
     [[ -e $updateAppliedF ]] && source $updateAppliedF
-    local list="$(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")" i= name= err=
-    for i in $profiles; do # {{{
-      include-config "$profilesPath/$i/inits/setup-env.to-apply" "update" list
-    done # }}}
-    include-config $appPath/setup-env.to-apply "update" list
-    list="$(echo "$list" | tr '\n' ' ')"
-    log -s=$verbose "list: $list"
+    local force=$force
+    if [[ -z $updateList ]]; then
+      updateList="$(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")" i= name= err=
+      for i in $profiles; do # {{{
+        include-config "$profilesPath/$i/inits/setup-env.to-apply" "update" updateList
+      done # }}}
+      include-config $appPath/setup-env.to-apply "update" updateList
+      updateList="$(echo "$updateList" | tr '\n' ' ')"
+    else
+      force=true
+    fi
+    log -s=$verbose "updateList: $updateList"
     local DONE_PROPERTIES="updateApplied:update:$updateAppliedF"
-    for i in $list; do # {{{
+    for i in $updateList; do # {{{
       is-enabled --ign-list $i 2>/dev/null || continue
       name="$(wide-print $i)"
       $justMark && { mark-done $i; continue; }
-      $force || ! is-done $i "updateApplied" "update" || { continue; }
-      log -s=$verbose "$name updating"
+      $force || ! is-done $i "updateApplied" "update" || continue
+      log "$name updating"
       update-$i; err=$?; set +xv
       (( err == 0 )) || { log "$name failed, exiting"; return 1; }
       mark-done $i
@@ -540,13 +574,29 @@ stepsFromCLI=false
 justMark=false
 update=false
 updateAll=true
+updateList=
 [[ -z $1 ]] && { update=true; initCoreEnv=false; stepsFromCLI=false; }
 declare -A stepsDone=()
 declare -A stepsCLI=()
 [[ -e $stepsDoneF ]] && source $stepsDoneF
 args="${@:-no args}"
-while [[ -n $1 ]]; do # {{{
+while [[ -n $1 ]]; do # @@:main # {{{
   case $1 in
+  --whats-new) # {{{
+    shift
+    ref= p=
+    case $1 in
+    l | last) ref="tmp/sync/last";;
+    '') ref="origin/devel"; p="-R";;
+    *)
+      if [[ $1 =~ ^[0-9]+$ ]]; then
+        ref="HEAD~$1"
+      else
+        ref="$1"
+      fi;;
+    esac
+    git diff $p $ref..HEAD -- ./inits/setup-env.conf ./inits/setup-env.to-apply ./bin/setup-env.sh
+    exit 0;; # }}}
   --add-note | --add-update) # {{{
     cmd="${1#--add-}"; shift
     [[ -e $RUNTIME_PATH/profiles ]] && profiles="$(ls $RUNTIME_PATH/profiles)"
@@ -576,10 +626,11 @@ while [[ -n $1 ]]; do # {{{
       vim $where.notes;;
     update::default)
       lines=
+      [[ -n $value ]] || value="misc-$(date +$DATE_FMT -d @$installTS)"
       if [[ -n $value ]]; then
         cat <<EOF >>$where.to-apply
 update-$value() { # {{{
-  :
+  local _ts="$(date +%y%m%d%H%M%S -d @$installTS)"
 } # }}}
 EOF
         lines="+$(( $(wc -l $where.to-apply | cut -d' ' -f1) - 2 ))"
@@ -587,29 +638,41 @@ EOF
       vim $lines $where.to-apply $HISTFILE;;
     esac # }}}
     exit 0;; # }}}
-  --clean)
+  --just-mark) # {{{
+    shift
+    if [[ -z $1 ]]; then
+      $0 --just-mark-worker --all
+      $0 --just-mark-worker packages basics bin-misc dot-files paru-tools tools
+      $0 --just-mark-worker --update
+    else
+      [[ $1 == '-' ]] && shift
+      $0 --just-mark-worker "$@"
+    fi
+    exit 0;; # }}}
+  --clean) # {{{
     rm -f $logFile $stepsDoneF $confDir/step-*.done $confDir/step-*.applied
-    stepsDone=();;
+    stepsDone=();; # }}}
   --no-sudo) useSudo=false;;
   --gui) hasGui=true;;
   --no-gui) hasGui=false;;
   --easy) boldOnError=false;;
   --core-env) initCoreEnv=true;;
-  --update) update=true;;
-  --notes) update=true; updateAll=false;;
+  --update) update=true; initCoreEnv=false; shift; updateList="$@"; shift $#;;
+  --notes) update=true; updateAll=false; initCoreEnv=false;;
   --all) initCoreEnv=false;;
-  --just-mark) justMark=true;;
+  --just-mark-worker) justMark=true;; # @@:ign
   -f | --force) force=true;;
   -p | --profiles) profiles+=" $2"; shift;;
   -v | --verbose) verbose=true;;
-  *)
+  *) # {{{
     [[ $1 == "--" ]] && shift
     while [[ -n $1 ]]; do
       stepsCLI[$1]=
       shift
     done
     stepsFromCLI=true
-    [[ -z $initCoreEnv ]] && initCoreEnv=false;;
+    force=true
+    [[ -z $initCoreEnv ]] && initCoreEnv=false;; # }}}
   esac; shift
 done # }}}
 log -s=$verbose "--------------------------------------------------" # {{{
@@ -653,12 +716,12 @@ declare -A dotFilesList=()
 declare -A tools=()
 declare -A paruTools=()
 declare -A coreEnv=()
+declare -A stepsList=()
 appPath="$APPS_CFG_PATH/setup-env"
 stepsAll="$(get-steps $thisFile)"
 for si in $stepsAll; do coreEnv[$si]=; done
 unset coreEnv[packages]
 include-config $SCRIPT_PATH/inits/setup-env.conf
-declare -A stepsList=()
 for si in ${stepsCLI:-$stepsAll}; do
   [[ $si =~ ^ext- ]] && continue
   stepsList[$si]=
@@ -703,6 +766,7 @@ log -s=$verbose "dotBasicList : $(declare -p dotFilesBasicList)"
 log -s=$verbose "dotFilesList : $(declare -p dotFilesList)"
 log -s=$verbose "tools        : $(declare -p tools)"
 log -s=$verbose "paruTools    : $(declare -p paruTools)"
+log -s=$verbose "upadteList   : $(declare -p updateList)"
 log -s=$verbose # }}}
 
 if $update; then # {{{
@@ -720,8 +784,8 @@ for si in $stepsAll; do # {{{
     :
   else
     ! $initCoreEnv || [[ -v coreEnv[$si] ]] || continue
-    $force || ! is-done $si || { log -s=$verbose "$name already done, skipping"; continue; }
     $justMark && { mark-done $si; continue; }
+    $force || ! is-done $si || { log -s=$verbose "$name already done, skipping"; continue; }
     if $initCoreEnv; then
       log -s=$verbose "$name from core, executing"
     else
@@ -734,3 +798,9 @@ for si in $stepsAll; do # {{{
   mark-done $si
   log -s=$verbose "$name done"
 done # }}}
+
+if $update; then # {{{
+  log "marking all as done"
+  $0 --just-mark-worker --all
+  $0 --just-mark-worker packages basics bin-misc dot-files paru-tools tools
+fi # }}}

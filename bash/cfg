@@ -6,140 +6,7 @@ ${RCSTUFF_CFG_INSTALLED:-false} && [[ $1 != '--force' ]] && return 0
 [[ $1 == '--force' ]] && shift
 export RCSTUFF_CFG_INSTALLED=true
 # }}}
-# Exports # {{{
-# Git # {{{
-export GIT_PS1_SHOWDIRTYSTATE=true
-export GIT_PS1_SHOWSTASHSTATE=true
-export GIT_PS1_SHOWUNTRACKEDFILES=true
-export GIT_PS1_SHOWUPSTREAM="auto"
-export GIT_PS1_DESCRIBE_STYLE="branch"
-unset GIT_PS1_SHOWCOLORHINTS
-export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
-export GIT_USER_123="${PERS_USER_SHORT}:${PERS_EMAIL_123}"
-# }}}
-# Ack # {{{
-export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match=yellow"
-export ACK_PAGER="less"
-export ACK_PAGER_COLOR="less"
-# }}}
-# Ag # {{{
-export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;214"
-# }}}
-# Bat # {{{
-if [[ -z $BAT_INSTALLED ]]; then
-  export BAT_INSTALLED=false
-  if is-installed -w bat >/dev/null 2>&1; then
-    BAT_INSTALLED=true
-    export BAT_PRG="bat"
-  elif is-installed -w batcat >/dev/null 2>&1; then
-    BAT_INSTALLED=true
-    export BAT_PRG="batcat"
-  fi
-  if $BAT_INSTALLED; then
-    export BAT_THEM2="Solarized (dark)"
-    export BAT_THEME="TwoDark"
-    help() {
-      "$@" --help 2>&1 | $BAT_PRG -p -l help --theme "$BAT_THEM2"
-    }
-  else
-    help() {
-      "$@" --help
-    }
-  fi
-fi
-# }}}
-# FZF # {{{
-if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
-  export FZF_DEFAULT_COMMAND="fzf-find"
-  export FZF_ALT_C_COMMAND="fzf-find -d"
-  fzf_exe="$ENV_SCRIPTS/fzf-tools/fzf-exe.sh" # has to be in this form for vim fzf-plugin
-  if [[ -e $BASHRC_RUNTIME_PATH/fzf.def-opts.env ]]; then # {{{
-    export FZF_DEFAULT_OPTS="$(cat $BASHRC_RUNTIME_PATH/fzf.def-opts.env)"
-  else
-    export FZF_DEFAULT_OPTS="$(cat <<-EOF
-				--multi --exact --no-sort --exit-0 --algo=v2 --no-mouse --height 80% --border --tabstop=2
-				--color=dark,fg:15,fg+:15,bg+:238,hl:214,hl+:208,marker:3,pointer:2
-				--layout=reverse-list
-				--preview '$fzf_exe -c prev --prev 10 -f {1}'
-				--preview-window 'hidden'
-				--bind 'f1:execute($fzf_exe -c less -f {1})'
-				--bind 'f2:execute($fzf_exe -c vim  -f {1})'
-				--bind 'f3:execute($fzf_exe -c pane -f {1})'
-				--bind 'esc:cancel'
-				--bind 'ctrl-a:select-all'
-				--bind '?:toggle-preview'
-				--bind 'ctrl-s:toggle-sort'
-				--bind 'ctrl-y:preview-up'
-				--bind 'ctrl-e:preview-down'
-			EOF
-    )"
-    export FZF_DEFAULT_OPTS="$(echo $FZF_DEFAULT_OPTS | tr -s ' ')"
-    echo "$FZF_DEFAULT_OPTS" >$BASHRC_RUNTIME_PATH/fzf.def-opts.env
-  fi # }}}
-  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-  export FZF_CTRL_T_OPTS="--preview '$fzf_exe -c prev --prev 20 -f {1}'"
-  export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
-  declare -A +x fzfUsageA=([ack-ag]=true [mg]=true [grep]=false [out2file]=true [last-grep]=false [phist]=true [cd]=true)
-  export FZF_USAGE="$(declare -p fzfUsageA)"
-  unset fzf_exe fdfindCmd fzfUsageA
-elif ! $FZF_INSTALLED; then
-  [[ ! -z "$PS1" ]] && echoe -s "FZF not found"
-fi
-# }}}
-# Default values for functions and scripts # {{{
-export GREP_DEFAULT_PARAMS="--color --binary-files=binary"
-export GREP_COLORS='mt=38;5;214:ne:fn=36'
-export HL_DEFAULTS+=" +cB@'\<TB\]'"
-export HL_DEFAULTS+=" +cGold@'\<\(AA|BB|TT\)\>\( |$\)'"
-export HL_DEFAULTS+=" +cRed@'\<\(EE|FF\)\>\( |$\)'"
-export HL_DEFAULTS+=" +cGreen@'\<II\>\( |$\)'"
-export HL_DEFAULTS+=" +cCyan@'\<IMP\>\( |$\)'"
-export HL_DEFAULTS+=" +c'38;5;9' '# {{{|# }}}'"
-export HL_DEFAULTS+=" +cGreen@'\<[a-z0-9]\{40\}\>'"
-export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
-export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
-export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
-export TMUX_INIT_SESSIONS+=" MAIN"
-export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
-export TMUX_PREFIX_2='C-q'
-export TMUX_STATUS_LEFT_EXTRA_MAP+="MAIN:${UNICODE_EXTRA_CHARS[tmux-main]}\n"
-export TMUX_STATUS_RIGHT_EXTRA+=" 001:tmux_info 002:cpu 003:net 005:ssh 008:reminder 010:weather 015:usb 025:time 035:progress_bar"
-export TMUX_SWITCH_WINDOW_MAIN_MAP="*:@2"
-[[ ! -z $TMUX_VERSION ]] || export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
-[[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
-export CD_LAST_DIRS=($PWD)
-[[ -e $HOME/Downloads ]] && export CD_LAST_DIRS_STORED+=":Dw@$HOME/Downloads"
-[[ -e $HOME/Desktop   ]] && export CD_LAST_DIRS_STORED+=":De@$HOME/Desktop"
-export CD_LAST_DIRS_STORED+=":tmux@--cd-spec"
-export CD_LAST_DIRS_STORED+=":docs@--cd-spec"
-# }}}
-# Editor # {{{
-if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
-  if is-installed vim-editor; then
-    export EDITOR="vim-editor"
-  elif [[ $(which vim 2>/dev/null) == "$HOME/"* ]]; then
-    export EDITOR="vim --editor"
-  else
-    export EDITOR="vim -c 'set cursorline'"
-  fi
-  export VISUAL=$EDITOR
-fi
-# }}}
-# }}}
 # Shell setup # {{{
-export QUOTING_STYLE='literal'
-export HISTCONTROL="erasedups:ignoreboth"
-export HISTFILESIZE=1000
-export HISTFILE=$HOME/.bash_history
-[[ -n $TMUX_SESSION ]] && export HISTFILE=$TMUX_SESSION_PATH/bash_history
-export HISTFILE_ORIG=$HISTFILE
-unset HISTTIMEFORMAT
-[[ -z $BASH_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
-if $BASHRC_FULL_START && [[ -e "$BASH_PHISTORY_FILE" ]]; then
-  sed -i '/ | [0-9]\{8\}-[0-9]\{6\} | \.\.\.$/d' "$BASH_PHISTORY_FILE" 2>/dev/null
-  sed -i '/^[^|]/d' "$BASH_PHISTORY_FILE" 2>/dev/null
-fi
-[[ -z $BASH_PHISTORY_SUM_CMD ]] && export BASH_PHISTORY_SUM_CMD="sha256sum | cut -d' ' -f1 |  xxd -r -p | base64"
 shopt -s autocd
 shopt -s cdspell
 shopt -s checkwinsize
@@ -152,7 +19,6 @@ shopt -s histverify
 shopt -s progcomp
 shopt -s progcomp_alias
 set +f
-export GLOBIGNORE=.:..
 # }}}
 # InputRC: Bash shortcuts # {{{
 goto_vi_command() { # {{{
@@ -217,32 +83,7 @@ elif [[ ! -z $TMUX_STATUS_RIGHT_GIT_INTERNAL_PS1 ]]; then
     done
     unset _fi
   fi
-fi
-# }}}
-# Less # {{{
-if [[ -z $LESSOPEN ]]; then
-  : ${LESSPIPE_PATH:="/usr/bin/lesspipe"}
-  if [[ -x "$LESSPIPE_PATH" ]]; then
-    eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
-  fi
-  if is-installed -w dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
-    export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
-  fi
-fi
-export PAGER=less
-export LESSCHARSET='utf-8'
-# Use this if lesspipe.sh exists
-export LESS="-diJRSwX -x4 -z-4 -+F -~"
-# Less man page colors (makes Man pages more readable) # {{{
-export LESS_TERMCAP_mb="$CGreen"
-export LESS_TERMCAP_md="$CCyan"
-export LESS_TERMCAP_me="$COff"
-export LESS_TERMCAP_so="$CRed"
-export LESS_TERMCAP_se="$COff"
-export LESS_TERMCAP_us="$CGold"
-export LESS_TERMCAP_ue="$COff"
-# }}}
-# }}}
+fi # }}}
 # PS1 # {{{
 if ${SET_TITLE_USE_SIMPLE_MODE:-true}; then
   export PROMPT_COMMAND="set-title-pane"
@@ -283,8 +124,7 @@ if false && ! $IS_MAC && [[ -n $DISPLAY ]]; then
     killall xcape >/dev/null 2>&1
     xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
   fi
-fi
-# }}}
+fi # }}}
 # Disable stopping terminal by C-S # {{{
 if type stty >/dev/null 2>&1; then
   stty -ixon 2>/dev/null
