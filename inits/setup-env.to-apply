@@ -60,3 +60,38 @@ update-arch-hypr-lua() { # {{{
     ln -sf $SCRIPT_PATH/dot-files/arch/hyprland/monitors.lua $HOME/.config/hypr/;;
   esac
 } # }}}
+update-gdb-move() { # {{{
+  rm -rf $HOME/.gdbinit $HOME/.config/gdb
+  mkdir -p $HOME/.config/gdb
+  ln -sf $SCRIPT_PATH/dot-files/gdb/gdbinit $HOME/.gdbinit
+  ln -sf $SCRIPT_PATH/dot-files/gdb/040-pwndbg.gdb $HOME/.config/gdb/
+  ln -sf $SCRIPT_PATH/dot-files/gdb/050-gdb-dashboard.gdb $HOME/.config/gdb/
+  ln -sf $SCRIPT_PATH/dot-files/gdb/051-gdb-dashboard-conf.gdb $HOME/.config/gdb/
+  ln -sf $SCRIPT_PATH/dot-files/gdb/090-init.gdb $HOME/.config/gdb/
+  ln -sf $SCRIPT_PATH/dot-files/gdb/091-init.py $HOME/.config/gdb/
+} # }}}
+update-tmux-move() { # {{{
+  rm -rf $HOME/.tmux.bash $HOME/.tmux.conf $HOME/.tmux/plugins/tpm
+  ln -sf $SCRIPT_PATH/dot-files/tmux/tmux.bash $HOME/.tmux.bash
+  ln -sf $SCRIPT_PATH/dot-files/tmux/tmux.conf $HOME/.tmux.conf
+  mkdir -p $HOME/.tmux/plugins
+  tar xzf $SCRIPT_PATH/dot-files/tmux/tpm.tgz -C $HOME/.tmux/plugins
+} # }}}
+update-git-move() { # {{{
+  rm -rf $HOME/.gitconfig $HOME/.gitignore $HOME/.git_template
+  ln -sf $SCRIPT_PATH/dot-files/git/gitconfig $HOME/.gitconfig
+  ln -sf $SCRIPT_PATH/dot-files/git/gitignore $HOME/.gitignore
+  ln -sf $SCRIPT_PATH/dot-files/git/template $HOME/.git_template
+} # }}}
+update-alacritty-move-Nvirtos() { # {{{
+  local i=
+  for i in ${!dotFilesList[*]}; do
+    [[ $i == alacritty/* ]] || continue
+    v=${dotFilesList[$i]}
+    [[ $v == @* ]] && continue
+    [[ $v == */ ]] && v+="${i##*/}"
+    [[ -h $HOME/$v ]] || continue
+    rm $HOME/$v
+    ln -sf $SCRIPT_PATH/dot-files/$i $HOME/$v
+  done
+} # }}}

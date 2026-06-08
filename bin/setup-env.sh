@@ -7,22 +7,30 @@ get-steps() { # {{{
   sed -n '/^\s*'"$prefix"'-.*()/ s/'"$prefix"'-\(.*\)().*/\1/p' $1
 } # }}}
 is-enabled() { # {{{
-  local skipListCheck=false
-  [[ $1 == "--ign-list" ]] && skipListCheck=true && shift
-  local step=$1
+  local step=$1 list= checkList=false
+  if (( $# == 2 )); then
+    local -n list=$2
+    checkList=true
+  fi
   (
-    $skipListCheck || [[ -v stepsList[$step] ]] || return 1
+    ! $checkList || [[ -v list[$step] ]] || return 1
     for i in arch ubuntu mac; do
       [[ ! $step =~ "$i-" ]] || [[ $OS_KIND == "$i" ]] || return 1
     done
-    [[ ! $step =~ "sudo-" ]] || $useSudo || return 1
-    [[ ! $step =~ "gui-" ]] || $hasGui || return 1
-    [[ ! $step =~ "linux-" ]] || $isLinux || return 1
-    [[ ! $step =~ "docker-" ]] || $IS_DOCKER || return 1
-    [[ ! $step =~ "virtos-" ]] || $IS_VIRTUAL_OS || return 1
-    [[ ! $step =~ "wsl-" ]] || $IS_WSL || return 1
+    [[ ! "-$step" =~ "-sudo" ]] || $useSudo || return 1
+    [[ ! "-$step" =~ "-Nsudo" ]] || ! $useSudo || return 1
+    [[ ! "-$step" =~ "-gui" ]] || $hasGui || return 1
+    [[ ! "-$step" =~ "-Ngui" ]] || ! $hasGui || return 1
+    [[ ! "-$step" =~ "-linux" ]] || $isLinux || return 1
+    [[ ! "-$step" =~ "-Nlinux" ]] || ! $isLinux || return 1
+    [[ ! "-$step" =~ "-docker" ]] || $IS_DOCKER || return 1
+    [[ ! "-$step" =~ "-Ndocker" ]] || ! $IS_DOCKER || return 1
+    [[ ! "-$step" =~ "-virtos" ]] || $IS_VIRTUAL_OS || return 1
+    [[ ! "-$step" =~ "-Nvirtos" ]] || ! $IS_VIRTUAL_OS || return 1
+    [[ ! "-$step" =~ "-wsl" ]] || $IS_WSL || return 1
+    [[ ! "-$step" =~ "-Nwsl" ]] || ! $IS_WSL || return 1
     return 0
-  ) || { log "step $step disabled"; return 1; }
+  ) || { log -s=$verbose "step $step disabled"; return 1; }
   return 0
 } # }}}
 
@@ -52,31 +60,7 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
         [[ -e $p/cfg ]] && ret+=" ${p##*/}"
       done
       echo "${ret:----}";; # }}}
-    --update) # {{{
-      steps=
-      [[ -f $SCRIPT_PATH/inits/setup-env.to-apply ]] && steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")"
-      for p in $PROFILES_PATH/*; do # {{{
-        f="$p/inits/setup-env.to-apply"
-        [[ -f $f ]] && steps+=" $(get-steps $f "update")"
-      done # }}}
-      [[ -f $appPath/setup-env.to-apply ]] && steps+=" $(get-steps $appPath/setup-env.to-apply "update")"
-      echo "$steps"
-      exit 0;; # }}}
     *) # {{{
-      steps="$(get-steps $thisFile)"
-      steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.conf)"
-      for p in $PROFILES_PATH/*; do # {{{
-        f="$p/inits/setup-env.conf"
-        [[ -e $f ]] && steps+=" $(get-steps $f)"
-      done # }}}
-      [[ -e $appPath/setup-env.conf ]] && steps+=" $(get-steps $appPath/setup-env.conf)"
-      if [[ " $@ " == *" -- "* ]]; then
-        echo "$steps"
-        exit 0
-      fi
-      compl-get-args "@@:main" < "$0"
-      log() { : ; }
-      declare -A stepsList=()
       useSudo=${SETUP_ENV_USE_SUDO:-true}
       hasGui=${SETUP_ENV_HAS_GUI:-true}
       case $OS_KIND,$IS_VIRTUAL_OS in
@@ -84,11 +68,43 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
       ubuntu,*) dpkg -l | grep -q "ubuntu-desktop" || hasGui=false;;
       *)
       esac
+      case $OS_KIND in
+      ubuntu | arch) isLinux=true;;
+      *) isLinux=false;;
+      esac
+      log() { : ; }
       list=
-      for s in $steps; do
-        stepsList[$s]=
-        is-enabled $s && list+=" $s"
-      done
+      declare -A stepsList=()
+      if [[ " $@ " == *" --update "* ]]; then
+        steps=
+        [[ -f $SCRIPT_PATH/inits/setup-env.to-apply ]] && steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")"
+        for p in $PROFILES_PATH/*; do # {{{
+          f="$p/inits/setup-env.to-apply"
+          [[ -f $f ]] && steps+=" $(get-steps $f "update")"
+        done # }}}
+        [[ -f $appPath/setup-env.to-apply ]] && steps+=" $(get-steps $appPath/setup-env.to-apply "update")"
+        for s in $steps; do
+          stepsList[$s]=
+          is-enabled $s "stepsList" && list+=" $s"
+        done
+      else
+        steps="$(get-steps $thisFile)"
+        steps+=" $(get-steps $SCRIPT_PATH/inits/setup-env.conf)"
+        for p in $PROFILES_PATH/*; do # {{{
+          f="$p/inits/setup-env.conf"
+          [[ -e $f ]] && steps+=" $(get-steps $f)"
+        done # }}}
+        [[ -e $appPath/setup-env.conf ]] && steps+=" $(get-steps $appPath/setup-env.conf)"
+        if [[ " $@ " == *" -- "* ]]; then
+          echo "$steps"
+          exit 0
+        fi
+        compl-get-args "@@:main" < "$0"
+        for s in $steps; do
+          stepsList[$s]=
+          is-enabled $s "stepsList" && list+=" $s"
+        done
+      fi
       echo "$list";; # }}}
     esac;; # }}}
   esac
@@ -97,7 +113,7 @@ fi # }}}
 
 # functions # {{{
 wide-print() { # {{{
-  local w=15 msg="$1"
+  local w=$wideLen msg="$1"
   (( $# == 2 )) && { w=$1; msg="$2"; }
   printf "[ %-${w}s ]" "$msg"
 } # }}}
@@ -111,8 +127,9 @@ log() { # {{{
     case $1 in
     false) return;;
     true) ;;
-    -s=false | -s=!true)  onStderr=false;;
-    -s=true  | -s=!false) ;;
+    -s=false | -s=!true  | -s=0) onStderr=false;;
+    -s=true  | -s=!false | -s=1) ;;
+    -) module=;;
     *) break
     esac; shift
   done
@@ -151,30 +168,29 @@ is-os-allowed() { # {{{
 get-fingerprint() { # {{{
   sha1sum | cut -d' ' -f1
 } # }}}
-mark-done() { # {{{
-  local varName="stepsDone" prefix="install" file="$stepsDoneF" IFS=$IFS
-  [[ -n $DONE_PROPERTIES ]] && IFS=$':' read -r varName prefix file <<<"$DONE_PROPERTIES"
-  local -n ref=$varName
-  local s=$(type $prefix-$1 | tail -n+2 | get-fingerprint)
-  ref[$1]="$s"
-  ref[zzz:$s]=
-  (
-    echo "declare -A $varName=()"
-    for i in $(echo ${!ref[*]} | tr ' ' '\n' | sort); do
-      echo "$varName[$i]=\"${ref[$i]}\""
-    done
-  ) >$file
-} # }}}
-is-done() { # {{{
-  local varName="stepsDone" prefix="install" file="$stepsDoneF" IFS=$IFS
+done-checker() { # {{{
+  local mode=$1; shift
+  local varName="stepsDone" prefix="install" file="$stepsDoneF" IFS=$IFS checkStepFile=true
   if [[ -n $DONE_PROPERTIES ]]; then
     IFS=$':' read -r varName prefix file <<<"$DONE_PROPERTIES"
-  else
-    [[ -e $confDir/step-$1.done ]] && return 1
+    checkStepFile=false
   fi
   local -n ref=$varName
   local s=$(type $prefix-$1 | tail -n+2 | get-fingerprint)
-  [[ -v ref[zzz:$s] || ${ref[$1]} == $s ]]
+  case $mode in
+  mark-done)
+    ref[$1]="$s"
+    ref[zzz:$s]=
+    (
+      echo "declare -A $varName=()"
+      for i in $(echo ${!ref[*]} | tr ' ' '\n' | sort); do
+        echo "$varName[$i]=\"${ref[$i]}\""
+      done
+    ) >$file;;
+  is-done)
+    $checkStepFile && [[ -e $confDir/step-$1.done ]] && return 0
+    [[ -v ref[zzz:$s] || ${ref[$1]} == $s ]];;
+  esac
 } # }}}
 check-fingerprint() { # {{{
   local sumNew="$(echo "$1" | get-fingerprint)" sumF="$confDir/step-$2.done" sumOld=0
@@ -298,15 +314,23 @@ os-install() { # {{{
   *) log "undefined OS"; return 1;
   esac
 } # }}}
+check-list() { # {{{
+  local name=$1 i= list=
+  shift
+  local -n refList=$name
+  (( ${#refList[*]} )) || { log -s=$verbose - "nothing to install"; return 0; }
+  for i in ${!refList[@]}; do
+    list+=" ${refList[$i]:-$i}"
+  done
+  list="${list# }"
+  check-fingerprint "$list" $name || { log -s=$verbose - "nothing new to install"; return 0; }
+  echo "$list"
+} # }}}
 # }}}
 # install steps: core & packages, order matters # {{{
 install-packages() { # {{{
-  (( ${#packages[*]} )) || { log -s=$verbose "no packages to install"; return 0; }
-  check-fingerprint "$(declare -p packages)" packages || { log -s=$verbose "nothing new to install"; return 0; }
-  local list= i=
-  for i in ${!packages[*]}; do
-    list+=" ${packages[$i]}"
-  done
+  local list=$(check-list packages)
+  [[ -n $list ]] || return 0
   case $OS_KIND in
   ubuntu) # {{{
     is-os-allowed +sudo || { log "no sudo"; return 1; }
@@ -354,7 +378,9 @@ install-basics() { # {{{
   [[ -e $RUNTIME_PATH/runtime-pre.bash ]] || touch $RUNTIME_PATH/runtime-pre.bash
   rm -rf $PROFILES_PATH/*; mkdir -p $PROFILES_PATH
   for i in $profiles; do
-    [[ -e $PROFILES_PATH/$i ]] || ln -sf $SCRIPT_PATH/bash/profiles/$i $PROFILES_PATH/$i
+    [[ ! -e $PROFILES_PATH/$i ]] || continue
+    [[ -d $SCRIPT_PATH/bash/profiles/$i ]] || { log "profile '$i' does not exists"; return 1; }
+    ln -sf $SCRIPT_PATH/bash/profiles/$i $PROFILES_PATH/$i
   done
 } # }}}
 install-bin-misc() { # {{{
@@ -397,10 +423,6 @@ install-vim() { # {{{
   appender "vim-specific" $HOME/.vimrc.specific || true
 } # }}}
 install-git() { # {{{
-  ln -sf $SCRIPT_PATH/git/gitconfig $HOME/.gitconfig
-  ln -sf $SCRIPT_PATH/git/gitignore $HOME/.gitignore
-  rm -f $HOME/.git_template
-  ln -sf $SCRIPT_PATH/git/template $HOME/.git_template
   if [[ ! -e $RUNTIME_PATH/gitconfig ]]; then
     (
       echo "[include]"
@@ -411,10 +433,9 @@ install-git() { # {{{
   fi
 } # }}}
 install-tmux() { # {{{
-  [[ ! -e $HOME/.tmux/plugins ]] && mkdir -p $HOME/.tmux/plugins
-  ln -sf $SCRIPT_PATH/inits/tmux/plugins/tpm   $HOME/.tmux/plugins
-  ln -sf $SCRIPT_PATH/inits/tmux/tmux.conf     $HOME/.tmux.conf
-  ln -sf $SCRIPT_PATH/inits/tmux/tmux.bash     $HOME/.tmux.bash
+  [[ -e $HOME/.tmux/plugins/tpm ]] && return 0
+  mkdir -p $HOME/.tmux/plugins
+  tar xzf $SCRIPT_PATH/dot-files/tmux/tpm.tgz -C $HOME/.tmux/plugins
   # $HOME/.tmux/plugins/tpm/scripts/install_plugins.sh || return 1
 } # }}}
 install-tmux-fingers() { # {{{
@@ -442,9 +463,6 @@ install-tmux-fingers() { # {{{
   )
   (( $? == 0 )) || { "tmux-fingers: installation failed"; return 1; }
 } # }}}
-install-alacritty() { # {{{
-  $SCRIPT_PATH/inits/alacritty/install.sh
-} # }}}
 install-dot-files() { # {{{
   local -n list=${1:-dotFilesList}
   (( ${#list[*]} )) || { log -s=$verbose "nothing to install"; return 0; }
@@ -454,7 +472,7 @@ install-dot-files() { # {{{
   local i=
   log -s=$verbose "list: $(declare -p list)"
   for i in ${!list[*]}; do
-    local dst="${list[$i]:-.$i}" dstForSudo= src="$i" doLink=true
+    local dst="${list[$i]:-.${i##*/}}" dstForSudo= src="$i" doLink=true
     [[ $dst == @* ]] && doLink=false && dst="${dst#@}"
     [[ $dst == *:* ]] && src=${dst%%:*} && dst=${dst#*:}
     if [[ $dst == /* && $dst != $HOME/* ]]; then
@@ -490,15 +508,16 @@ install-dot-files() { # {{{
     [[ -z $dstForSudo ]] || sudo mv $dst $dstForSudo
   done
 } # }}}
-install-ext-update() { # {{{
-  touch "$confDir/step-ext-update.done"
+# }}}
+update-env() { # {{{
+  touch "$confDir/step-update-env.done"
   if $updateAll; then # {{{
     declare -A updateApplied=()
-    local updateAppliedF="$confDir/step-ext-update.applied"
+    local updateAppliedF="$confDir/step-update-env.applied"
     [[ -e $updateAppliedF ]] && source $updateAppliedF
     local force=$force
     if [[ -z $updateList ]]; then
-      updateList="$(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")" i= name= err=
+      updateList="$(get-steps $SCRIPT_PATH/inits/setup-env.to-apply "update")" i= name=
       for i in $profiles; do # {{{
         include-config "$profilesPath/$i/inits/setup-env.to-apply" "update" updateList
       done # }}}
@@ -510,14 +529,13 @@ install-ext-update() { # {{{
     log -s=$verbose "updateList: $updateList"
     local DONE_PROPERTIES="updateApplied:update:$updateAppliedF"
     for i in $updateList; do # {{{
-      is-enabled --ign-list $i 2>/dev/null || continue
+      is-enabled $i || continue
       name="$(wide-print $i)"
-      $justMark && { mark-done $i; continue; }
-      $force || ! is-done $i "updateApplied" "update" || continue
+      $justMark && { done-checker mark-done $i; continue; }
+      $force || ! done-checker is-done $i "updateApplied" "update" || continue
       log "$name updating"
-      update-$i; err=$?; set +xv
-      (( err == 0 )) || { log "$name failed, exiting"; return 1; }
-      mark-done $i
+      update-$i || { log "$name failed, exiting"; return 1; }
+      done-checker mark-done $i
       log -s=$verbose "$name done"
     done # }}}
   fi # }}}
@@ -531,7 +549,7 @@ install-ext-update() { # {{{
   [[ -e $appPath/setup-env.notes ]] && noteFiles[app]=" $appPath/setup-env.notes"
   if [[ ${#noteFiles[*]} ]]; then # {{{
     declare -A notesApplied=()
-    local notesAppliedF="$confDir/step-ext-update-notes.applied"
+    local notesAppliedF="$confDir/step-update-env-notes.applied"
     [[ -e $notesAppliedF ]] && source $notesAppliedF
     local line= s=
     log -s=$verbose "notes: ${noteFiles[*]}"
@@ -554,19 +572,19 @@ install-ext-update() { # {{{
     ) >$notesAppliedF
   fi # }}} # }}}
 } # }}}
-# }}}
 
 # init # {{{
 verbose=false
+verboseLvl=0
 confDir="$HOME/.config/setup-env"
 [[ -e $confDir ]] || mkdir -p $confDir
 stepsDoneF="$confDir/steps.done"
 logFile=$confDir/setup-env.log
 force=false
 hasGui=
+useSudo=
 isLinux=true
 profiles=
-useSudo=
 installTS=$EPOCHSECONDS
 boldOnError=false
 initCoreEnv=
@@ -575,6 +593,7 @@ justMark=false
 update=false
 updateAll=true
 updateList=
+wideLen=12
 [[ -z $1 ]] && { update=true; initCoreEnv=false; stepsFromCLI=false; }
 declare -A stepsDone=()
 declare -A stepsCLI=()
@@ -640,14 +659,23 @@ EOF
     exit 0;; # }}}
   --just-mark) # {{{
     shift
-    if [[ -z $1 ]]; then
+    case $1 in
+    '' | skip-update)
+      skipUpdate=false
+      [[ $1 == skip-update ]] && skipUpdate=true
       $0 --just-mark-worker --all
-      $0 --just-mark-worker packages basics bin-misc dot-files paru-tools tools
-      $0 --just-mark-worker --update
-    else
+      list="packages basics bin-misc dot-files tools cargo-tools pip-tools"
+      case $OS_KIND in
+      arch) is-os-allowed +sudo && list+=" arch-sudo-paru-tools"
+      esac
+      $0 --just-mark-worker $list
+      if ! $skipUpdate; then
+        $0 --just-mark-worker --update
+      fi;;
+    *)
       [[ $1 == '-' ]] && shift
-      $0 --just-mark-worker "$@"
-    fi
+      $0 --just-mark-worker "$@";;
+    esac
     exit 0;; # }}}
   --clean) # {{{
     rm -f $logFile $stepsDoneF $confDir/step-*.done $confDir/step-*.applied
@@ -663,7 +691,8 @@ EOF
   --just-mark-worker) justMark=true;; # @@:ign
   -f | --force) force=true;;
   -p | --profiles) profiles+=" $2"; shift;;
-  -v | --verbose) verbose=true;;
+  -v  | --verbose) verbose=true; verboseLvl=1;;
+  -vv | --verbose2) verbose=true; verboseLvl=2;;
   *) # {{{
     [[ $1 == "--" ]] && shift
     while [[ -n $1 ]]; do
@@ -683,7 +712,7 @@ log -s=$verbose "log-file     : $logFile"
 # env-load # {{{
 if [[ -z $profiles ]]; then # {{{
   [[ -e $RUNTIME_PATH/profiles ]] && profiles="$(ls $RUNTIME_PATH/profiles)"
-elif [[ $profiles == '-' ]]; then
+elif [[ $profiles == ' -' ]]; then
   profiles=
 fi
 log -s=$verbose "profiles     : '$profiles'" # }}}
@@ -694,10 +723,10 @@ if $boldOnError; then
   set -e
 fi
 log -s=$verbose "[    ]         sourcing environment basics"
-source $SCRIPT_PATH/bash/essentials
 source $SCRIPT_PATH/bash/runtime.basic
-source $SCRIPT_PATH/bash/runtime
 source $SCRIPT_PATH/bash/completion.basic
+source $SCRIPT_PATH/bash/essentials
+source $SCRIPT_PATH/bash/runtime
 profilesPath="$SCRIPT_PATH/bash/profiles"
 for p in $profiles; do
   [[ -e $profilesPath/$p/runtime ]] && source $profilesPath/$p/runtime
@@ -709,6 +738,20 @@ done
 log -s=$verbose "[done]         sourcing environment basics"
 # }}}
 # setup # {{{
+case $OS_KIND in # {{{
+ubuntu | arch) isLinux=true;;
+*) isLinux=false
+esac # }}}
+if [[ -z $useSudo ]]; then # {{{
+  useSudo=${SETUP_ENV_USE_SUDO:-true}
+fi # }}}
+if [[ -z $hasGui ]]; then # {{{
+  hasGui=${SETUP_ENV_HAS_GUI:-true}
+  case $OS_KIND,$IS_VIRTUAL_OS in
+  *,true) hasGui=false;;
+  ubuntu,*) dpkg -l | grep -q "ubuntu-desktop" || hasGui=false;;
+  esac
+fi # }}}
 declare -A packages=()
 declare -A binMiscList=()
 declare -A dotFilesBasicList=()
@@ -717,6 +760,8 @@ declare -A tools=()
 declare -A paruTools=()
 declare -A coreEnv=()
 declare -A stepsList=()
+declare -A cargoTools=()
+declare -A pipTools=()
 appPath="$APPS_CFG_PATH/setup-env"
 stepsAll="$(get-steps $thisFile)"
 for si in $stepsAll; do coreEnv[$si]=; done
@@ -730,21 +775,6 @@ for p in $profiles; do # {{{
   include-config "$profilesPath/$p/inits/setup-env.conf"
 done # }}}
 include-config $appPath/setup-env.conf
-if [[ $OS_KIND == "ubuntu" || $OS_KIND == "arch" ]]; then # {{{
-  isLinux=true
-else
-  isLinux=false
-fi # }}}
-if [[ -z $useSudo ]]; then # {{{
-  useSudo=${SETUP_ENV_USE_SUDO:-true}
-fi # }}}
-if [[ -z $hasGui ]]; then # {{{
-  hasGui=${SETUP_ENV_HAS_GUI:-true}
-  case $OS_KIND,$IS_VIRTUAL_OS in
-  *,true) hasGui=false;;
-  ubuntu,*) dpkg -l | grep -q "ubuntu-desktop" || hasGui=false;;
-  esac
-fi # }}}
 [[ -n $initCoreEnv ]] || initCoreEnv=true
 $initCoreEnv && updateAll=false
 # }}}
@@ -757,50 +787,66 @@ log -s=$verbose "backupTS     : $installTS"
 log -s=$verbose "init-core    : $initCoreEnv"
 log -s=$verbose "update       : $update"
 log -s=$verbose "conf-dir     : $confDir"
-log -s=$verbose "stepsCLI     : $(declare -p stepsCLI)"
-log -s=$verbose "stepsList    : $(declare -p stepsList)"
-log -s=$verbose "coreEnv      : $(declare -p coreEnv)"
-log -s=$verbose "packages     : $(declare -p packages)"
-log -s=$verbose "binMiscList  : $(declare -p binMiscList)"
-log -s=$verbose "dotBasicList : $(declare -p dotFilesBasicList)"
-log -s=$verbose "dotFilesList : $(declare -p dotFilesList)"
-log -s=$verbose "tools        : $(declare -p tools)"
-log -s=$verbose "paruTools    : $(declare -p paruTools)"
-log -s=$verbose "upadteList   : $(declare -p updateList)"
+printEnv=$(( verboseLvl >= 2 ))
+log -s=$printEnv "stepsCLI     : $(declare -p stepsCLI)"
+log -s=$printEnv "stepsList    : $(declare -p stepsList)"
+log -s=$printEnv "coreEnv      : $(declare -p coreEnv)"
+log -s=$printEnv "packages     : $(declare -p packages)"
+log -s=$printEnv "binMiscList  : $(declare -p binMiscList)"
+log -s=$printEnv "dotBasicList : $(declare -p dotFilesBasicList)"
+log -s=$printEnv "dotFilesList : $(declare -p dotFilesList)"
+log -s=$printEnv "tools        : $(declare -p tools)"
+log -s=$printEnv "paruTools    : $(declare -p paruTools)"
+log -s=$printEnv "cargoTools   : $(declare -p cargoTools)"
+log -s=$printEnv "pipTools     : $(declare -p pipTools)"
+log -s=$printEnv "upadteList   : $(declare -p updateList)"
 log -s=$verbose # }}}
+# }}}
 
 if $update; then # {{{
   [[ -e $SCRIPT_PATH/inits/setup-env.to-apply ]] || { log "nothing to update"; exit 0; }
   source $SCRIPT_PATH/inits/setup-env.to-apply
-  stepsAll="ext-update"
-fi # }}}
-
-for si in $stepsAll; do # {{{
-  name="$(wide-print $si)"
-  type install-$si >/dev/null 2>&1 || { log "$name not defined"; exit 1; }
-  if $stepsFromCLI; then
-    [[ -v stepsCLI[$si] ]] || continue
-  elif $update; then
-    :
+  name="$(wide-print "update")"
+  if $justMark; then
+    log "$name marking"
   else
-    ! $initCoreEnv || [[ -v coreEnv[$si] ]] || continue
-    $justMark && { mark-done $si; continue; }
-    $force || ! is-done $si || { log -s=$verbose "$name already done, skipping"; continue; }
-    if $initCoreEnv; then
-      log -s=$verbose "$name from core, executing"
-    else
-      is-enabled $si || continue
-    fi
+    log "$name installing"
   fi
-  log "$name installing"
-  install-$si; err=$?; set +xv
-  (( err == 0 )) || { log "$name failed, exiting"; exit 1; }
-  mark-done $si
+  update-env || { log "$name update failed, exiting"; exit 1; }
   log -s=$verbose "$name done"
-done # }}}
-
-if $update; then # {{{
-  log "marking all as done"
-  $0 --just-mark-worker --all
-  $0 --just-mark-worker packages basics bin-misc dot-files paru-tools tools
+  if ! $justMark; then
+    log "marking all as done"
+    $0 --just-mark skip-update
+  fi # }}}
+else # {{{
+  for si in $stepsAll; do
+    name="$si" nameFull=
+    if (( ${#name} > $wideLen )); then
+      nameFull=" ($name)"
+      name="$(sed -e 's/\(arch\|ubuntu\|mac\|N\?linux\|N\?docker\|N\?virtos\|N\?sudo\|\N\?wsl\|\N\?gui\|ext\)-//g' <<<"$name")"
+      (( ${#name} <= $wideLen )) || name="${name:0:11}."
+    fi
+    name="$(wide-print $name)"
+    type install-$si >/dev/null 2>&1 || { log "$name not defined"; exit 1; }
+    if $stepsFromCLI; then
+      [[ -v stepsCLI[$si] ]] || continue
+    else
+      ! $initCoreEnv || [[ -v coreEnv[$si] ]] || continue
+      $justMark && { done-checker mark-done $si; continue; }
+      $force || ! done-checker is-done $si || { log -s=$verbose "$name already done, skipping"; continue; }
+      if $initCoreEnv; then
+        log -s=$verbose "$name from core, executing"
+      else
+        is-enabled $si "stepsList" || continue
+      fi
+    fi
+    if $justMark; then
+      log "$name marking$nameFull"
+    else
+      log "$name installing$nameFull"
+    fi
+    install-$si || { log "$name failed$nameFull, exiting"; exit 1; }
+    done-checker mark-done $si
+    log -s=$verbose "$name done"
+  done
 fi # }}}

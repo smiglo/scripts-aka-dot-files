@@ -216,12 +216,14 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
   bind -m vi-insert  -x '"\C-w\C-g": "__fzf-git-widget"'
   bind -m vi-command -x '"\C-w\C-r": "__fzf-history"'
   bind -m vi-insert  -x '"\C-w\C-r": "__fzf-history"'
-  bind -m vi-command -x '"\C-t"    : "__fzf-file-widget"'
-  bind -m vi-insert  -x '"\C-t"    : "__fzf-file-widget"'
-  bind -m vi-insert     '"\ec"     : "\C-gcd\C-m"'
-  bind -m vi-command -x '"\ed"     : "__fzf-cd-widget"'
-  bind -m vi-insert  -x '"\ed"     : "__fzf-cd-widget"'
-fi 2>/dev/null # }}}
+  bind -m vi-command -x '"\C-r": "__fzf-history"'
+  bind -m vi-insert  -x '"\C-r": "__fzf-history"'
+  bind -m vi-command -x '"\C-t": "__fzf-file-widget"'
+  bind -m vi-insert  -x '"\C-t": "__fzf-file-widget"'
+  bind -m vi-insert     '"\ec": "\C-gcd\C-m"'
+  bind -m vi-command -x '"\ed": "__fzf-cd-widget"'
+  bind -m vi-insert  -x '"\ed": "__fzf-cd-widget"'
+fi # }}}
 # }}}
 if ${TMUX_POPUP:-false}; then # {{{
   if ! $TMUX_POPUP_SILENT; then

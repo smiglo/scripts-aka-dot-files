@@ -34,5 +34,7 @@ get-unicode-char() { # {{{
     echo "${UNICODE_EXTRA_CHARS[$1]}"
   fi # }}}
 } # }}}
-export -f get-unicode-char
-
+unicode-source() { # {{{
+  echo "source '$UNICODE_EXTRA_CHARS_FILE'"
+} # }}}
+export -f get-unicode-char unicode-source

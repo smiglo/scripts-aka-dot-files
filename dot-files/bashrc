@@ -44,6 +44,7 @@ __bashrc_exit() { # {{{
   ! $keep && ${BASHRC_PROFILER:-false} && v+=" $(echo ${!BASHRC_PROFILER_*})"
   $addInstalling && v+=" RCSTUFF_BASHRC_INSTALLING"
   v+=";"
+  history -r
   ${BASHRC_PROFILER:-false} && time-measure -v bashrc_exit --msg 'exit'
   if ${BASHRC_TRACE:-false}; then # {{{
     set +xv
@@ -111,7 +112,7 @@ done # }}}
 # }}}
 if $BASHRC_TRACE; then # {{{
   $BASHRC_PLAIN_INSTALL && [[ -z $BASHRC_TRACE_F ]] && export BASHRC_TRACE_F="$HOME/.tmp/bashrc-$(command date +"%Y%m%d-%H%M%S").log"
-  if [[ ! -z $BASHRC_TRACE_F ]]; then
+  if [[ ! -z $BASHRC_TRACE_F && $BASHRC_TRACE_F != "/dev/stderr" ]]; then
     tmpFD=3
     eval "exec $tmpFD>\"$BASHRC_TRACE_F\""
     export BASH_XTRACEFD=$tmpFD
@@ -163,12 +164,11 @@ if $RCSTUFF_FORCE; then # {{{
   if [[ ! -z $BASHRC_RUNTIME_PATH ]]; then
     rm -rf \
       $BASHRC_RUNTIME_PATH/env* \
-      $BASHRC_RUNTIME_PATH/fzf.def* \
       $BASHRC_RUNTIME_PATH/net.status \
       $BASHRC_RUNTIME_PATH/unicode-extra.conf
   fi
   if [[ ! -z $ENV_SNAPSHOT ]]; then
-    rm -rf $ENV_SNAPSHOT/*
+    ( shopt -u dotglob; rm -rf $ENV_SNAPSHOT/*; )
   fi
   what_to_do='full' # }}}
 elif $BASHRC_USE_FAST_ENV; then # {{{

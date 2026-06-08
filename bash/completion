@@ -22,19 +22,19 @@ if $BASHRC_COMPLETION_FULL; then # {{{
     for i in {,_}{,g,m,r}{vi,view,vim,vimdiff}; do
       if [[ -e $BIN_PATH/vims/$i ]]; then
         while complete -r $i >/dev/null 2>&1; do :; done
-        complete $COMPLETE_DEFAULT_PARAMS -D -F _completion_vim $i
+        complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim $i
       fi
     done
-    complete $COMPLETE_DEFAULT_PARAMS -D -F _completion_vim vim-session
+    complete $COMPLETE_DEFAULT_PARAMS -F _completion_vim vim-session
   }
   # }}}
-  # Completion for git aliases defined in git-extra-completion.sh # {{{
-  for ii in $($SCRIPT_PATH/git/git-extra-completion.sh --list); do
+  # Completion for git aliases defined in bin/git/extra-completion.sh # {{{
+  for ii in $($SCRIPT_PATH/bin/git/extra-completion.sh --list); do
     eval "_git_${ii}() { compl-new; }"
   done
-  for ii in $(cd $SCRIPT_PATH/git/bin; ls *); do
+  for ii in $(cd $SCRIPT_PATH/bin/git; ls git-* 2>/dev/null); do
     f=${ii#git-} && f=${f//[-]/_}
-    grep -q "@@" $SCRIPT_PATH/git/bin/$ii || continue
+    grep -q "@@" $SCRIPT_PATH/bin/git/$ii || continue
     eval "_git_$f() { compl-new; }"
   done
   # }}}
@@ -64,20 +64,20 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   # }}}
   # Hosts # {{{
   if [[ -e $HOME/.ssh/known_hosts ]] && tail -1 $HOME/.ssh/known_hosts | command grep -vq "^|1|"; then
-    complete -D -W "$(cut -f 1 -d ' ' $HOME/.ssh/known_hosts | sed -e s/,.*//g | uniq | command grep -v "\[")" ssh
+    complete -W "$(cut -f 1 -d ' ' $HOME/.ssh/known_hosts | sed -e s/,.*//g | uniq | command grep -v "\[")" ssh
   fi # }}}
   # Vim # {{{
   _do_vim_completion
   unset _do_vim_completion
   # }}}
   # Oth # {{{
-  complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -D -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
+  complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
   declare -F _filedir >/dev/null && eval "$(type -a _filedir | tail -n +2 | sed 's/compopt -o filenames 2>/compopt -o filenames -o noquote 2>/')"
   compl-add --smart ./build.sh
   # }}}
   # tldr # {{{
   if [[ -e $HOME/.local/share/tldr ]]; then
-    complete -D -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
+    complete -W "$(q=($HOME/.local/share/tldr/*/*); sed 's@\.md @ @g' <<<${q[@]##*/})" tldr
   fi # }}}
   # all from own bins/ # {{{
   add_for_all() { # {{{

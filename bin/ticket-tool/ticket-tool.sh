@@ -2,6 +2,40 @@
 # vim: fdl=0
 
 # Initial checks & set up # {{{
+mapShortCutToFull() { # {{{
+  if [[ $1 == '@@' ]]; then # {{{
+    echo "-a --all PREFIX SET"
+    return 0
+  fi # }}}
+  local allDisplay=false
+  while [[ ! -z $1 ]]; do # {{{
+    case $1 in
+    -a | --all) allDisplay=true;;
+    *) break;;
+    esac; shift
+  done # }}}
+  local shortcut=$1 set=$2 i= onlyOne=true foundFull= allMatches=
+  for i in $(echo "$set" | tr ' ' '\n'); do # {{{
+    [[ $i == $shortcut ]] && echo "$i" && return 0
+    if [[ $i =~ ^$shortcut.* ]]; then
+      if [[ -z $foundFull ]]; then
+        allMatches+="$i "
+        foundFull=$i
+      else
+        allMatches+="$i "
+        onlyOne=false
+      fi
+    fi
+  done # }}}
+  if [[ ! -z $foundFull ]]; then # {{{
+    if $onlyOne; then
+      echo "$foundFull"
+    elif $allDisplay; then
+      echo "$allMatches"
+      return 1
+    fi
+  fi # }}}
+} # }}}
 mapCommand() { # {{{
   local cmd="$1" ret= ext=
   [[ $cmd == '@@' ]] && echo "@@" && return 0

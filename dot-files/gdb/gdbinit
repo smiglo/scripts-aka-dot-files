@@ -1,0 +1,53 @@
+# vim: ft=python
+
+python
+import os
+import re
+import sys
+
+usePwnDbg = False
+useDashboard = True
+
+if "pwndbg" in sys.modules and hasattr(sys.modules["pwndbg"], "_is_loaded_from_pwndbg"):
+    # already loaded via pwndbg exec
+    useDashboard = False
+else:
+    if os.environ.get("GDB_USE_PWNDBG") == 'true' or os.environ.get("GDB_PWNDBG_INIT"):
+        usePwnDbg = True
+        useDashboard = False
+    elif os.environ.get("GDB_USE_DASHBOARD") == 'false':
+        useDashboard = False
+
+confDir = os.path.expanduser('~/.config/gdb')
+
+if usePwnDbg:
+    pwnDbgConf = os.environ.get("GDB_PWNDBG_INIT")
+    if not pwnDbgConf:
+        pwnDbgConf = '/usr/share/pwndbg/gdbinit.py'
+    if not os.path.exists(pwnDbgConf):
+        usePwnDbg = False
+    if usePwnDbg:
+        useDashboard = False
+
+for file in sorted(os.listdir(os.path.expanduser(confDir))):
+    path = os.path.join(confDir, file)
+    _, ext = os.path.splitext(path)
+    _, filename = os.path.split(path)
+    if ( ext == '.py' or ext == '.gdb') and (re.match('.*\\.ign.*', filename) is None):
+        if re.match('.*dashboard.*', filename) and not useDashboard:
+            continue
+        if re.match('.*pwndbg.*', filename) and not usePwnDbg:
+            continue
+        print(path)
+        gdb.execute('source ' + path)
+
+root = os.path.abspath('.')
+if confDir != root:
+  for file in sorted(os.listdir(os.path.expanduser(root))):
+      path = os.path.join(root, file)
+      _, ext = os.path.splitext(path)
+      _, filename = os.path.split(path)
+      if ( ext == '.gdb' or filename == 'gdbinit' ) and (re.match('.*\\.ign.*', filename) is None):
+          print(path)
+          gdb.execute('source ' + path)
+end

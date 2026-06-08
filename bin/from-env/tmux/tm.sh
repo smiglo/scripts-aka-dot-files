@@ -189,6 +189,7 @@ tm() { # @@ # {{{
       esac; shift
     done
     local cpid="$(tmux list-clients -F '#{client_activity} #{client_pid}' | sort | sed -n '$s/.* //p')"
+    [[ -n $cpid ]] || return 1
     if $IS_MAC; then
       pstree -p $cpid | grep -q ' sshd:\?\($\| \)'
     else
@@ -208,7 +209,9 @@ tm() { # @@ # {{{
     -r | --restore) # {{{
       shift
       local last=${@: -1}
-      [[ ! -z $@ && $last != -* ]] && tmux rename-window "$last"
+      [[ ! -z $@ && $last != -* ]] && tmux rename-window -t $TMUX_PANE "$last"
+      local name="$(tmux display-message -t $TMUX_PANE -pF '#W')"
+      [[ -e "./.layout" ]] && grep -q "^$name:" ./.layout && dst="./.layout"
       tm --l-restore --file $dst --set-cd-all --add-disabled "$@";; # }}}
     esac
     return 0;; # }}}
@@ -488,7 +491,7 @@ tm() { # @@ # {{{
     local wId="$(tmux list-windows -F '#{window_id} - #W' | awk '/ - '"${wName//./\\.}"'$/ {print $1}')"
     [[ ! -z $newName ]] && tmux rename-window -t $wId "$newName"
     if [[ ! -z $paths ]]; then # {{{
-      local pDiff= pNow="$(tmux list-panes -t "$wId" -F '#{pane_current_path}' | tr '\n' ' ' | sed -e "s|$HOME|~|g" -e 's/\s\+$//' -e 's/ \+/:/g')" i=
+      local pDiff= pNow="$(tmux list-panes -t "$dst" -F '#{pane_current_path}' | tr '\n' ' ' | sed -e "s|$HOME|~|g" -e 's/\s\+$//' -e 's/ \+/:/g')" i=
       IFS=':' read -a pNow <<<$(echo "$pNow")
       IFS=':' read -a paths <<<$(echo "$paths")
       if [[ $err != 0 || ${#paths[*]} != ${#pNow[*]} ]]; then # {{{
@@ -503,7 +506,7 @@ tm() { # @@ # {{{
           elif [[ $pd -gt 0 ]]; then
             for i in $(seq 1 $pd); do
               tmux split-window -t $dst -l 3 -d
-              sleep 0.3
+              sleep 0.1
             done
           fi # }}}
         else

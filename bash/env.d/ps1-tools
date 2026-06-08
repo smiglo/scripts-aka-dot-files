@@ -310,7 +310,10 @@ PS1_setter() { # {{{
       fi
       local l= statF=$MEM_KEEP/tmux-git
       if ${PS1_CFG_GIT_USE_CACHE:-false} && [[ -e $statF ]]; then
-        l=$(source "$statF"; echo "${git_stat[$PWD]}")
+        local gitdir="$(git rev-parse --path-format=absolute --git-dir)"
+        if [[ -n $gitdir ]]; then
+          l=$(source "$statF"; echo "${git_stat[$gitdir]}")
+        fi
       else
         l="$(unset GIT_PS1_SHOWCOLORHINTS; __git_ps1 "%s")"
       fi
@@ -439,7 +442,7 @@ ps1_toggle() { # @@ # {{{
       echo "on off";;
     *)
       local ret="next"
-      ret+=" hl hn hr ht $(echo hist-{local,no,no-pers,restore,stat})"
+      ret+=" hl hn hr ht hw $(echo hist-{local,no,no-pers,restore,stat,wnd})"
       ret+=" split nl gt"
       ret+=" time-delta time-start time-curr td ts tc t-on t-off time t"
       ret+=" oneline oneline-short"
@@ -532,12 +535,21 @@ ps1_toggle() { # @@ # {{{
       __ps1_var_toggle 'PS1_CFG_ADD_GIT' true
     fi
     return 0;; # }}}
-  hist-local | hist-no | hist-no-pers | hist-restore | hist-stat | hl | hn | ht | hr) # {{{
+  hist-local | hist-no | hist-no-pers | hist-restore | hist-stat | hist-wnd | \
+  hl | hn | ht | hr | hw) # {{{
     local cmd="$1"
     if [[ "$cmd" == 'ht' ]]; then
       [[ ! -z $BASH_PHISTORY_FILE ]] && cmd='hn' || cmd='hr'
     fi
     case $cmd in
+    hist-wnd | hw) # {{{
+      [[ -n $TMUX ]] || return 0
+      local wndName="$(tmux display-message -p -t $TMUX_PANE -F '#W')"
+      wndName=${wndName%%[-:.]*}
+      export HISTFILE=$TMUX_SESSION_PATH/history.$wndName
+      export HISTFILE_ORIG=$HISTFILE
+      history -r
+      return 0;; # }}}
     hist-local | hl) # {{{
       [[ -z $BASH_ORIG_PHISTORY_FILE ]] && export BASH_ORIG_PHISTORY_FILE="$BASH_PHISTORY_FILE"
       [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"

@@ -7,8 +7,6 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
 fi # }}}
 
 cmd="fd" params=
-is-installed -w $cmd || cmd="fdfind"
-is-installed -w $cmd || cmd="find"
 
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -22,13 +20,13 @@ out() { # {{{
 } # }}}
 
 case $cmd in
-fd | fdfind) params+=" --type file --type symlink";;
+fd) params+=" --type file --type symlink";;
 *)
 esac
 
 if [[ -t 1 ]]; then # {{{
   case $cmd in
-  fd | fdfind) params+=" --color=always";;
+  fd) params+=" --color=always";;
   esac
 else
   out() { cat -; }

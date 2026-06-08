@@ -295,13 +295,11 @@ ssh_tmux_sb_worker() { # {{{
   printf "%b" "$value"
 } # }}}
 usb_tmux_sb_worker() { # {{{
-  local prefix="/media/$USER" value=
-  $IS_MAC && prefix="/Volumes"
-  if [[ $(echo $prefix/*) != "$prefix/*" ]]; then
-    if ! $IS_MAC || [[ $(echo $prefix/*) != "$prefix/Macintosh HD" ]]; then
-      value="#[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
-    fi
-  fi
+  local prefix="/media/$USER" value= list= exclude="$TMUX_SB_USB_EXCLUDE"
+  $IS_MAC && prefix="/Volumes" && exclude+="\|Macintosh HD\|ramfs"
+  [[ -e $prefix ]] || return
+  list="$(find -L $prefix -maxdepth 1 -type d | sed -e '1d' -e '/\/\('"${exclude#\\|}"'\)$/d')"
+  [[ -n $list ]] && value="#[fg=colour148]${UNICODE_EXTRA_CHARS[disk]}"
   printf "%b" "$value"
 } # }}}
 temp_tmux_sb_worker() { # {{{

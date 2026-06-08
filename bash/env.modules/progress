@@ -82,6 +82,7 @@ progress-dot() { # @@ # {{{
           max=$((max - 1))
         done
       fi # }}}
+      tput civis
       return 0;; # }}}
     --end | --end=* | --hold | --hold=*) # {{{
       [[ -z $i || -z $out ]] && return 0
@@ -92,7 +93,10 @@ progress-dot() { # @@ # {{{
         echo -e -n "\n$(cl 'ts' $(time2s --to-HMS $(time2s --diff $ts))): "
         echo "$msg ($(time2s now))"
       fi >$out
-      $isEnd && eval unset \${!${pre}*} || { i=; ts=; }
+      if $isEnd; then
+        tput cnorm
+        eval unset \${!${pre}*} || { i=; ts=; }
+      fi
       return 0;; # }}}
     esac; shift
   done # }}}

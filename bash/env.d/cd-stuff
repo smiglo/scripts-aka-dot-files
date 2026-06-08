@@ -7,19 +7,16 @@ __cd_util() { # {{{
   --list-parents) # {{{
     shift
     local cDir="${1:-$PWD}"
-    local stdout=$(i=1; while true; do
-      p="$(command cd "$cDir/$(eval printf "../%.0s" {1..$i})"; pwd | sed -e "s|^$HOME|~|")"
-      if [[ ${#p} -ge 120 ]]; then
-        while [[ ${#p} -ge 120 ]]; do
-          p="${p#*/}"
-        done
-        p=".../$p"
-      fi
-      printf "%d. %s\n" "$i" "$p"
-      i=$(($i+1))
-      [[ $p == '/' ]] && break
-    done)
-    echo "$stdout";; # }}}
+    local stdout= i=1
+    while [[ -n $cDir ]]; do
+      cDir=${cDir%/*}
+      [[ -n $cDir ]] || cDir="/"
+      [[ -e $cDir ]] || continue
+      stdout+="$(printf "%d. %s" "$i" "${cDir/$HOME/\~}")\n"
+      ((++i))
+      [[ $cDir == "/" ]] && break
+    done
+    echo -e "$stdout";; # }}}
   --tilde-conv) # {{{
     shift
     local d="$1"
@@ -30,7 +27,7 @@ __cd_util() { # {{{
     local key="$(echo -e "$1" | sed -n '1p')"
     local dst="$(echo -e "$1" | sed -n '2p')"
     if [[ -z $2 ]]; then
-      dst="${dst#*. }"
+      dst="${dst##*. }"
     elif [[ "$2" == eval\ * ]]; then
       dst="$($2)"
     else
@@ -92,7 +89,8 @@ __cd_util_mode_parent() { # {{{
   case $1 in
   .[0-9]*) # {{{
     if [[ ! -e "$1" ]]; then
-      dst="$(eval printf "../%.0s" {1..${1:1}})"
+      dst="$(__cd_util --list-parents | sed -n ${1:1}p)"
+      dst="${dst##*. }"
       [[ ! -z $2 ]] && dst+="/$2" && shift
     else
       dst="$1"
@@ -102,7 +100,7 @@ __cd_util_mode_parent() { # {{{
       stdout="$(__cd_util --list-parents)"
       if $use_fzf; then
         dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Parent> ')" || return 0
-        dst="$(__cd_util --update-dst "$dst" 'eval dst="${dst%%. *}" && eval printf ../%.0s {1..$dst}')"
+        dst="$(__cd_util --update-dst "$dst")"
       else
         echo "$stdout"
         return 0
@@ -186,87 +184,6 @@ __cd_util_mode_stored() { # {{{
         return 0
       fi
       ;; # }}}
-    :+|:++)  # {{{
-      local param=$1
-      p=$2; shift
-      if [[ -z $p ]]; then
-        [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
-        return 0
-      fi
-      local path=$PWD
-      [[ ! -z $2 ]] && path=$2 && shift
-      [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
-      cd_list=$CD_LAST_DIRS_STORED
-      if [[ ! -z $cd_list ]]; then
-        IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
-        for i in ${!cd_list[*]}; do
-          [[ $p    == ${cd_list[$i]/@*} ]] && return 1
-          [[ $path == ${cd_list[$i]/*@} ]] && return 1
-          out+=":${cd_list[$i]}"
-        done
-      fi
-      out+=":$p@$path"
-      export CD_LAST_DIRS_STORED="${out:1}"
-      [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
-      dst="env:export CD_LAST_DIRS_STORED='$CD_LAST_DIRS_STORED';$dst"
-      if [[ $param == ':++' ]]; then
-        sed -i "/export CD_LAST_DIRS_STORED+=:$p/ d" $RUNTIME_PATH/cd-list
-        echo "export CD_LAST_DIRS_STORED+=:$p@$path" >>$RUNTIME_PATH/cd-list
-      fi
-      return 0;; # }}}
-    :-) # {{{
-      p=$2; shift
-      [[ -z $p ]] && return 1
-      [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
-      cd_list=$CD_LAST_DIRS_STORED
-      [[ -z $cd_list ]] && return 0
-      IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
-      for i in ${!cd_list[*]}; do
-        [[ $p == ${cd_list[$i]/@*} ]] && continue
-        out+=":${cd_list[$i]}"
-      done
-      export CD_LAST_DIRS_STORED="${out:1}"
-      [[ -n $TMUX ]] && tmux set-environment -g CD_LAST_DIRS_STORED "$CD_LAST_DIRS_STORED"
-      dst="env:export CD_LAST_DIRS_STORED='$CD_LAST_DIRS_STORED';$dst"
-      return 0;; # }}}
-    # Search: :?* :??* # {{{
-    :\?* ) # {{{
-      case $1 in
-      :\?\?*) # {{{
-        p="${1:3}"
-        [[ -z $p ]] && return 1
-        p=$(echo "$p" | sed -e "s/\(.\)/\1\.\*/g" -e "s/^/\.\*/")
-        [[ $p == *.\*$.\* ]] && p=${p/.\*$.\*/$};; # }}}
-      :\?* ) # {{{
-        p=${1:2}
-        [[ -z $p ]] && return 1;; # }}}
-      esac
-      [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
-      cd_list=$CD_LAST_DIRS_STORED
-      [[ -z $cd_list ]] && return 1
-      IFS=':' && read -ra cd_list <<< "$cd_list" && IFS=$oldIFS
-      out=()
-      for i in ${!cd_list[*]}; do
-        [[ ${cd_list[$i]/*@} == '--cd-spec' ]] && continue
-        echo ${cd_list[$i]/*@} | grep -q "$p" && out[${#out[*]}]=${cd_list[$i]/*@}
-      done
-      [[ -z $out ]] && return 1
-      if [[ ${#out[*]} == 1 ]]; then
-        dst=${out[0]}
-      else
-        stdout=$(for i in ${!out[*]}; do
-          printf "%2d. %s\n" "$(($i+1))" "$(echo -e "${out[$i]}" | sed "s|^$HOME|~|")"
-        done)
-        if $use_fzf; then
-          dst="$(echo -e "$stdout" | fzf $fzf_common_params --prompt='Search> ')" || return 0
-          dst="$(__cd_util --update-dst "$dst")"
-        else
-          echo "$stdout"
-          return 0
-        fi
-        [[ -z $dst ]] && return 1
-      fi;; # }}}
-      # }}}
     :*) # {{{
       p=${1:1}
       [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
@@ -337,10 +254,10 @@ __cd_util_mode_interactive() { # {{{
       local dirLvl=${#dirLvl}
       (( dirLvl >= 4 )) && md=$((md + dirLvl-3))
     fi
-    $useFdFind && md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
+    md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
   -*)
     md=${md#-}
-    $useFdFind && md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
+    md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
   esac # }}}
   if [[ -n $TMUX ]]; then # {{{
     tmux_p="$(tmux show  -vq @tmux_path)"
@@ -443,17 +360,15 @@ __cd_util_mode_interactive() { # {{{
   local fzf_key_show_hidden='ctrl-f' fzf_key_upper="ctrl-u" fzf_key_into="ctrl-e" fzf_key_orig="ctrl-o" fzf_key_refresh="ctrl-r" fzf_key_last="ctrl-l"
   local orgDst="$PWD" lastDst=
   local exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
-  if $useFdFind; then # {{{
-    if $IS_MAC || $IS_DOCKER; then # {{{
-      exclude_list+=" Applications Library"
-    fi # }}}
-    if $IS_VIRTUAL_OS; then # {{{
-      exclude_list+=" host"
-    fi # }}}
-    for i in $exclude_list; do
-      exclude+=" -E '$i/*' -E '**/$i/*'"
-    done
+  if $IS_MAC || $IS_DOCKER; then # {{{
+    exclude_list+=" Applications Library"
   fi # }}}
+  if $IS_VIRTUAL_OS; then # {{{
+    exclude_list+=" host"
+  fi # }}}
+  for i in $exclude_list; do
+    exclude+=" -E '$i/*' -E '**/$i/*'"
+  done
   while true; do # {{{
     dst="$(command cd "$(__cd_util --tilde-conv "$dst")"; pwd)"
     # List # {{{
@@ -472,14 +387,7 @@ __cd_util_mode_interactive() { # {{{
       esac
       res="$( \
         command cd $dst
-        if $useFdFind; then
-          eval $fdfindCmd -Ld $depth $exclude $($hidden && echo "--hidden") --type d
-        else
-          find -L . -maxdepth $depth
-                -type d -a -not \( -name .git -o -path \*/.git/\* \) -print
-                -o -prune \
-          | { if ! $hidden; then grep -v "/\."; else cat -; fi; }
-        fi 2>/dev/null \
+        fd -Ld $depth $exclude $($hidden && echo "--hidden") --type d 2>/dev/null \
         | awk -F'/' '{print NF-1, $0}' \
         | sed -e 's|/$||' \
         | LC_COLLATE=C sort -s -k1,1n -k2,2f \
@@ -491,13 +399,7 @@ __cd_util_mode_interactive() { # {{{
       list+="../\n"
       list+="$( \
         command cd $dst
-        if $useFdFind; then
-          $fdfindCmd -Ld 1 $($hidden && echo "--hidden") --type d '.*' ..
-        else
-          find -L .. -maxdepth 1 \
-                  -type d -a -not \( -path ../.git \) -print \
-                  -o -prune
-        fi 2>/dev/null \
+        fd -Ld 1 $($hidden && echo "--hidden") --type d '.*' ..  2>/dev/null \
         | sed -e 's|/$||' \
         | LC_COLLATE=C sort -f)\n"
       local i=0 pdir= tmp=
@@ -511,13 +413,7 @@ __cd_util_mode_interactive() { # {{{
         cnt=$((${#cnt}+1))
         list+="$( \
           command cd $dst
-          if $useFdFind; then
-            $fdfindCmd -Ld 1 $($hidden && echo "--hidden") --type d '.*' "$(realpath "$ddAdd")"
-          else
-            find -L "$(realpath "$ddAdd")" -maxdepth 1 \
-                    -type d -a -not \( -path '*/.git' \) -print \
-                    -o -prune
-          fi 2>/dev/null \
+          fd -Ld 1 $($hidden && echo "--hidden") --type d '.*' "$(realpath "$ddAdd")" 2>/dev/null \
           | sed -e 's|/$||' -e 's|'$HOME'|~|' \
           | LC_COLLATE=C sort -f \
           | sed -e 's|^.*/\(.*\)|...'$cnt'/\1 --> \0|')\n"
@@ -629,7 +525,7 @@ __cd_util_mode_interactive() { # {{{
   echo "$dst"
 } # }}}
 cd_wrapper() { # @@ # {{{
-  if [[ $1 != '--' && $1 != '-f' ]]; then # {{{
+  if [[ $1 != '@@' && $1 != '--' && $1 != '-f' ]]; then # {{{
     if [[ ${#BASH_SOURCE[*]} -gt 1 ]]; then
       command cd "$@"
       return $?
@@ -643,9 +539,6 @@ cd_wrapper() { # @@ # {{{
     [[ $1 == '-f' ]] && shift
   fi # }}}
   local dst="$1" oldPWD="$PWD" i= cmd="cd" p= verbose=false oldIFS=$IFS cd_list= len= out= stdout= create_dir=false param= in_pipe=false step_in=false err=0
-  local useFdFind=true fdfindCmd="fdfind"
-  is-installed -w $fdfindCmd || fdfindCmd="fd"
-  is-installed -w $fdfindCmd || useFdFind=false
   if [[ $1 == '@@' ]]; then # {{{
     [[ -n $TMUX ]] && { eval $(tmux show-environment -gs CD_LAST_DIRS_STORED 2>/dev/null) || true; }
     cd_list=$CD_LAST_DIRS_STORED
@@ -670,11 +563,7 @@ cd_wrapper() { # @@ # {{{
     elif [[ $4 == ':' && $2 -ge 3 ]]; then # {{{
       for i in ${!cd_list[*]}; do
         if [[ "${cd_list[$i]/@*}" == $5 ]]; then
-          if $useFdFind; then
-            echo "$(command cd "${cd_list[$i]#*@}/$6" && $fdfindCmd -Ld 2 --type d)"
-          else
-            echo "$(command cd "${cd_list[$i]#*@}/$6" && find -L . -maxdepth 2 -type d)"
-          fi 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
+          echo "$(command cd "${cd_list[$i]#*@}/$6" && fd -Ld 2 --type d)" 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
         fi
         return 0
       done
@@ -687,22 +576,14 @@ cd_wrapper() { # @@ # {{{
       len=${#CD_LAST_DIRS[*]}
       [[ -z $CD_LAST_DIRS || $len == 1 || $i -ge $len ]] && return
       dst="${CD_LAST_DIRS[$((len-i-1))]}"
-      if $useFdFind; then
-        echo "$(command cd "$dst" && $fdfindCmd -Ld2 --type d)"
-      else
-        echo "$(command cd "$dst" && find -L . -maxdepth 2 -type d)"
-      fi 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
+      echo "$(command cd "$dst" && fd -Ld2 --type d)" 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
       return 0
       # }}}
     elif [[ $4 == '.'* && $2 -ge 2 ]]; then # {{{
       i="${4:1}"
       [[ -z $i ]] && i="1"
       dst="$(eval printf "../%.0s" {1..$i})"
-      if $useFdFind; then
-        echo "$(command cd "$dst" && $fdfindCmd -Ld2 --type d)"
-      else
-        echo "$(command cd "$dst" && find -L . -maxdepth 2 -type d)"
-      fi 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
+      echo "$(command cd "$dst" && fd -Ld2 --type d)" 2>/dev/null | sed -e 's|^\./||' -e '/^\.$/d'
       return 0
     fi # }}}
     local ret=''
@@ -710,7 +591,7 @@ cd_wrapper() { # @@ # {{{
       ret+=" :${cd_list[$i]/@*}"
     done
     ret+=" $($BASH_PATH/env-ext.sh call --all __util_cd_param @@ | tr ' ' '\n' | sed 's/^/:/')"
-    ret+=" @@-d -mk -P -pu -po -i --no-pipe --old-pwd --find"
+    ret+=" @@-d -mk -P -pu -po -i --no-pipe --old-pwd"
     echo "$ret"
     return 0
   fi # }}}
@@ -728,7 +609,14 @@ cd_wrapper() { # @@ # {{{
     local use_fzf=${fzfUsageA[cd]:-$FZF_INSTALLED}
     local fzf_key_step_in='ctrl-d'
     local fzf_common_params="--exit-0 --select-1 --expect $fzf_key_step_in --sort --no-multi"
-    [[ -z $1 ]] && set -- -i -
+    if [[ -z $1 ]]; then
+      if [[ -e $PWD ]]; then
+        set -- -i
+      else
+        dst="$(__cd_util --list-parents | sed -n 1p)"
+        dst="${dst##*. }"
+      fi
+    fi
     # Switches first # {{{
     while [[ ! -z $1 ]]; do
       case $1 in
@@ -739,7 +627,6 @@ cd_wrapper() { # @@ # {{{
       -po) cmd="popd";;
       -v)  verbose=true; in_pipe=true; use_fzf=false;;
       --no-pipe) in_pipe=false;;
-      --find) useFdFind=false;;
       -P)  dst="$(readlink -f "${2:-$PWD}")"; shift $#; break;;
       -i | -[0-9]* | -) break;;
       -*)  [[ ! -d "$1" ]] && cmd+=" $1" || { dst="$1"; shift $#; break; };;
@@ -762,6 +649,7 @@ cd_wrapper() { # @@ # {{{
         dst="$(__cd_util_mode_stored "$@")"
         break;; # }}}
       -i | -[0-9]*) # Interactive # {{{
+        shift
         if [[ -z "$dst" && "$@" =~ "--query="\ *.+$ ]]; then
           local dstConv=$(__cd_util --tilde-conv "${@: -1}")
           [[ $dstConv == '-' ]] && dstConv=$OLDPWD
@@ -850,29 +738,23 @@ cd_no_expansion() { # @@ { # {{{
   cd_wrapper -- "$@"
 } # }}}
 __cdd_completion() { # {{{
-  local fdfindCmd="fdfind"
-  is-installed -w $fdfindCmd || fdfindCmd="fd"
-  is-installed -w $fdfindCmd || fdfindCmd=
   local cur= opts= depth=4
   cur=${COMP_WORDS[COMP_CWORD]}
   _get_comp_words_by_ref -n : cur
-  if [[ ! -z $fdfindCmd ]]; then
-    local dirLvl="${PWD//[^\/]/}"
-    if (( ${#dirLvl} >= 5 )); then depth=8
-    elif [[ $PWD == $HOME/* ]]; then depth=4
-    else depth=3
-    fi
-    opts="$($fdfindCmd -d $depth --type d -L --no-ignore-vcs | sed -e '/\/$/s|/$||' -e '/.\+\/.\+/s|$|,|' | sed -e 's|.*/||' | sort -u)"
-  else
-    opts="$(find -L . -maxdepth $depth -type d | sed -e '/\/$/s|/$||' -e '/.\+\/.\+/s|$|,|' | sed -e 's|.*/||' | sort -u)"
-  fi 2>/dev/null
+  local dirLvl="${PWD//[^\/]/}"
+  if (( ${#dirLvl} >= 5 )); then depth=8
+  elif [[ $PWD == $HOME/* ]]; then depth=4
+  else depth=3
+  fi
+  opts="$(fd -d $depth --type d -L --no-ignore-vcs 2>/dev/null | sed -e '/\/$/s|/$||' -e '/.\+\/.\+/s|$|,|' | sed -e 's|.*/||' | sort -u)"
   COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
   __ltrim_colon_completions "$cur"
 } # }}}
 complete $COMPLETE_DEFAULT_PARAMS -F __cdd_completion cdd
+compl-add --old cd
 
-alias cd='set -f;cd_no_expansion' # @@
-alias cdd='cd -i -8 --loop --stored-none --fzf-params "-e -x --query="'
+alias cd='set -f; cd_no_expansion' # @@
+alias cdd='cd -i -8 --loop --stored-all --fzf-params "-e -x --query="'
 alias ccd='builtin cd'
 alias cdp='cd -P'
 alias po='cd -po'

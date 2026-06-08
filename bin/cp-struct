@@ -22,7 +22,7 @@ _cp-struct() { # @@ # {{{
     cat - >$contentFile
   elif ! $userCF; then
     if (( $# <= 1 )); then
-      fdfind | fzf --prompt "Files > " >$contentFile
+      fd | fzf --prompt "Files > " >$contentFile
     else
       rm -f $contentFile
       while [[ ! -z $2 ]]; do

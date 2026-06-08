@@ -1,5 +1,13 @@
 -- vim: sts=4 ts=4 sw=4
 
+local function get_hostname()
+    local f = io.open("/etc/hostname", "r")
+    if not f then return nil end
+    local s = f:read("*l")
+    f:close()
+    return s and s:match("^%s*(.-)%s*$")
+end
+
 hl.env("CLUTTER_BACKEND", "wayland")
 hl.env("GDK_BACKEND", "wayland,x11")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
@@ -15,6 +23,12 @@ hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Amber")
 hl.env("HYPRCURSOR_SIZE", "20")
 hl.env("XCURSOR_THEME", "Bibata-Modern-Amber")
 hl.env("XCURSOR_SIZE", "20")
+
+local hostname = get_hostname()
+
+if hostname == "..." then
+else
+end
 
 require("monitors")
 
@@ -37,6 +51,7 @@ hl.on("hyprland.start", function ()
     hl.exec_cmd("swayosd-server")
     hl.exec_cmd("wlsunset -l 51.1 -L 17.0")
     hl.exec_cmd("keyd-application-mapper -d")
+    hl.exec_cmd("blueman-applet")
     hl.exec_cmd(terminal .. " --option window.startup_mode=Fullscreen")
 end)
 
@@ -165,7 +180,7 @@ hl.bind(mainMod .. " + CTRL + J", hl.dsp.layout("togglesplit"))
 hl.bind(mainMod .. " + CTRL + SHIFT + L", hl.dsp.exec_cmd("hyprlock"))
 hl.bind(mainMod .. " + CTRL + SHIFT + S", hl.dsp.exec_cmd("systemctl suspend"))
 
-hl.bind("CTRL + ALT + V", hl.dsp.exec_cmd('cliphist list | rofi -dmenu -p "Clipboard" | cliphist decode | wl-copy'))
+hl.bind("SHIFT + ALT + V", hl.dsp.exec_cmd('cliphist list | rofi -dmenu -p "Clipboard" | cliphist decode | wl-copy'))
 
 hl.bind("Print", hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh"))
 
@@ -180,8 +195,8 @@ hl.bind(mainMod .. " + J", hl.dsp.focus({ direction = "down" }))
 hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("magic"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
 
-hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
+hl.bind(mainMod .. " + CTRL + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
+hl.bind(mainMod .. " + CTRL + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 
 hl.bind(mainMod .. " + CTRL + left",  hl.dsp.focus({ workspace = "e-1" }))
 hl.bind(mainMod .. " + CTRL + right", hl.dsp.focus({ workspace = "e+1" }))

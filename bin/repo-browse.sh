@@ -9,7 +9,7 @@ _repo-browse() { # @@ # {{{
     return 0
   fi # }}}
   local addMaster=false addTags=false addTmpRepos=false addTBRepos=false addExtra=false wereParams=false allDirty=false
-  local repoList="$TMP_MEM_PATH/repo-$([[ "${BASH_SOURCE[0]}" == "$0" ]] && echo $PPID || echo $$).nfo" cleanRepoFile=false
+  local repoList="$TMP_MEM_PATH/repo-$PPID.nfo" cleanRepoFile=false
   [[ ! -z $1 ]] && wereParams=true
   while [[ ! -z $1 ]]; do # {{{
     case $1 in

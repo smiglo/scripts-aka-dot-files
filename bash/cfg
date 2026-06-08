@@ -12,6 +12,7 @@ shopt -s cdspell
 shopt -s checkwinsize
 shopt -s cmdhist
 shopt -s dirspell
+shopt -u dotglob
 shopt -s extglob
 shopt -s globstar
 shopt -s histappend
@@ -27,6 +28,7 @@ goto_vi_command() { # {{{
   return 0
 } # }}}
 if [[ ! -z $PS1 ]]; then
+  bind -f $HOME/.inputrc
   for i in {emacs,vi-command,vi-insert}; do
     bind "set keymap $i"
     # bind -r '\C-k'    # k for utils

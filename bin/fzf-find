@@ -32,37 +32,18 @@ if ${isGit:-false}; then # {{{
   exit 0
 fi # }}}
 
-fdfindCmd="fdfind"
-is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
-is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
-if [[ ! -z $fdfindCmd ]]; then # {{{
-  depth="$(correctDepth "${FZF_MAX_DEPTH:-12}")"
-  exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
-  if $useFdFind; then # {{{
-    if $IS_MAC || $IS_DOCKER; then # {{{
-      exclude_list+=" Applications Library"
-    fi # }}}
-    if $IS_VIRTUAL_OS; then # {{{
-      exclude_list+=" host"
-    fi # }}}
-    for i in $exclude_list; do
-      exclude+=" -E \"$i/*\" -E \"**/$i/*\""
-    done
-  fi # }}}
-  case $mode in
-  all)  eval $fdfindCmd -Ld $depth $($hidden && echo "--hidden") --no-ignore-vcs $exclude;;
-  dirs) eval $fdfindCmd -Ld $depth $($hidden && echo "--hidden") --type d --type l --no-ignore-vcs $exclude;;
-  esac | sort # }}}
-elif is-installed -w ag >/dev/null 2>&1; then # {{{
-  case $mode in
-  all)  ag $AG_OPTIONS --follow -g "";;
-  dirs) ag $AG_OPTIONS --follow -g "" | sed -n '/\//s|\(.*/\).*|\1|p';;
-  esac | sort # }}}
-else # {{{
-  depth="$(correctDepth "${FZF_MAX_DEPTH:-5}")"
-  case $mode in
-  all)  find . -maxdepth $depth;;
-  dirs) find . -maxdepth $depth -type d;;
-  esac | sed 's|^\./||' | sort
+depth="$(correctDepth "${FZF_MAX_DEPTH:-12}")"
+exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
+if $IS_MAC || $IS_DOCKER; then # {{{
+  exclude_list+=" Applications Library"
 fi # }}}
-
+if $IS_VIRTUAL_OS; then # {{{
+  exclude_list+=" host"
+fi # }}}
+for i in $exclude_list; do
+  exclude+=" -E \"$i/*\" -E \"**/$i/*\""
+done
+case $mode in
+all)  eval fd -Ld $depth $($hidden && echo "--hidden") --no-ignore-vcs $exclude;;
+dirs) eval fd -Ld $depth $($hidden && echo "--hidden") --type d --type l --no-ignore-vcs $exclude;;
+esac | sort

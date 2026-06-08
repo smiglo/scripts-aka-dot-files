@@ -10,7 +10,7 @@ aawk() { # @@ # {{{
     split) echo ": -";;
     -f) get-file-list '*.awk'; get-file-list --pwd "$scriptPath" '*.awk';;
     -F) echo "\'[=\\ ]\'";;
-    *)  echo "1 2 3 -F -f --split";;
+    *)  echo "1 2 3 -F -f split";;
     esac
     return 0
   fi # }}}

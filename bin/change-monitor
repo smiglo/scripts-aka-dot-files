@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module echor progress
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $3 in
+  --dst) echo "FILE @@-f";;
+  -d) echo "DELAY 1 5 10 30";;
+  *)  echo "--dst -d -s --stop @@-f @@-d -? -S";;
+  esac
+  exit 0
+fi # }}}
+dst=$TMP_MEM_PATH/change-monitor.$PPID dstChanged=false toMonitor="." delay=5 useProgress=true stopOnChange=false silent=false
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  --dst) dst="$2"; dstChanged=true; shift;;
+  -\?)   dstChanged=false;;
+  -d | --delay) delay="$2"; shift;;
+  -S) silent=true;;
+  -s) useProgress=false;;
+  --stop) stopOnChange=true;;
+  *) toMonitor="$@"; shift $#; break;;
+  esac; shift
+done # }}}
+$stopOnChange || $dstChanged || $silent || echor "file: $dst"
+i= k= list= shaLast= sha= first=true
+for i in $toMonitor; do # {{{
+  if [[ -d $i ]]; then
+    list+=" $(fd . --type f "$i/")"
+  else
+    [[ ! -e $i ]] && $first && touch $i
+    [[ -e $i ]] && list+=" $i"
+  fi
+  first=false
+done # }}}
+[[ -z ${list// /} ]] && exit 1
+mkdir -p "$(dirname "$dst")" >/dev/null
+$useProgress && progress-dot --init --align
+sha1sum $list >"$dst"
+shaLast=$(sha1sum "$dst")
+exitByChange=true
+trap "tput cnorm; rm -f '$dst'; exit 0" INT
+dot=$(get-unicode-char romb)
+while true; do # {{{
+  sleep-precise -s
+  sha1sum $list>"$dst"
+  sha="$(sha1sum "$dst")"
+  if $useProgress; then
+    if [[ $sha == $shaLast ]]; then
+      progress-dot
+    else
+      progress-dot --dot=yellow:$dot
+    fi
+  fi
+  if [[ $sha != $shaLast ]]; then
+    shaLast=$sha
+    $stopOnChange && break
+  fi
+  if ! read -t $(sleep-precise -i $delay) -s -n1 k; then
+    [[ -e $dst ]] || { exitByChange=false; break; }
+    continue
+  fi
+  case ${k,,} in
+  q) break;;
+  esac
+done # }}}
+$useProgress && progress-dot --end
+rm "$dst"
+$exitByChange && exit 0 || exit 1

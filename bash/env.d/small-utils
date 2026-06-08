@@ -1,46 +1,16 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-bash-on-list() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "--always --cont --pre --post --no-bash DIRS"
-    return 0
-  fi # }}}
-  local exitOnErr=true preCmd= postCmd= always=false skipBash=false
-  while [[ ! -z $1 ]]; do # {{{
+add-params() { # {{{
+  while [[ -n $1 ]]; do
     case $1 in
-    --always)  always=true;;
-    --cont)    exitOnErr=false;;
-    --pre)     preCmd="$2"; shift;;
-    --post)    postCmd="$2"; shift;;
-    --no-bash) skipBash=true;;
-    *)         break;;
-    esac; shift
-  done # }}}
-  local list="$@"
-  [[ ! -z $list ]] || return 1
-  local d= oPWD="$OLDPWD" retVal=0
-  for d in $list; do # {{{
-    local err=0
-    command cd "$d" >/dev/null 2>&1 || { echoe -f "Cannot cd to '$d', skipping"; continue; }
-    [[ -z $preCmd ]] || eval "$preCmd"
-    err=$?
-    if [[ $err == 0 ]] || $always; then
-      $skipBash || bash </dev/tty
-      err=$?
-    fi
-    if [[ ! -z $postCmd ]] && ( [[ $err == 0 ]] || ! $exitOnErr ); then # {{{
-      eval "$postCmd"
-      err=$?
-    fi # }}}
-    command cd - >/dev/null 2>&1
-    if [[ $err != 0 ]]; then
-      retVal=1
-      $exitOnErr && break
-    fi
-  done # }}}
-  OLDPWD="$oPWD"
-  return $retVal
+    0 | false);;
+    *)
+      if [[ $1 == "true" || $1 =~ ^[1-9][0-9]*$ ]] || eval "$1" >/dev/null 2>&1; then
+        echo "$2"
+      fi;;
+    esac; shift 2
+  done
 } # }}}
 bash-trace() { # @@ # {{{
   set +x
@@ -155,9 +125,6 @@ byebye() { # {{{
     command logout 2>/dev/null || command exit
   fi
 } # }}}
-change-monitor() { # @@ # {{{
-  $ENV_SCRIPTS/small-utils/change-monitor.sh "$@"
-} # }}}
 clean-ansi() { # {{{
   if [[ ! -z $1 ]]; then
     echo -e "$@"
@@ -194,6 +161,7 @@ clr() { # @@ # {{{
   if $hist && [[ -n $TMUX ]]; then
     tmux clear-history
   fi
+  tput cnorm
   unset PS1_CONVERTER_ADD_SEPARATOR
   return 0
 } # }}}
@@ -233,42 +201,6 @@ fix-agent() { # @@ # {{{
   source $SCRIPT_PATH/bin/fix-ssh-agent.sh "$@"
   err=$?; unset __fsa_err
   return $err
-} # }}}
-fix_caps() { # {{{
-  which setxkbmap >/dev/null 2>&1 && setxkbmap -option 'caps:ctrl_modifier'
-  if which xcape >/dev/null 2>&1; then
-    killall xcape >/dev/null 2>&1
-    xcape -e "${CAPS_KEY:-Caps_Lock}=Escape"
-  fi
-} # }}}
-for-do() { # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "- -l"
-    return 0
-  fi # }}}
-  local arg= cmd= xargsP="-n1 -r" wasBracketParam=false processWords=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -)  xargsP+=" -I{}"; wasBracketParam=true;;
-    -w) processWords=true;;
-    *)  break;;
-    esac; shift
-  done # }}}
-  if [[ ! -t 0 ]]; then # {{{
-    arg="$(<-)"
-    cmd="$@" # }}}
-  elif [[ "$@" == *\ --\ * ]]; then # {{{
-    arg="$@"
-    cmd="$@"
-    args="$(echo "${arg/ -- *}" | sed -e 's/^\s\+//' -e 's/\s\+$//')"
-    cmd="$( echo "${cmd/* -- }" | sed -e 's/^\s\+//' -e 's/\s\+$//')" # }}}
-  else # {{{
-    arg="$1"
-    shift
-    cmd="$@"
-  fi # }}}
-  ! $wasBracketParam && [[ $cmd == *{}* ]] && xargsP+=" -I{}"
-  echo -n "$arg" | { if $processWords; then sed 's/ /\n/g'; else command cat -; fi; } | sed '/^\s*$/d' | eval xargs $xargsP $cmd
 } # }}}
 fr() { # @@:new # {{{
   if [[ $1 == '@@' ]]; then # {{{
@@ -325,6 +257,24 @@ getCurPos() { # {{{
   read -sdR -p $'\E[6n' pos # ]
   echo "${pos#*\[}" # ]
 } # }}}
+gp() { # {{{
+  local f="$1" doFind=false findDir="."
+  declare -a findP=()
+  if [[ -n "$f" ]]; then
+    if [[ -d "$f" ]]; then
+      doFind=true; findDir="$f"
+    elif [[ ! -e "$f" ]]; then
+      doFind=true; findP=("-a" "-name" "$f" )
+    fi
+  else
+    doFind=true
+  fi
+  if $find; then
+    f="$(find $findDir -maxdepth 1  \( -type f -o -type l \) "${findP[@]}" -print | xargs -r ls -dt | fzf --multi -1 -0)"
+    [[ -n $f ]] || eval $(die "file not found")
+  fi
+  realpath $f | tee >(xclip --put) | sed 's/$/ (copied)/'
+} # }}}
 logout() { # {{{
   if [[ ! -n $TMUX ]]; then
     command logout 2>/dev/null || command exit
@@ -333,54 +283,20 @@ logout() { # {{{
     tmux detach -P
   fi
 } # }}}
-mapShortCutToFull() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "-a --all PREFIX SET"
-    return 0
+src() { # {{{
+  if [[ $1 == "@@" ]]; then # @@:new # {{{
+    $ENV_SCRIPTS/misc/src.sh "$@"
+    return
+  fi # }}}}
+  local file= params= sthSourced=false
+  while read file params; do
+    source $file $params || eval $(die src "sourcing $j failed")
+    sthSourced=true
+  done < <($ENV_SCRIPTS/misc/src.sh "$@")
+  touch $ENV_SNAPSHOT/.src.${TMUX_PANE:-main}
+  if $sthSourced; then # {{{
+    env-snapshot --force save
   fi # }}}
-  local allDisplay=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    -a | --all) allDisplay=true;;
-    *) break;;
-    esac; shift
-  done # }}}
-  local shortcut=$1 set=$2 i= onlyOne=true foundFull= allMatches=
-  for i in $(echo "$set" | tr ' ' '\n'); do # {{{
-    [[ $i == $shortcut ]] && echo "$i" && return 0
-    if [[ $i =~ ^$shortcut.* ]]; then
-      if [[ -z $foundFull ]]; then
-        allMatches+="$i "
-        foundFull=$i
-      else
-        allMatches+="$i "
-        onlyOne=false
-      fi
-    fi
-  done # }}}
-  if [[ ! -z $foundFull ]]; then # {{{
-    if $onlyOne; then
-      echo "$foundFull"
-    elif $allDisplay; then
-      echo "$allMatches"
-      return 1
-    fi
-  fi # }}}
-} # }}}
-rpath() { # {{{
-  local pwd="." src= p="-s"
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --pwd) pwd=$2; shift;;
-    -*)    p+="$1 ";;
-    +s)    p="${p/-s}";;
-    *) break;;
-    esac; shift
-  done # }}}
-  src=$1 pre=
-  [[ -z $src ]] && return 1
-  [[ $src == $pwd* ]] && pre="./"
-  echo "$pre$(realpath $p --relative-to "$pwd" "$src")"
 } # }}}
 sudo() { # {{{
   if [[ ! -z $1 ]]; then
@@ -392,11 +308,6 @@ sudo() { # {{{
 up() { # {{{
   is-installed up || { echoe -f "up not installed"; return 1; }
   ( TERM='xterm-256color' command up "$@" )
-} # }}}
-zipf() { # {{{
-  [ -d "$1" ] && zip -r $1.zip $@ && return 0
-  [ "$1" == '-' ] && shift && zip -r $1.zip $@ && return 0
-  while [ -f "$1" ]; do gzip $1; shift; done
 } # }}}
 # OS specifics # {{{
 if ! $IS_MAC; then
@@ -468,7 +379,7 @@ if $IS_ARCH; then # {{{
       read -t5 -p "Reboot [NY] ? " k || { echo; return 2; }
       [[ $k == 'Y' ]] || return 1;;
     esac
-    hyprshutdown -t 'Rebooting...' --post-cmd "sudo -E /root/bin/utils.sh reboot -y"
+    hyprshutdown -t 'Rebooting...' --post-cmd "sudo -E /root/bin/utils.sh reboot -y" || /usr/bin/reboot
   } # }}}
   shutdownF() { # {{{
     if [[ $(tty) == /dev/tty* ]]; then
@@ -482,7 +393,7 @@ if $IS_ARCH; then # {{{
       read -t5 -p "Shutdown [NY] ? " k || { echo; return 2; }
       [[ $k == 'Y' ]] || return 1;;
     esac
-    hyprshutdown -t 'Shutting down...' --post-cmd "sudo -E /root/bin/utils.sh shutdown -y"
+    hyprshutdown -t 'Shutting down...' --post-cmd "sudo -E /root/bin/utils.sh shutdown -y" || /usr/bin/shutdown now
   } # }}}
   LogoutF() { # {{{
     if [[ $(tty) == /dev/tty* ]]; then
@@ -502,5 +413,4 @@ if $IS_ARCH; then # {{{
   alias Logout='LogoutF'
 fi # }}}
 # }}}
-export -f bash-trace change-monitor clean-ansi mapShortCutToFull rpath
-
+export -f add-params bash-trace clean-ansi

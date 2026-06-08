@@ -49,6 +49,7 @@ call=*) # {{{
   declare -F $what >/dev/null 2>&1 || exit 254
   $what "$@";; # }}}
 get) # {{{
+  declare -A ENV_FUNC_GETTER=()
   ENV_FUNC_GETTER[get-unicode-char]="unicode-chars"
   ENV_FUNC_GETTER[xclip]="clipboard"
   mode="call"

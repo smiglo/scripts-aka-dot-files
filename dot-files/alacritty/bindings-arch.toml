@@ -1,0 +1,29 @@
+[[keyboard.bindings]]
+key = "="
+mods = "Control"
+action = "None"
+
+[[keyboard.bindings]]
+key = "="
+mods = "Control|Alt"
+action = "IncreaseFontSize"
+
+[[keyboard.bindings]]
+key = "-"
+mods = "Control"
+action = "None"
+
+[[keyboard.bindings]]
+key = "-"
+mods = "Control|Alt"
+action = "DecreaseFontSize"
+
+[[keyboard.bindings]]
+key = "0"
+mods = "Control"
+action = "None"
+
+[[keyboard.bindings]]
+key = "0"
+mods = "Control|Alt"
+action = "ResetFontSize"

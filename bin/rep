@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  case $2 in
+  -d | --dir)
+    echo "@@-d"
+    echo "$REP_DIRS"  | tr ' ' '\n' | sed 's|'"$APPS_CFG_PATH/rep/"'||';;
+  -f | --file)
+    echo "@@-f"
+    echo "$REP_FILES" | tr ' ' '\n' | sed 's|'"$APPS_CFG_PATH/rep/"'||';;
+  -e | --env) echo "@@-f $REP_ENVS";;
+  --wait-time) echo "0 1 3";;
+  esac
+  exit 0
+fi # }}}
+
+run-cmds() { # {{{
+  local item=
+  [[ -e $repEnv ]] && source $repEnv
+  [[ -e $repDir && -e $repDir/env ]] && source $repDir/env
+  while read item; do
+    if [[ -v rep[$item] ]]; then
+      cl gray "$ " info "$(eval "echo \"${rep[$item]}\"")" >&2
+      if [[ -z $setP ]]; then
+        ( eval "${rep[$item]}" )
+      else
+        ( set -$setP; eval "${rep[$item]}" )
+      fi
+    else
+      cl gray "$ " info "$item" >&2
+      if [[ -z $setP ]]; then
+        $repDir/$item
+      else
+        ( set -$setP; $repDir/$item; )
+      fi
+    fi || cl err "ERR" - "failed" >&2
+  done
+} # }}}
+load() { # {{{
+  list=()
+  rep=()
+  [[ -e $repEnv ]] && source $repEnv
+  if [[ -e $repFile ]]; then
+    source $repFile
+  fi
+  if [[ -e $repDir ]]; then
+    list=( $(cd $repDir; find . -type f -executable | sed -e 's|\./||' -e '/^env$/d') )
+  fi
+  if (( ${#rep[@]} )); then
+    list+=( "${!rep[@]}" )
+  fi
+  list=( $(printf "%s\n" "${list[@]}" | sort -u) )
+} # }}}
+
+repDir=
+repFile=
+setP=
+waitTime=
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -d | --dir)
+    repDir="$2"; shift
+    [[ ! -e $repDir && -e $APPS_CFG_PATH/rep/$regDir ]] && refFile="$APPS_CFG_PATH/rep/$regDir";;
+  -f | --file)
+    repFile="$2"; shift
+    [[ ! -e $repFile && -e $APPS_CFG_PATH/rep/$regFile ]] && refFile="$APPS_CFG_PATH/rep/$regFile";;
+  -e | --env) repEnv="$2"; shift;;
+  --wait) waitTime="$2"; shift;;
+  -x) setP+="x";;
+  -v) setP+="v";;
+  -xv) setP="xv";;
+  esac; shift
+done # }}}
+
+if [[ -z $repDir && -z $repFile ]]; then # {{{
+  if [[ -e ./.rep ]]; then
+    repFile="./.rep"
+  elif [[ -n $REP_FILE && -e $REP_FILE ]]; then
+    repFile="$REP_FILE"
+  elif [[ -n $REP_FILES && -e ${REP_FILES%% *} ]]; then
+    repFile="${REP_FILES%% *}"
+  elif [[ -d ./.rep.d ]]; then
+    repDir="./.rep.d"
+  elif [[ -n $REP_DIR && -e $REP_DIR ]]; then
+    repDir="$REP_DIR"
+  elif [[ -n $REP_DIRS && -e ${REP_DIRS%% *} ]]; then
+    repDir="${REP_DIRS%% *}"
+  fi
+fi # }}}
+[[ -e $repFile || -e $repDir ]] || die "no rep file/dir"
+
+if [[ -z $repEnv ]]; then # {{{
+  repEnv="./.rep.env"
+  suffix=
+  if [[ -e $repFile && $repFile =~ (.*/)?(rep)?([._-].*) ]]; then
+    suffix="${BASH_REMATCH[3]}"
+  elif [[ -e $repDir && $repDir =~ (.*/)?(rep)?([._-].*) ]]; then
+    suffix="${BASH_REMATCH[3]}"
+  fi
+  [[ -n $suffix && -e ./.rep$suffix.env ]] && repEnv="./.rep$suffix.env"
+fi # }}}
+
+declare -a list=()
+declare -A rep=()
+
+if [[ -t 0 ]]; then # {{{
+  while true; do
+    load
+    (( ${#list[@]} )) || exit 0
+    items=( $( \
+      printf "%s\n" "${list[@]}" \
+      | fzf --prompt "cmd> " --no-sort --multi \
+          --min-height=10+ --height=~50% \
+          --expect ctrl-r \
+          --expect ctrl-e \
+    ) ) || break
+    (( ${#items[@]} )) || break
+    case ${items[0]} in
+    ctrl-r) ;;
+    ctrl-e) # {{{
+      list=
+      [[ -e $repFile ]] && list+=" $repFile"
+      [[ -e $repDir ]] && list+=" $repDir/*"
+      list+=" $repEnv"
+      vim $list;; # }}}
+    *)
+      printf "%s\n" "${items[@]}" | run-cmds
+      if [[ -n $waitTime ]]; then
+        waitP="-sn1"
+        ((waitTime > 0 )) && waitP+=" -t$waitTime"
+        read $waitP >&2
+      fi;;
+    esac
+  done # }}}
+else # {{{
+  load
+  (( ${#list[@]} )) || exit 0
+  run-cmds
+fi # }}}

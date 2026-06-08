@@ -489,7 +489,7 @@ brun-clang() { # @@:new # {{{
     if $isGit; then
       git ls-files -- '*.cpp' '*.c' '*.h' '*.hpp'
     else
-      fdfind --type f ".*\.(c|cpp|h|hpp)$"
+      fd --type f ".*\.(c|cpp|h|hpp)$"
     fi
   fi | xargs clang-format $params
   if (( $? == 0 )); then

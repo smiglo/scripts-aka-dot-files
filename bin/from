@@ -74,7 +74,7 @@ if $fzfAll; then # {{{
   [[ ! -z $from ]] || from="."
   $fullPath && from="$(realpath "$from")" && cwd="$(realpath "$cwd")"
   cd $from
-  fdfind --type f \
+  fd --type f \
   | { [[ -z $what ]] && cat - || grep -E "$what"; } \
   | fzf -m --sort \
   | sed "s:^:$from/:"

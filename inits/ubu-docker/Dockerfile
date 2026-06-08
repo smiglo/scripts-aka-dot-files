@@ -82,8 +82,7 @@ RUN sed -i '/@includedir/i '"$UNAME"'	ALL=(ALL:ALL) ALL' /etc/sudoers
 
 RUN mv /usr/bin/hostname /usr/bin/hostname.bck \
     && echo "echo ubu" >/usr/bin/hostname \
-    && chmod a+rx /usr/bin/hostname \
-    && echo "ubu" >/etc/hosts
+    && chmod a+rx /usr/bin/hostname
 
 RUN mkdir -p /etc/ssh/sshd_config.d \
     && echo "Port 4022" >>/etc/ssh/sshd_config.d/port.conf

@@ -71,8 +71,8 @@ $showInfo && printfc "%ts:%s: end at %info:%s, pid: %purple:%s" "$(date +$TIME_F
 
 endReason="timeout"
 progress-dot --init $params --end $t_end
-sleep-precise -s $step
 for ((i=1; EPOCHSECONDS < t_end; i++)); do # {{{
+  sleep-precise -s
   if [[ ! -z $checkCmd || ! -z $fileMarker ]] && (($i % $cmd_n == 0)); then
     [[ ! -z $fileMarker && -e $fileMarker ]] || eval $checkCmd
     if (( $? == 0 )); then
@@ -86,9 +86,7 @@ for ((i=1; EPOCHSECONDS < t_end; i++)); do # {{{
   else
     progress-dot --dot
   fi
-  sleep-precise
-  read -s -n 1 -t 0.001 key </dev/tty && \
-  case ${key,,} in
+  read -t $(sleep-precise -i 1) -s -n1 key </dev/tty && case ${key,,} in
   q) progress-dot --dot=cyan:sep-x@UC; endReason="break"; break;;
   esac
 done # }}}
@@ -107,4 +105,3 @@ timeout)
   progress-dot --end=?
   exit 2;;
 esac # }}}
-

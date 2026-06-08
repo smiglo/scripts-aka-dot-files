@@ -203,5 +203,3 @@ hist() { # {{{
 }
 alias h="hist" # }}}
 export -f bash_phistory
-alias l="fc -s"
-

@@ -108,6 +108,8 @@ if [[ $1 == '@@' ]]; then # {{{
       esac # }}}
     elif [[ " $@ " =~ \ (--)?(sync|sync-get|sync-put)\  ]]; then # {{{
       echo "---" # }}}
+    elif [[ " $@ " =~ \ next-iter\  ]]; then # {{{
+      echo "PHRASE" # }}}
     else # {{{
       if [[ $3 == *:* ]]; then
         echo "PHRASE"
@@ -121,7 +123,7 @@ if [[ $1 == '@@' ]]; then # {{{
       else
         echo "$(get-keys)"
         echo "-v -vv -vvv -j --journal --help --test"
-        list=" add-env gen get has ios-pass key list list-all save set-master-key"
+        list=" add-env gen get has ios-pass key list list-all save set-master-key next-iter"
         if is-installed keep-pass-sync.sh && keep-pass-sync.sh --is-configured; then
           list+=" sync sync-get sync-put"
         fi
@@ -179,7 +181,7 @@ if [[ ! -z "$KEEP_PASS_KEYS" ]]; then # {{{
 fi # }}}
 
 getRand() { # {{{
-  echo "$(($1 + $RANDOM % ($2-$1+1)))"
+  echo "$(($1 + $SRANDOM % ($2-$1+1)))"
 } # }}}
 testRand() { # {{{
   for ((i=0; i<${3:-10}; i++)); do
@@ -765,6 +767,42 @@ genIOSLikePass() { # {{{
   echo "$out"
 } # }}}
 # }}}
+next-iter() { # {{{
+  local w="$1" wn=
+  [[ -z $w && ! -t 0 ]] && w="$(</dev/stdin)"
+  [[ -n $w ]] || eval $(die "no input")
+  local ssum=$(echo "$w" | sha256sum | cut -d' ' -f1) in= ot=
+  local -i len="${#w}" cnt=(len/2)+1 i=0 idx=0 offset=0 value=0 res= slen="${#ssum}"
+  dbg 1 "$w [$len] : $ssum"
+  local special="-=+@#%"
+  while ((cnt--)); do
+    idx=(idx + 16#${ssum:i:2})%len
+    in=${w:$idx:1} ot=
+    printf -v value '%d' "'$in"
+    i=(i+11)%slen
+    offset=16#${ssum:i:2}
+    i=(i+7)%slen
+    case $in in
+    -) ot="=";;
+    =) ot="-";;
+    [0-9]) res=(value - 48 + offset)%10+48;;
+    [a-z]) res=(value - 97 + offset)%26+97;;
+    [A-Z]) res=(value - 65 + offset)%26+65;;
+    *)
+      local -i j=0
+      while ((j<${#special} )) && [[ $in != ${special:$j:1} ]]; do j+=1; done
+      res=(j + offset)%${#special}
+      ot=${special:$res:1};;
+    esac
+    [[ -n $ot ]] || printf -v ot "\\$(printf '%03o' "$res")"
+    dbg 2 "w[$idx]: $in -> $ot ($value +$offset)"
+    wn="${w:0:$((idx))}$ot${w:$((idx+1))}"
+    dbg 3 "$w"
+    dbg 1 "$wn"
+    w="$wn"
+  done
+  echo "$w"
+} # }}}
 set -- $KEEP_PASS_PARAMS "$@"
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -804,6 +842,7 @@ case $1 in
 --set-master-key | set-master-key) shift; setMasterKey $@;;
 --test) shift; $@;;
 --ios-pass | ios-pass) shift; genIOSLikePass $@;;
+next-iter) shift; next-iter "$@";;
 --sync | --sync-put | --sync-get | sync | sync-put | sync-get) # {{{
   is-installed keep-pass-sync.sh || { err "sync not found"; exit 1; }
   keep-pass-sync.sh --is-configured || { err "sync not configured"; exit 1; }
@@ -825,4 +864,3 @@ case $1 in
     getPass "$@"
   fi
 esac
-

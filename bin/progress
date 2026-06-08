@@ -159,7 +159,7 @@ _progress() { # @@ # {{{
     --wait-pv | --wait) # {{{
                   [[ $1 == '--wait-pv' ]] && method='pv' && report_error=false
                   shift
-                  endTime="$(time2s -o abs-s $1)";; # }}}
+                  [[ $1 != 0 ]] && endTime="$(time2s -o abs-s $1)";; # }}}
     --dbg)        dbg="l1"; useTput=false;;
     --dbg2)       dbg="l2"; useTput=false;;
     --tput)       useTput=true;;

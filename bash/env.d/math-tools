@@ -6,7 +6,7 @@ get-value-with-prob() { # @@ # {{{
     [[ $2 == 1 ]] && echo "Values Value-i:Prob-i[%]" || echo "Probability-For-Each-Value[%] Value-j:Prob-j[%] Value-k"
     return 0
   fi # }}}
-  local r=$((RANDOM%100)) dbg=false i= s=0 ii=0 v= end=false values= probs=
+  local r=$((SRANDOM%100)) dbg=false i= s=0 ii=0 v= end=false values= probs=
   $dbg && import-module echor
   if [[ $1 == *:* ]]; then
     for i in $@; do
@@ -46,11 +46,11 @@ get-range-value() { # @@ # {{{
   elif [[ $# == 2 ]]; then
     min=$1 max=$2
   fi
-  [[ -z $max ]] && echo $RANDOM && return 0
+  [[ -z $max ]] && echo $SRANDOM && return 0
   [[ $min != 0 ]] && max=$((max-min))
   [[ $max == 0 ]] && max=2
   $inclusive && max=$((max+1))
-  echo $((min+RANDOM%max))
+  echo $((min + SRANDOM % max))
 } # }}}
 export -f get-value-with-prob get-range-value
 

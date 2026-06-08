@@ -9,9 +9,19 @@ _screen_lock() { # {{{
   local c2="$(( ($c1 + 1 + $RANDOM % (${#colors[*]} - 1)) % ${#colors[*]} ))"
   local cmatrix_cmd="nice -n 15 cmatrix -u ${CMATRIX_SPEED:-5} -b"
   import-module mutex-locking time-tools
+  local title=
+  title="$(tmux show -gv set-titles-string 2>/dev/null)"
+  if [[ -n $title ]]; then
+    title="${title//\\}"
+    [[ "$title" == *" " ]] && title="${title% }" || title="$title " # make a difference to force redraw
+    local dummyTitle="$TMUX_TITLE"
+    [[ -n $dummyTitle ]] || dummyTitle="$($BASH_PATH/env-ext.sh get get-unicode-char "${TMUX_ICON_HOST:-localhost}")"
+    printf "]0;%b%b" "$dummyTitle" "\x07"
+  fi
   tput reset
   if ${SSHH_ADD_LOCK_NO_PWD:-false} || [[ -z $SSHH_ADD_LOCK_NO_PWD && -z $SSH_AGENT_LOCK_PWD ]] || [[ "$(tmux display-message -pF '#{client_tty}')" !=  *"/0" && $(tmux list-clients | wc -l) -gt 1 ]] ; then # {{{
     eval $cmatrix_cmd -C ${colors[$(($RANDOM % ${#colors[*]}))]}
+    [[ -n $title ]] && tmux set -g set-titles-string "$title"
     return
   fi # }}}
   if [[ ! -z $SSH_AGENT_LOCK_PWD ]]; then # {{{
@@ -32,6 +42,7 @@ _screen_lock() { # {{{
     mutex-init "ssh-lock" --no-trap --auto-clean-after 0
     if ! mutex-lock; then
       eval $cmatrix_cmd -C ${colors[$c1]}
+      [[ -n $title ]] && tmux set -g set-titles-string "$title"
       $from_tmux && tmux display-message "Cannot lock ssh-agent, mutex locked" || echoe "Cannot lock ssh-agent, mutex locked"
       sleep 1
       return 1
@@ -55,6 +66,7 @@ _screen_lock() { # {{{
       if [[ $? != 255 ]]; then
         read -s -n 10000 -t 0.5 tmp
         [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ENV_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
+        [[ -n $title ]] && tmux set -g set-titles-string "$title"
         mutex-unlock; mutex-deinit
         return 0
       fi
@@ -132,6 +144,7 @@ _screen_lock() { # {{{
       done # }}}
     fi # }}}
   done # }}}
+  [[ -n $title ]] && tmux set -g set-titles-string "$title"
   [[ $SSHH_ADD_LOCK_TS_FILE != '-' ]] && $ENV_SCRIPTS/file-tools/update-file.sh $SSHH_ADD_LOCK_TS_FILE --var cmatrixLockTime "$((cmatrixLockTime + $EPOCHSECONDS - cTime))"
   mutex-unlock
   mutex-deinit

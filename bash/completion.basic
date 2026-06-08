@@ -1,25 +1,39 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
 _completer-filename() { # {{{
-    local cur="$1"
-    command grep -v -F -f <(compgen -d -P ^ -S '$' -- "$cur") <(compgen -f -P ^ -S '$' -- "$cur") | sed -e 's/^\^//' -e 's/\$$/ /'
+    local cur="$1" fileFilter="${2:-txt}"
+    local i= list=
+    [[ $cur == ./* || $curr == *//* ]] && fileFilter="all"
+    list="$(command grep -v -F -f <(compgen -d -P ^ -S '$' -- "$cur") <(compgen -f -P ^ -S '$' -- "$cur") | sed -e 's/^\^//' -e 's/\$$/ /')"
+    if [[ -n $list ]]; then
+      while read -r i; do
+        case $fileFilter in
+        txt) [[   $(file --mime $i) =~ binary ]] && continue;;
+        bin) [[ ! $(file --mime $i) =~ binary ]] && continue;;
+        all) ;;
+        esac
+        echo "$i"
+      done <<<"$list"
+    fi
     compgen -d -S / -- "$cur"
 } # }}}
 _completer() { # {{{
   local mode=$1; shift
   local cur=${COMP_WORDS[COMP_CWORD]} cmd=${COMP_WORDS[0]} prev= param= dbgOn=${COMPLETION_DBG:-false} prevTrim=false
+  local space_hasNoSpace=true space_addOnNonDir=true
+  local i=
   echoe $dbgOn
   echoe $dbgOn -m compl-$mode "$(declare -p COMP_WORDS)"
+  [[ $(complete -p $cmd) =~ "-o nospace" ]] || space_hasNoSpace=false
   _get_comp_words_by_ref -n : cur
   [[ $COMP_CWORD -gt 1 ]] && prev="${COMP_WORDS[COMP_CWORD - 1]}" && _get_comp_words_by_ref -n : prev && prevTrim=true
   local this_alias="${BASH_ALIASES[$cmd]}"
   if [[ $cmd == 'git' || ( $cmd == 'g' && ${BASH_ALIASES[g]} == 'git' ) ]]; then # {{{
     cmd="git"
     param="${COMP_WORDS[1]}"
-    if [[ " $($SCRIPT_PATH/git/git-extra-completion.sh --list) " == *" $param "* ]]; then
-      cmd="$SCRIPT_PATH/git/git-extra-completion.sh"
+    if [[ " $($SCRIPT_PATH/bin/git/extra-completion.sh --list) " == *" $param "* ]]; then
+      cmd="$SCRIPT_PATH/bin/git/extra-completion.sh"
     else
       local git_alias="$(git config alias.$param)"
       [[ ! -z $git_alias ]] && param="${git_alias%% }"
@@ -33,13 +47,16 @@ _completer() { # {{{
       local module="${this_alias%% *}" cmd="${this_alias#* }"
       import-module ${module##*/}
     else
+      [[ $this_alias =~ ^set\ [^\;]*\;\ *(.*) ]] && this_alias="${BASH_REMATCH[1]}"
       cmd="${this_alias%% *}"
     fi
   fi # }}}
   case $mode in
   old | new) # {{{
     local wCmd="$(which $cmd 2>/dev/null)"
+    local cmdBody=
     if [[ -n $wCmd ]]; then # {{{
+      cmdBody="$(< $wCmd)"
       [[ $wCmd == ./* ]] && wCmd="$PWD/${wCmd#./}"
       local dirCmd="$(basename $(dirname $wCmd))"
       wCmd="${wCmd#$HOME/}" && wCmd="${wCmd//\//-}"
@@ -47,11 +64,16 @@ _completer() { # {{{
         cmd="compl-$wCmd"
       elif is-installed compl-$dirCmd-$cmd; then
         cmd="compl-$dirCmd-$cmd"
+      elif is-installed compl-$cmd; then
+        cmd="compl-$cmd"
       fi # }}}
     elif declare -F $cmd >/dev/null 2>&1; then # {{{
+      cmdBody="$(type $cmd)"
       wCmd="f-$cmd"
       if is-installed compl-$wCmd; then
         cmd="compl-$wCmd"
+      elif is-installed compl-$cmd; then
+        cmd="compl-$cmd"
       fi
     fi;; # }}} # }}}
   esac
@@ -59,95 +81,69 @@ _completer() { # {{{
   echoe $dbgOn -m compl-$mode "c=[$cmd @@$param], cur[$cur], prev[$prev], cnt[$COMP_CWORD]"
   COMPREPLY=()
   case $mode in
-  old) # {{{
-    local opts="$($cmd @@$param $COMP_CWORD $prev ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))})"
-    echoe $dbgOn -m compl-$mode "opts=[$opts]"
+  old | new) # {{{
+    declare -a opts=()
+    case $mode in
+    old) opts=( $($cmd @@$param $COMP_CWORD "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) );;
+    new) opts=( $($cmd @@$param             "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) );;
+    esac
+    [[ -z $opts && -n "$cmdBody" ]] && opts=( $(compl-get-args <<<"$cmdBody") )
+    echoe $dbgOn -m compl-$mode "$(declare -p opts)"
     case $opts in
-    ---) # {{{
-      COMPREPLY=( "" );; # }}}
-    *) # {{{
-      local flags=${-//[is]}
-      set -f; set -- $(echo -e "$opts"); set +f -$flags
-      opts=''
-      while [[ -n $1 ]]; do # {{{
-        case $1 in
-        @@*) # {{{
-          case ${1:2} in
-          -f) # {{{
-            while read -r i; do
-              opts+=" ${i// /\\ }"
-              [[ -d $i ]] && opts+='/'
-            done < <(compgen -f -- "$cur");; # }}}
-          -d) # {{{
-            while read -r i; do
-              opts+=" ${i// /\\ }/"
-            done < <(compgen -d -- "$cur");; # }}}
-          *) # {{{
-            while read -r i; do
-              opts+=" ${i// /\\ }"
-            done < <(compgen ${1:2} -- "$cur");; # }}}
-          esac;; # }}}
-        *) # {{{
-          opts+=" $1";; # }}}
-        esac; shift
-      done # }}}
-      i=0
-      while read -r opts; do # {{{
-        COMPREPLY[$i]="${opts//\\/\\\\}"
-        i=$(($i+1))
-      done < <(compgen -W "$opts" -- "$cur") # }}}
-      ;; # }}}
-    esac;; # }}}
-  new) # {{{
-    declare -a ret=( $($cmd @@$param "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) )
-    echoe $dbgOn -m compl-$mode "$(declare -p ret)"
-    case $ret in
-    @@-? | @@-?:*) # {{{
-      local dir="."
-      [[ $ret == *:* ]] && dir="${ret#*:}" && ret="${ret%%:*}"
-      case $ret in
-      @@-f) COMPREPLY=( $(builtin cd "$dir"; _completer-filename "$cur") );;
-      @@-d) COMPREPLY=( $(builtin cd "$dir"; compgen -d -S '/' -- "$cur") );;
-      @@-*) COMPREPLY=( $(builtin cd "$dir"; compgen ${ret#@@-} -- "$cur") );;
-      esac;; # }}}
     '---') # {{{
       COMPREPLY=( "" );; # }}}
     *) # {{{
-      declare -a extra
-      local i=
-      for i in ${!ret[*]}; do
-        local v=${ret[$i]}
+      declare -a extra=()
+      local noCompletion=false
+      for i in ${!opts[*]}; do
+        local v=${opts[$i]}
         case $v in
-        @@-? | @@-?:*) # {{{
-          unset ret[$i]
+        ---) unset opts[$i]; noCompletion=true;;
+        @@-* | @@-*:*) # {{{
+          unset opts[$i]
           local dir="."
           [[ $v == *:* ]] && dir="${v#*:}" && v="${v%%:*}"
           case $v in
-          @@-f) extra=( $(builtin cd "$dir"; _completer-filename "$cur") );;
-          @@-d) extra=( $(builtin cd "$dir"; compgen -d -S '/' -- "$cur") );;
-          @@-*) extra=( $(builtin cd "$dir"; compgen ${v#@@-} -- "$cur") );;
+          @@-f)   extra+=( $(builtin cd "$dir"; _completer-filename "$cur" "txt") );;
+          @@-fb)  extra+=( $(builtin cd "$dir"; _completer-filename "$cur" "bin") );;
+          @@-fb+) extra+=( $(builtin cd "$dir"; _completer-filename "$cur" "all") );;
+          @@-d)   extra+=( $(builtin cd "$dir"; compgen -d -S '/' -- "$cur") );;
+          @@-*)   extra+=( $(builtin cd "$dir"; compgen ${v#@@} -- "$cur") );;
           esac;; # }}}
         *) # {{{
-          ret[$i]="${v// /\\ }";; # }}}
-      esac
+          opts[$i]="${v// /\\ }";; # }}}
+        esac
       done
-      readarray -t COMPREPLY < <(compgen -W "${ret[*]@Q}" -- $cur)
-      COMPREPLY+=( "${extra[@]}" );; # }}}
+      if $noCompletion && [[ -z ${opts[@]} && -z ${extra[@]} ]]; then
+        COMPREPLY=( "" )
+      else
+        readarray -t COMPREPLY < <(compgen -W "${opts[*]@Q}" -- $cur)
+        COMPREPLY+=( "${extra[@]}" )
+      fi;; # }}}
     esac;; # }}}
   smart) # {{{
-    local body=
+    local body= params=
     if declare -F $cmd >/dev/null 2>&1; then
       body=$(declare -f $cmd)
+      [[ -v COMPLETION_SMART_PARAMS[$cmd] ]] && params=${COMPLETION_SMART_PARAMS[$cmd]:---no-while}
     elif which $cmd >/dev/null 2>&1; then
-      body=$(< $(which $cmd))
+      local cmdLoc="$(which $cmd)"
+      body=$(< $cmdLoc)
+      if [[ -v COMPLETION_SMART_PARAMS[${cmdLoc##*/}] ]]; then
+        params="${COMPLETION_SMART_PARAMS[$cmdLoc]:-${COMPLETION_SMART_PARAMS[${cmdLoc##*/}]:---no-while}}"
+      elif grep -q "# COMPL-ARGS" $cmdLoc; then
+        params="--no-while"
+      else
+        params="$(sed -n '/# COMPL-SMART:/s/.*# COMPL-SMART:\s*//' $cmdLoc)"
+      fi
     fi
     if [[ -n $body ]]; then
-      declare -a ret=( $(echo "$body" | compl-get-args) )
-      ret=( $(printf "%s\n" "${ret[@]}" | sort -u) )
-      echoe $dbgOn -m compl-$mode "$(declare -p ret)"
-      local i=0 cg=
-      for i in ${!ret[*]}; do
-        cg="$(compgen -W "'${ret[i]//@_@/\\ }'" -- "$cur")"
+      declare -a opts=( $(echo "$body" | compl-get-args $params) )
+      opts=( $(printf "%s\n" "${opts[@]}" | sort -u) )
+      echoe $dbgOn -m compl-$mode "$(declare -p opts)"
+      local cg=
+      for i in ${!opts[*]}; do
+        cg="$(compgen -W "'${opts[i]//@_@/\\ }'" -- "$cur")"
         [[ ! -z $cg ]] || continue
         COMPREPLY+=( "$cg" )
       done
@@ -172,6 +168,13 @@ _completer() { # {{{
       readarray -t COMPREPLY < <(compgen -W "${opts[*]@Q}" -- $cur)
     fi;; # }}}
   esac
+  if $space_hasNoSpace && $space_addOnNonDir; then
+    for i in "${!COMPREPLY[@]}"; do
+      if [[ "${COMPREPLY[$i]}" != */ ]]; then
+        COMPREPLY[$i]+=" "
+      fi
+    done
+  fi
   echoe $dbgOn -m compl-$mode "$(declare -p COMPREPLY)"
   $prevTrim && __ltrim_colon_completions "$prev"
   __ltrim_colon_completions "$cur"

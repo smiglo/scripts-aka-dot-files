@@ -6,7 +6,7 @@ is-installed() { # @@ # {{{
     echo "-f --function -F -x --exporter-Function -w --which -t --type -v --var --cache --no-cache"
     return 0
   fi # }}}
-  local err=0 no=1 mode= tool= fInstalled="$BASHRC_RUNTIME_PATH/is-installed" key= useCache=true
+  local err=0 no=1 mode= tool= fInstalled="${BASHRC_RUNTIME_PATH:-/tmp}/is-installed" key= useCache=true
   declare -Ax IS_INSTALLED_TOOL
   [[ -e $fInstalled ]] && source $fInstalled
   while [[ ! -z $1 ]]; do # {{{
@@ -207,15 +207,21 @@ env-snapshot() { # @@:new # {{{
     rm -rf $ENV_SNAPSHOT_PRE*;; # }}}
   load) # {{{
     [[ ! -e $ENV_SNAPSHOT/setting ]] || return 1
-    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC && ! -e $ENV_SNAPSHOT/set ]]; then
+    local shopts=$(shopt -p dotglob extglob)
+    shopt -u dotglob
+    shopt -s extglob
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set  && ! -e $ENV_SNAPSHOT/set ]]; then
       cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
       unset ENV_SNAPSHOT_SRC
     fi
     [[ -e $ENV_SNAPSHOT/set ]] || return 1
+    cp $ENV_SNAPSHOT/set $ENV_SNAPSHOT/.src.${TMUX_PANE:-main}
+    unalias -a
     for snap_i in bash env func compl alias; do
       [[ -e $ENV_SNAPSHOT/$snap_i ]] || continue
       source $ENV_SNAPSHOT/$snap_i 2>$errOut
     done
+    $shopts
     if [[ $- == *i* ]]; then
       [[ -e $ENV_SNAPSHOT/bind.glob ]] && source $ENV_SNAPSHOT/bind.glob
     fi
@@ -239,8 +245,8 @@ env-snapshot() { # @@:new # {{{
       unset PROMPT_COMMAND
       export PROMPT_COMMAND="$__promptCommand"
       unset __promptCommand
-      declare -p | \
-        sed \
+      declare -p \
+      | sed \
           -e '/^declare -[^ ]\?r/d' \
           -e '/^declare -[^ ]\? BASH_\(ALIASES\|ARGC\|ARGV\|ARGV0\|CMDS\|COMMAND\|COMPAT\|COMPLETION_VERSINFO\|LAST_ERR\|LINENO\|REMATCH\|SOURCE\|SUBSHELL\|VERSION\)=/d' \
           -e '/^declare -[^ ]\? \(BASHPID\|PPID\|\|_\|PS0_time\|PS1\|PWD\|OLDPWD\|EPOCHSECONDS\|EPOCHREALTIME\|TMUX_PANE\|TERM\)=/d' \
@@ -258,8 +264,8 @@ env-snapshot() { # @@:new # {{{
       if [[ $ENV_SNAPSHOT == *.main ]]; then
         sed -i '/^declare -[^ ]\? PS1_STATUS=/d' $ENV_SNAPSHOT/env
       fi
-      declare -f |
-        sed \
+      declare -f \
+      | sed \
           -e '/^__bashrc_exit ()/s/__bashrc_exit/__bashrc_exit_tmp/' \
           >$ENV_SNAPSHOT/func
       complete -p | while read line; do
@@ -278,6 +284,7 @@ env-snapshot() { # @@:new # {{{
         bind -m $snap_i -X | sed $'s/^.*/bind -m '"$snap_i"$' -x \'\\0\'/'
       done >$ENV_SNAPSHOT/bind.glob
       touch $ENV_SNAPSHOT/set
+      cp $ENV_SNAPSHOT/set $ENV_SNAPSHOT/.src.${TMUX_PANE:-main}
     fi
     rm -rf $ENV_SNAPSHOT/setting
     return 0;; # }}}

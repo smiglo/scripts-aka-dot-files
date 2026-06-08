@@ -42,7 +42,7 @@ COMPLETION_STATIC[npx:semantic-release]="--dry-run" # }}}
 # Path # {{{
 export PATH=@END@:$PATH
 export PATH=$SCRIPT_PATH/bin:$PATH
-export PATH=$SCRIPT_PATH/git/bin:$PATH
+export PATH=$SCRIPT_PATH/bin/git:$PATH
 export PATH=$APPS_CFG_PATH/bin:$RUNTIME_PATH/bin:$BIN_PATH:$BIN_PATH/vims:$PATH
 # }}}
 # FZF Runtime # {{{
@@ -56,8 +56,6 @@ if [[ -z $FZF_INSTALLED || -z $VIM_FZF_RUNTIME_PATH ]]; then
       fzfPath="/usr/bin"
     elif [[ -e /usr/local/bin/fzf ]]; then
       fzfPath="/usr/local/bin"
-    elif [[ -e $SCRIPT_PATH/inits/fzf/bin/fzf ]]; then
-      fzfPath="$SCRIPT_PATH/inits/fzf/bin"
     fi
   fi # }}}
   if [[ ! -z $fzfPath  ]]; then
@@ -145,7 +143,7 @@ if $FZF_INSTALLED && ( [[ -z $FZF_DEFAULT_COMMAND ]] || $RCSTUFF_FORCE ); then
   export FZF_ALT_C_OPTS="-e -x --layout=reverse --prompt='> '"
   declare -A +x fzfUsageA=([ack-ag]=true [mg]=true [grep]=false [out2file]=true [last-grep]=false [phist]=true [cd]=true)
   export FZF_USAGE="$(declare -p fzfUsageA)"
-  unset fzf_exe fdfindCmd fzfUsageA
+  unset fzf_exe fzfUsageA
 elif ! $FZF_INSTALLED; then
   [[ ! -z "$PS1" ]] && echoe -s "FZF not found"
 fi # }}}
@@ -213,30 +211,18 @@ if [[ -z $PRJ_PATH ]]; then
 fi
 [[ -z $WORKSPACE ]] && export WORKSPACE="$PRJ_PATH"
 export W=$WORKSPACE
-# vim - cpp # {{{
+# vim - ycm # {{{
 if [[ -z $VIM_YCM_PATH ]]; then
   if $IS_DOCKER; then
     if [[ ! -z $(shopt -s nullglob; echo $ENV_PATH/vim/git-plugins/YouCompleteMe.docker/third_party/ycmd/ycm_core.*.so) ]]; then
       export VIM_YCM_PATH="$ENV_PATH/vim/git-plugins/YouCompleteMe.docker"
-      export VIM_CLANG_PATH='-'
     fi
   fi
   if [[ -z $VIM_YCM_PATH ]]; then
     if [[ ! -z $(shopt -s nullglob; echo $ENV_PATH/vim/git-plugins/YouCompleteMe/third_party/ycmd/ycm_core.*.so) ]]; then
       export VIM_YCM_PATH="$ENV_PATH/vim/git-plugins/YouCompleteMe"
-      export VIM_CLANG_PATH='-'
     fi
   fi
-fi
-if [[ -z $VIM_CLANG_PATH ]]; then
-  export VIM_CLANG_PATH='-'
-  if ! $IS_MAC; then
-    clang_dir="$(shopt -s nullglob; ls -dr /usr/lib/llvm-* 2>/dev/null | head -n1)"
-  else
-    clang_dir="$(shopt -s nullglob; ls -dr /usr/local/Cellar/llvm/* 2>/dev/null| head -n1)"
-  fi
-  [[ ! -z $clang_dir && -e $clang_dir ]] && VIM_CLANG_PATH="$clang_dir/lib"
-  unset clang_dir
 fi # }}}
 # }}}
 # Sharable setup # {{{

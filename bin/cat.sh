@@ -36,9 +36,7 @@ _cat() { # {{{
     [[ -t 1 ]] && params+=" --terminal-width $((COLUMNS - 2))"
     if [[ -z $f1 || -d "$f1" || -h "$f1" && -d "$(readlink -f "$f1")" ]]; then # {{{
       local cmd=
-      if is-installed --which fdfind; then
-        cmd="fdfind --type f --type l -L --no-ignore-vcs '${f1:-.}'"
-      elif is-installed --which fd; then
+      if is-installed --which fd; then
         cmd="fd --type f --type l -L --no-ignore-vcs '${f1:-.}'"
       elif is-installed --which ag; then
         cmd="ag --follow -g ''"

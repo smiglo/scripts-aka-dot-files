@@ -16,7 +16,7 @@ _net() { # @@ # {{{
     return 0
   fi # }}}
   local mtr=false speed=false out=/dev/null fix="${NET_CHECK_FIX:-false}" showHelp=false
-  local waitFor=false waitTime=30s waitMsg="Waiting for Internet connection... " waitJustCheck=false
+  local waitFor=false waitTime=0 waitMsg="Waiting for Internet connection... " waitJustCheck=false
   local addressGateway= addressIP="8.8.8.8" addressDNS="google.pl" loop=false loopForever=false loopFSleep=5 every=false
   local readKey= readTimeout=0.01 loopTries=15 echormParams="-nh" silent=false
   echormf + 1
@@ -73,21 +73,24 @@ _net() { # @@ # {{{
     shift
   done # }}}
   local ping="ping" pingParams="-c1 -i0.5 -W0.5" ts= err=0 colorsOn=
-  $IS_WSL && pingParams="-c1 -i1 -W1"
+  $IS_VIRTOS && pingParams="-c1 -i1 -W1"
   [[ ! -t 2 ]] && colorsOn=false
   [[ ! -t 1 ]] && fix=false
   if $waitFor; then # {{{
-    local cnt=$(time2s $waitTime -o s)
+    local cnt=0
+    (( waitTime > 1 )) && ((--waitTime)) && cnt=$(time2s $waitTime -o s)
     while true; do
       $silent && sleep-precise -s
       $ping $pingParams $addressIP >/dev/null 2>&1 && return 0
       $waitJustCheck && return 1
       $silent || break
-      cnt=$((cnt - 1))
-      [[ $cnt == 0 ]] && return 1
+      if (( cnt > 0 )); then
+        cnt=$((cnt - 1))
+        [[ $cnt == 0 ]] && return 1
+      fi
       read -s -n1 -t $(sleep-precise -i 1) && return 1
     done
-    progress --msg "$waitMsg" --cmd "$ping $pingParams $addressIP" --dots --wait $waitTime --key --err
+    progress --msg "$waitMsg" --cmd "$ping $pingParams $addressIP" --dots $(add-params $cnt "--wait $waitTime") --key --err
     return $?
   fi # }}}
   if $showHelp; then # {{{
@@ -116,7 +119,7 @@ _net() { # @@ # {{{
   fi # }}}
   # IP Address # {{{
   local gatewayOk=false try=0 local emptyDots=
-  $loopForever && progress-dot --init -r 6 --align
+  $loopForever && { progress-dot --init -r 6 --align; stty -echo; }
   while true; do
     emptyDots=$loopFSleep
     if ! $loopForever; then # {{{
@@ -219,7 +222,8 @@ _net() { # @@ # {{{
         sleep-precise
       fi
     fi # }}}
-  done # }}}
+  done
+  # }}}
   # DNS Address # {{{
   while true; do
     if ! $loopForever; then # {{{
@@ -258,8 +262,8 @@ _net() { # @@ # {{{
         return 2
       fi # }}}
     fi # }}}
-  done # }}}
-  $loopForever && progress-dot --end
+  done
+  $loopForever && { stty echo; progress-dot --end; }
   if $speed; then # {{{
     speedtest
   fi # }}}

@@ -2,7 +2,7 @@
 # vim: fdl=0
 
 if [[ $1 == '@@' ]]; then # {{{
-  ret="-l --log-path --file --link --no-link"
+  ret="-l --log-path --log-file --link --no-link"
   if [[ -z $DEV_USB_SERIAL ]]; then
     if $IS_MAC; then
       ret+=" $(get-file-list '/dev/tty.usbserial*') $(get-file-list '/dev/tty.PL2303*')"
@@ -36,12 +36,11 @@ if ! is-installed -f genLogFilename; then # {{{
   }
 fi # }}}
 in_loop=false port= log_filename= log_path="$(getLogPath)" minirc=$HOME/.minirc.dfl auto_filename=true link=true speed=
-[[ ! -z $DEV_USB_SERIAL ]] && port="$(get-file-list -1 "$DEV_USB_SERIAL")"
 while [[ ! -z "$1" ]]; do # {{{
   case "$1" in
   -l) in_loop=true;;
   --log-path) shift; log_path="$1";;
-  --file) shift; log_filename="$1";;
+  --log-file) shift; log_filename="$1"; link=false;;
   --link) link=true;;
   --no-link) link=false;;
   --speed) shift; speed="$1";;
@@ -57,12 +56,17 @@ while [[ ! -z "$1" ]]; do # {{{
   shift
 done # }}}
 if [[ -z $port ]]; then # {{{
-  if $IS_MAC; then
-    port="$(get-file-list -1 '/dev/tty.usbserial*')"
-    [[ -z $port ]] && port="$(get-file-list -1 '/dev/tty.PL2303*')"
-  else
-    port=$(get-file-list -1 '/dev/ttyUSB*')
+  if [[ -n $STB_TTY ]]; then port="$STB_TTY"
+  elif [[ -n $DEV_USB_SERIAL ]]; then  port="$(get-file-list -1 "$DEV_USB_SERIAL")"
   fi
+  if [[ -z $port ]]; then # {{{
+    if $IS_MAC; then
+      port="$(get-file-list -1 '/dev/tty.usbserial*')"
+      [[ -z $port ]] && port="$(get-file-list -1 '/dev/tty.PL2303*')"
+    else
+      port=$(get-file-list -1 '/dev/ttyUSB*')
+    fi
+  fi # }}}
 fi # }}}
 [[ -n $port ]] || die "Serial adapter not found"
 [[ -e $port ]] || die "Serial adapter [$port] not connected"

@@ -11,62 +11,95 @@ if [[ -e $HOME/.bashrc-mount.trace && ! -n $TMUX ]]; then # {{{
   set -x
 fi # }}}
 if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
-  user_id="$UID"
   [[ -e $RUNTIME_PATH/runtime-pre.cfg ]] && source $RUNTIME_PATH/runtime-pre.cfg
-  if ! $IS_DOCKER; then # {{{
-    [[ -z $mount_src ]] && mount_src="/run/user/$user_id"
-    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true # }}}
-  else # {{{
-    [[ -z $mount_src ]] && mount_src="/tmpfs"
-    [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=false
-  fi # }}}
-  if ${RUNTIME_MOUNT_DO_MOUNT:-true} && [[ -e "$mount_src" && ( ! -n $TMUX || $1 == '-f' ) ]]; then
-    [[ -e $mount_src  ]] || eval $(die runtime-pre.mount "Mount-Src ($mount_src) does not exist")
-    mount_p="bind"
-    $IS_MAC || $IS_VIRTUAL_OS || mount_p+=",x-gvfs-hide"
+  if ${RUNTIME_MOUNT_DO_MOUNT:-true} && [[ ( ! -n $TMUX || $1 == '-f' ) ]]; then
     mounts_default=".tmp/.mem $BASHRC_RUNTIME_PATH"
     $IS_VIRTUAL_OS || mounts_default+=" Desktop/mem"
-    ts="mount.ts"
-    for aDir in ${RUNTIME_MOUNT_MEM_DIRS:-$mounts_default}; do
-      aDir="${aDir/$HOME\/}"
-      do_mount=false
-      s="m-"
-      s+="$(echo "${aDir%/*}" | tr "/" "\n" | sed -e '/^$/d' -e 's/^\.//' -e 's/\(.\).*/\L\1/' | tr '\n' '-')"
-      s+="$(echo "${aDir##*/}" | sed -e 's/^\.//' -e 's/.*/\L&/')"
-      d="$aDir"
-      [[ "$d" == /* ]] || d="$HOME/$d"
-      [[ -e "$(dirname "$d")" ]] || continue
-      if [[ ! -e "$mount_src/$s" ]]; then # {{{
-        command mkdir -p "$mount_src/$s"
-        do_mount=true
-      fi # }}}
-      if $do_mount || [[ $1 == '-f' ]]; then
-        touch $mount_src/$s/$ts
-        if [[ ! -e $d/$ts ]]; then
-          if [[ -e "$d" ]]; then # {{{
-            command mkdir -p "$d.bck"
-            cp -a "$d/." "$d.bck/"
-            rm -rf "$d"
-          fi # }}}
-          if ${RUNTIME_MOUNT_USE_MOUNT:-false}; then # {{{
-            command mkdir -p "$d"
-            command mount | command grep -qF "$d" && sudo umount "$d"
-            sudo mount -o $mount_p "$mount_src/$s" "$d"
-            ${RUNTIME_MOUNT_ADD_EXEC:-true} && command mount | command grep -q "$d.*noexec" && sudo mount -o remount,exec "$d" # }}}
-          else # {{{
-            ln -sf "$mount_src/$s" "$d"
-          fi # }}}
-          if [[ -e "$d.bck" ]]; then # {{{
-            cp -a "$d.bck/." "$d/"
-            rm -rf "$d.bck"
-          fi # }}}
+    case $OS_KIND,${RUNTIME_MOUNT_MAC_USE_RAMFS:-true} in
+    mac,true) # {{{
+      mountSrc="$HOME/.tmp/.memFS"
+      if [[ ! -e $mountSrc/mounted ]]; then
+        ramfsLabel="ramfs"
+        ramfsDev=$(hdid -nomount ram://$((${RUNTIME_MOUNT_RAMFS_SIZE:-512*1024*1024}/512)))
+        if [[ -n $ramfsDev ]] && newfs_hfs -v "$ramfsLabel" $ramfsDev; then
+          mkdir -p $mountSrc
+          if mount -o noatime,nobrowse -t hfs $ramfsDev $mountSrc; then
+            touch $mountSrc/mounted
+            for aDir in $mounts_default; do
+              case $aDir in
+              .tmp/.mem) aSrc="mem"; aDir="$TMP_MEM_PATH";;
+              $BASHRC_RUNTIME_PATH) aSrc="bashrc"; aDir="$BASHRC_RUNTIME_PATH";;
+              Desktop/mem) aSrc="desktop"; aDir="$HOME/Desktop/mem";;
+              *) aSrc=${aDir//\//%}; aDir="$aDir";;
+              esac
+              mkdir -p $mountSrc/$aSrc $aDir
+              ln -sf $mountSrc/$aSrc $aDir
+            done
+            unset aDir aSrc aDst
+          else
+            echo "cannot mount: $ramfsDev -> $mountSrc" >&2
+            hdiutil detach /ramfsDev
+          fi
+        else
+          echo "cannot make ramfs or hfs, '$ramfsDev' -> '$ramfsLabel'" >&2
         fi
-        rm -f $mount_src/$s/$ts
-      fi
-    done
-    unset aDir s d mount_p do_mount
+        unset ramfsDev ramfsLabel
+      fi;; # }}}
+    *) # {{{
+      user_id="$UID"
+      if ! $IS_DOCKER; then # {{{
+        [[ -z $mountSrc ]] && mountSrc="/run/user/$user_id"
+        [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=true # }}}
+      else # {{{
+        [[ -z $mountSrc ]] && mountSrc="/tmpfs"
+        [[ -z $RUNTIME_MOUNT_USE_MOUNT ]] && RUNTIME_MOUNT_USE_MOUNT=false
+      fi # }}}
+      [[ -e $mountSrc  ]] || eval $(die runtime-pre.mount "Mount-Src ($mountSrc) does not exist")
+      mount_p="bind"
+      $IS_MAC || $IS_VIRTUAL_OS || mount_p+=",x-gvfs-hide"
+      ts="mount.ts"
+      for aDir in ${RUNTIME_MOUNT_MEM_DIRS:-$mounts_default}; do # {{{
+        aDir="${aDir/$HOME\/}"
+        do_mount=false
+        s="m-"
+        s+="$(echo "${aDir%/*}" | tr "/" "\n" | sed -e '/^$/d' -e 's/^\.//' -e 's/\(.\).*/\L\1/' | tr '\n' '-')"
+        s+="$(echo "${aDir##*/}" | sed -e 's/^\.//' -e 's/.*/\L&/')"
+        d="$aDir"
+        [[ "$d" == /* ]] || d="$HOME/$d"
+        [[ -e "$(dirname "$d")" ]] || continue
+        if [[ ! -e "$mountSrc/$s" ]]; then # {{{
+          command mkdir -p "$mountSrc/$s"
+          do_mount=true
+        fi # }}}
+        if $do_mount || [[ $1 == '-f' ]]; then
+          touch $mountSrc/$s/$ts
+          if [[ ! -e $d/$ts ]]; then
+            if [[ -e "$d" ]]; then # {{{
+              command mkdir -p "$d.bck"
+              cp -a "$d/." "$d.bck/"
+              rm -rf "$d"
+            fi # }}}
+            if ${RUNTIME_MOUNT_USE_MOUNT:-false}; then # {{{
+              command mkdir -p "$d"
+              command mount | command grep -qF "$d" && sudo umount "$d"
+              sudo mount -o $mount_p "$mountSrc/$s" "$d"
+              ${RUNTIME_MOUNT_ADD_EXEC:-true} && command mount | command grep -q "$d.*noexec" && sudo mount -o remount,exec "$d" # }}}
+            else # {{{
+              ln -sf "$mountSrc/$s" "$d"
+            fi # }}}
+            if [[ -e "$d.bck" ]]; then # {{{
+              cp -a "$d.bck/." "$d/"
+              rm -rf "$d.bck"
+            fi # }}}
+          fi
+          rm -f $mountSrc/$s/$ts
+        fi
+      done # }}}
+      unset aDir s d mount_p do_mount user_id;; # }}}
+    esac
+    unset mountSrc mounts_default
   fi
-  unset user_id mount_src RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT
+  unset RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT RUNTIME_MOUNT_MAC_USE_RAMFS
 fi
 if ${BASHRC_MOUNT_TRACING:-false}; then # {{{
   set +xv

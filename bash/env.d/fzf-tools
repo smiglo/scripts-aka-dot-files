@@ -7,14 +7,7 @@ fzf-exe() { # @@ # {{{
 fzfwr() { # {{{
   local isInputRc=false
   [[ $1 == 'iRC' ]] && isInputRc=true && shift
-  local fdfindCmd="fdfind"
-  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd="fd"
-  is-installed -w $fdfindCmd >/dev/null 2>&1 || fdfindCmd=
-  if [[ -n $fdfindCmd ]]; then
-    local cmd="$fdfindCmd -d ${FZF_MAX_DEPTH:-8}"
-  else
-    cmd="command find -L . -mindepth 1 -maxdepth 8 \( -path '*/\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \) -prune -o -type f -print -o -type l -print 2>/dev/null | cut -b3-"
-  fi
+  local cmd="fd -d ${FZF_MAX_DEPTH:-8}"
   cmd+=" | sort"
   local selected="$(__fzf_select__ --cmd "$cmd" --handler __fzf_handler_fs "$@")" # | sed 's/^\|$/"/g' | tr '\n' ' ' | sed 's/ \+/ /')"
   [[ -n $selected ]] || return 0

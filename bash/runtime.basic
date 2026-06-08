@@ -2,6 +2,8 @@
 # vim: fdl=0
 
 # Essentials # {{{
+export RUNTIME_PATH=$HOME/.runtime
+[[ -e $RUNTIME_PATH/runtime-very-pre.bash ]] && source $RUNTIME_PATH/runtime-very-pre.bash
 if [[ -z $ENV_PATH ]]; then # {{{
   ENV_PATH="$(readlink -f "$HOME/.bashrc")"
   export ENV_PATH="${ENV_PATH%/scripts/*}"
@@ -11,16 +13,12 @@ export TMP_MEM_PATH=$TMP_PATH/.mem
 [[ -h $TMP_MEM_PATH && ! -e $TMP_MEM_PATH ]] && rm $TMP_MEM_PATH
 export MEM_KEEP=$TMP_MEM_PATH/keep
 export TMPDIR=$TMP_PATH/.tmp-dir
-export RUNTIME_PATH=$HOME/.runtime
 export APPS_CFG_PATH=$RUNTIME_PATH/apps
 export PROFILES_PATH="$RUNTIME_PATH/profiles"
 export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 [[ -h $BASHRC_RUNTIME_PATH && ! -e $BASHRC_RUNTIME_PATH ]] && rm $BASHRC_RUNTIME_PATH
 export BIN_PATH="$HOME/.bin"
 export BASH_PATH="$ENV_PATH/scripts/bash"
-export UGID="$UID:$(command id -g)"
-export DISPLAY=$DISPLAY
-export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 # os-kind (mac/docker/wsl/virt-os/vscode # {{{
 if [[ -z $OS_KIND ]]; then
   export OS_KIND="ubuntu"
@@ -69,17 +67,17 @@ if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
       else
         envTime="$(/usr/bin/stat -c %W $ENV_SNAPSHOT)"
       fi
-      (( envTime >= bootTime )) || rm -rf $ENV_SNAPSHOT_PRE.*
+      (( envTime >= bootTime )) || { rm -rf $ENV_SNAPSHOT_PRE.* $BASHRC_RUNTIME_PATH $TMP_MEM_PATH; }
       unset bootTime envTime
     fi # }}}
   fi
   [[ -e $ENV_SNAPSHOT ]] || command mkdir -p $ENV_SNAPSHOT
 fi # }}}
-declare -a ENV_POST_INVOKE=() # }}}
 # System-Wide env configuration + cleaning up appended variables # {{{
 export BASH_EXTRA_FEATURES=
 export BASH_UPDATE_REPOS=
 export BASH_UPDATE_TIME=
+export COMPLETE_DEFAULT_PARAMS="-o bashdefault -o default -o nospace"
 export COMPLETION_GENERIC_UTILS="setup-env.sh tmux-sb-worker.sh"
 export COMPLETION_GENERIC_FUNCTIONS=
 export COMPLETION_GENERIC_UTILS_OLD=
@@ -97,8 +95,11 @@ export CLANG_PARAMS="-std=c99"
 export CLANGPP_PARAMS="-std=c++11"
 export CLIP_FILE="$MEM_KEEP/clip"
 export CMAKE_ARGS=
+export DISPLAY=$DISPLAY
+export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 declare -A ENV_EXT=()
 declare -A ENV_FUNC_GETTER=()
+declare -a ENV_POST_INVOKE=()
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
@@ -135,9 +136,15 @@ export KEEP_PASS_JOURNALS=
 export KEEP_PASS_ENV_KEY_MAP=
 [[ -z $KEEP_PASS_MASTER_KEY ]] && export KEEP_PASS_MASTER_KEY="$MEM_KEEP/keep-pass.mkey"
 if [[ -z $LESS ]]; then # {{{
-  export LESS="-diJRSwX -# 4 -x4 -z-4 -+F -~ --save-marks --rscroll=• --use-color"
-  export LESS="-diJRSwX -# 4 -x4 -z-4 -+F -~ --follow-name --save-marks --rscroll=• --use-color"
-  export LESS+=" -Dub -Dd+y -DPm -DS0.214 -DEr -DNK -Dkg -DWM* -DMR* -DRm"
+  export LESS='-diJRSwX -# 4 -x4 -z-4 -+F -~ --follow-name --save-marks'
+  ver=$(less -V | head -n1 | awk '{print 2}')
+  if (( ver >= 600 )); then
+    export LESS+=' --rscroll=•'
+    export LESS+=' --use-color -Dub -Dd+y -DPm -DS0.214 -DEr -DNK -Dkg -DWM* -DMR* -DRm'
+  else
+    export LESS+=' --use-color -Dub$Dd+y$DPm$DS0.214$DEr$DNK$Dkg$DWM$DMR$DRm'
+  fi
+  unset ver
   export LESSCHARSET='utf-8'
   case $OS_KIND in
   ubuntu)
@@ -153,7 +160,7 @@ if [[ -z $LESS ]]; then # {{{
       export LESSOPEN="| source-highlight-esc.sh %s 2>/dev/null"
     fi;;
   esac
-fi # }}} # }}}
+fi # }}}
 export MANPATH=
 export PAGER="less"
 export PHISTORY_IGNORED_COMMANDS= # {{{
@@ -172,6 +179,7 @@ export QUOTING_STYLE='literal'
 export SCRIPT_PATH=
 export SHARABLE_PATH=
 export SHARED_BASH_PATH=
+export SRC_FILES=
 export SSH_HOST_LIST=
 export SSH_KEYS=
 export TICKET_J_PREDEFINED=
@@ -205,14 +213,20 @@ if [[ -n $TMUX ]]; then
   [[ $UID == 0 ]] && export TMUX_SESSION_PATH="/root/tmux/sessions/$TMUX_SESSION"
   [[ -e $TMUX_SESSION_PATH ]] || command mkdir -p $TMUX_SESSION_PATH
   export HISTFILE=$TMUX_SESSION_PATH/bash_history
+  wndName=$(tmux display-message -p -t $TMUX_PANE -F '#W')
+  wndName=${wndName%%[-:.]*}
+  [[ $wndName != "tmux" ]] && export HISTFILE=$TMUX_SESSION_PATH/history.$wndName
+  unset wndName
 fi
 [[ -n $TMUX_VERSION ]] || export TMUX_VERSION="$(type tmux >/dev/null 2>&1 && tmux -V | sed 's/\.//' | cut -c6-7)"
 # }}}
 export HISTFILE_ORIG=$HISTFILE # must be after tmux set up
 export TOOLS_PATH="$HOME/tools"
+export UGID="$UID:$(command id -g)"
 export VIM_CTRLP_IGNORE_DIRS="NOT_EXISTING_DIR_PATTERN_TO_IGNORE"
 export VIM_PRJ_EXCLUDE=
 export VIM_PRJ_PARAMS=
+# }}}
 # Editor # {{{
 if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
   if which vim-editor >/dev/null 2>&1; then
@@ -248,11 +262,13 @@ export BASH_PROFILES="$(command cd $PROFILES_PATH 2>/dev/null; echo *)"
 export BASH_PROFILES_FULL="$(command ls -d $PROFILES_PATH/* 2>/dev/null)"
 # Static completions # {{{
 if [[ -z ${COMPLETION_STATIC[_placeholder]} ]] || $RCSTUFF_FORCE; then
-  declare -Ag COMPLETION_STATIC
+  declare -Ag COMPLETION_STATIC=()
   COMPLETION_STATIC[_placeholder]="_defined"
+  declare -Ag COMPLETION_SMART_PARAMS=()
 fi # }}}
 # }}}
 if $BASHRC_FULL_START; then # {{{
+  [[ -e $RUNTIME_PATH/runtime-pre.mount ]] && source $RUNTIME_PATH/runtime-pre.mount
   command mkdir -p \
     $TMP_PATH $TMPDIR $TMP_MEM_PATH \
     $MEM_KEEP \
@@ -268,7 +284,6 @@ fi # }}}
 for profi in $($BASH_PATH/env-ext.sh get-plugins runtime-pre.bash); do
   source $profi
 done
-[[ -e $RUNTIME_PATH/runtime-pre.mount ]] && source $RUNTIME_PATH/runtime-pre.mount
 export CD_LAST_DIRS_STORED+=":rt@$RUNTIME_PATH"
 # }}}
 # shortcuts to env # {{{

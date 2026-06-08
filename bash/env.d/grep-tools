@@ -6,8 +6,8 @@ mg() { # @@:new # {{{
     echo "+g"
     return 0
   fi # }}}
-  local cmd="rg" params="-S"
-  is-installed -w $cmd || cmd="ag"
+  local cmd="rg" params="-Sn"
+  is-installed -w $cmd || { cmd="ag"; params=""; }
   while [[ -n $1 ]]; do # {{{
     case $1 in
     +g)
@@ -38,7 +38,7 @@ gr() { # @@:new # {{{
     return 0
   fi # }}}
   local cmd="rg" params="-S"
-  is-installed -w $cmd || cmd="ag"
+  is-installed -w $cmd || { cmd="ag"; params=""; }
   is-installed -w $cmd || { cmd="grep"; params="-iP"; }
   while [[ -n $1 ]]; do # {{{
     case $1 in
