@@ -9,7 +9,7 @@ declare -a files=( # {{{
   $BASH_PATH/completion:--force
   $BASH_PATH/env:--force
   $BASH_PATH/essentials
-  $BASH_PATH/runtime
+  $BASH_PATH/runtime:--force
   $BASH_PATH/runtime-post:--force
   $BASH_PATH/unicode
 )
@@ -22,6 +22,7 @@ for i in $PROFILES_PATH/*; do
 done
 files+=( $(find $BASH_PATH/env.d -maxdepth 1 -type f) )
 [[ -n $SRC_FILES ]] && files+=( $SRC_FILES )
+files=( $(printf "%s\n" "${files[@]}" | awk '!($0 in a) {a[$0]; print}') )
 # }}}
 
 get-modified() { # {{{

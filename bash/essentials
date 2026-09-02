@@ -207,21 +207,21 @@ env-snapshot() { # @@:new # {{{
     rm -rf $ENV_SNAPSHOT_PRE*;; # }}}
   load) # {{{
     [[ ! -e $ENV_SNAPSHOT/setting ]] || return 1
-    local shopts=$(shopt -p dotglob extglob)
+    local shopts=$(shopt -p dotglob extglob) opt=
     shopt -u dotglob
     shopt -s extglob
-    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set  && ! -e $ENV_SNAPSHOT/set ]]; then
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
       cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
       unset ENV_SNAPSHOT_SRC
     fi
     [[ -e $ENV_SNAPSHOT/set ]] || return 1
     cp $ENV_SNAPSHOT/set $ENV_SNAPSHOT/.src.${TMUX_PANE:-main}
     unalias -a
-    for snap_i in bash env func compl alias; do
+    for snap_i in bash env func compl alias histfile; do
       [[ -e $ENV_SNAPSHOT/$snap_i ]] || continue
       source $ENV_SNAPSHOT/$snap_i 2>$errOut
     done
-    $shopts
+    while read opt; do $opt; done <<<"$shopts"
     if [[ $- == *i* ]]; then
       [[ -e $ENV_SNAPSHOT/bind.glob ]] && source $ENV_SNAPSHOT/bind.glob
     fi
@@ -258,6 +258,7 @@ env-snapshot() { # @@:new # {{{
           -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\)[^=]*=/d' \
           -e '/^declare -[^ ]\? BASH_PHISTORY_\(LAST\|TODAY\|TODAY_LINE\)=/d' \
           -e '/^declare -[^ ]\? SSH_\(CLIENT\|CONNECTION\)=/d' \
+          -e '/^declare -[^ ]\? TMUX_POPUP[^=]*=/d' \
           -e '/^declare -[^ ]\? \('"$v"'\)="/d' \
           -e 's/^declare /declare -g /' \
           >$ENV_SNAPSHOT/env

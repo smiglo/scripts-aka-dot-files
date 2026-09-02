@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+endpoint-is-alive() { # {{{
+  return 0
+} # }}}
+endpoint-init() { # {{{
+  return 0
+} # }}}
+endpoint-term() { # {{{
+  return 0
+} # }}}
+endpoint-ls() { # {{{
+   readarray -t list < <(ls -1ap --group-directories-first $aDir 2>/dev/null)
+} # }}}
+endpoint-find() { # {{{
+  readarray -t list < <(cd "$aDir" && fd 2>/dev/null)
+} # }}}
+endpoint-cat() { # {{{
+  cat "$1"
+} # }}}
+endpoint-vim-list() { # {{{
+  (( $# == 3 )) && local dst="$1" aDir="$2" && shift 2
+  local f="$1"
+  [[ $f == /* ]] || f="${aDir%/}/$f"
+  printf "%q" "$f"
+} # }}}
+endpoint-cp() { # {{{
+  local -a sources=() f=
+  for f in "${selected[@]}"; do
+    [[ $f == /* ]] || f="${aDir%/}/$f"
+    sources+=("$f")
+  done
+  cp -r "${sources[@]}" ./
+} # }}}

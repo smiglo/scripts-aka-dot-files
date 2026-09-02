@@ -56,11 +56,7 @@ singleCPU=false
 useProgress=
 linesForProgress=1000
 inesForSingleCpu=5000
-if [[ -e /proc/cpuinfo ]]; then
-  cpu="$(awk '/siblings/ {print $3}' /proc/cpuinfo | head -n1)"
-else
-  cpu=4
-fi
+cpu=$(nproc)
 keepFo=false
 workerMode=false
 if false; then :

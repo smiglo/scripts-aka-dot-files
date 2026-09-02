@@ -138,24 +138,23 @@ time2s() { # @@ # {{{
     else
       out="$ts"
     fi # }}}
-  elif [[ $ts =~ ^([0-9]{0,4})[.-]?([0-9]{0,2})[.-]?([0-9]{1,2})[\ -]([0-9]{1,2}):?([0-9]{0,2})(:?([0-9]{0,2}))$ ]]; then # {{{
-    local aDate=( "${BASH_REMATCH[@]}" )
-    local aYear="$(date +%Y)"
-    if (( ${#aDate[1]} == 0 )); then
-      aDate[1]="$aYear"
-    elif(( ${#aDate[1]} == 2 )); then
-      aDate[1]="${aYear:0:2}${m[1]}"
-    fi
-    if (( ${#aDate[2]} == 0 )); then
-      aDate[2]="$(date +%m)"
-    fi
-    aDate[3]="$(printf "%02d" $((10#${aDate[3]})))"
-    aDate[4]="$(printf "%02d" $((10#${aDate[4]})))"
-    aDate[5]="$(printf "%02d" $((10#${aDate[5]:-0})))"
-    if (( ${#aDate[7]} == 0 )); then
-      aDate[7]="00"
-    fi
-    ts="${aDate[1]}-${aDate[2]}-${aDate[3]} ${aDate[4]}:${aDate[5]}:${aDate[7]}"
+  elif [[ $ts =~ ^((([0-9]{2})?[0-9]{2}[.-]?)?([0-9]{2}[.-]?))?([0-9]{2})[\ .-]([0-9]{2})(:?[0-9]{2})(:?[0-9]{2})?$ ]]; then # {{{
+    local cYea= cMon=
+    printf -v cYea '%(%Y)T' -1
+    printf -v cMon '%(%m)T' -1
+    local tYea=${BASH_REMATCH[2]%[.-]}
+    local tMon=${BASH_REMATCH[4]%[.-]}
+    local tDay=${BASH_REMATCH[5]}
+    local tHou=${BASH_REMATCH[6]}
+    local tMin=${BASH_REMATCH[7]#:}
+    local tSec=${BASH_REMATCH[8]#:}
+    [[ -z $tMon ]] && tMon=$cMon
+    [[ -z $tSec ]] && tSec="00"
+    case ${#tYea} in
+    0) tYea=$cYea;;
+    2) tYea=${cYea:0:2}$tYea;;
+    esac
+    ts="$tYea-$tMon-$tDay $tHou:$tMin:$tSec"
     now=0
     out=$(command date +%s -d "$ts") # }}}
   else # {{{
@@ -189,7 +188,6 @@ time-measure() { # @@ # {{{
     return 0
   fi # }}}
   local t0= tLast= unit=s round= addUnit=false msg= onInit=false silent=${TIME_MEASURE_SILENT} d= plain=${TIME_MEASURE_PLAIN:-} out=${TIME_MEASURE_OUT:-/dev/stderr} from0Abs=false from0=false
-  local LC_NUMERIC=
   local tLastVariable=${TIME_MEASURE_VARIABLE:-time-measure-var}
   if [[ $1 == '--test' ]]; then # {{{
     shift
@@ -204,8 +202,8 @@ time-measure() { # @@ # {{{
       shift;; # }}}
     -r | --reset) # {{{
       tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
-      local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 diff_s_last=${tName}_diff_s_last diff_s_0=${tName}_diff_s_0 accu_0=${tName}_accu_0
-      ns_last= ns_0= diff_s_last= diff_s_0= accu_0=;; # }}}
+      local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 accu_0=${tName}_accu_0
+      ns_last= ns_0= accu_0=;; # }}}
     --end) # {{{
       tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
       unset TIME_MEASURE_VARIABLE ${tName}_ns_last ${tName}_ns_0 ${tName}_diff_s_last ${tName}_diff_s_0 ${tName}_accu_0
@@ -232,7 +230,7 @@ time-measure() { # @@ # {{{
     esac; shift
   done # }}}
   tName="$TIME_MEASURE_PREFIX${tLastVariable//-/_}"
-  local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 diff_s_last=${tName}_diff_s_last diff_s_0=${tName}_diff_s_0 accu_0=${tName}_accu_0
+  local -n ns_last=${tName}_ns_last ns_0=${tName}_ns_0 accu_0=${tName}_accu_0
   [[ -z $tLast ]] && tLast=$ns_last
   t0=$ns_0
   if [[ -z $tLast ]]; then # First run: just collect time # {{{
@@ -253,10 +251,10 @@ time-measure() { # @@ # {{{
     accu_0=0
     return 0
   fi # }}}
-  local tDiffLast=$(calc -qp -- "($tNow - $tLast - (${TIME_MEASURE_OVERHEAD:-0}))")
-  local tDiff0=$(   calc -qp -- "($tNow - $t0    - (${TIME_MEASURE_OVERHEAD:-0}))")
-  [[ $tDiffLast == -* ]] && tDiffLast=$(calc -qp -- "($tNow - $tLast)")
-  [[ $tDiff0    == -* ]] && tDiff0=$(   calc -qp -- "($tNow - $t0)")
+  local tDiffLast=$((tNow - tLast - TIME_MEASURE_OVERHEAD))
+  local tDiff0=$((   tNow - t0    - TIME_MEASURE_OVERHEAD))
+  [[ $tDiffLast == -* ]] && tDiffLast=$((tNow - tLast))
+  [[ $tDiff0    == -* ]] && tDiff0=$((   tNow - t0))
   if ! ${silent:-false}; then # {{{
     local tDiff=$tDiffLast
     $from0Abs && tDiff=$tDiff0
@@ -268,9 +266,8 @@ time-measure() { # @@ # {{{
     ns)  d=0; unit=ns; [[ -z $round ]] && round=0;;
     *)   d=0; unit=ns; [[ -z $round ]] && round=0;;
     esac # }}}
-    tDiff=$(calc -qp -- "($tDiff/(10^$d))")
+    tDiff="$(bc -l <<< "$tDiff/(10^$d)")"
     ! $addUnit && unit=
-    LC_NUMERIC=C
     if [[ ( $out == '/dev/stdout' && ! -t 1 ) || ( $out == '/dev/stderr' && ! -t 2 ) ]]; then
       [[ -z $plain ]] && plain=true
     fi
@@ -281,9 +278,7 @@ time-measure() { # @@ # {{{
     fi
   fi # }}}
   if $from0 || $from0Abs; then return 0; fi
-  diff_s_last=$(calc -qp -- "($tDiffLast / 1000000000)")
-  diff_s_0=$(   calc -qp -- "($tDiff0    / 1000000000)")
-  accu_0=$(     calc -qp -- "($accu_0    + $tDiffLast)")
+  accu_0=$((accu_0 + $tDiffLast))
   ns_last="$(command date +"%s%N")"
   return 0
 } # }}}
@@ -306,11 +301,11 @@ sleep-precise() { # @@ # {{{
       local t1= t2= tSum=0 cnt=10 diff=
       echor "$msg (SLEEP_PRECISE_MARGIN=$SLEEP_PRECISE_MARGIN)"
       for i in $(seq 1 $cnt); do # {{{
-        t1=${EPOCHREALTIME//[.,]}
+        t1=${EPOCHREALTIME/[,.]}
         sleep-precise -s
         sleep 0.5
         sleep-precise 1
-        t2=${EPOCHREALTIME//[.,]}
+        t2=${EPOCHREALTIME/[,.]}
         diff=$(( (t2 - t1) - 1000000 ))
         tSum=$((tSum + diff))
         echor "[$i] $diff"

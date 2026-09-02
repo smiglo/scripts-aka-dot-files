@@ -28,7 +28,7 @@ if ! is-installed --no-cache -t kp-pp; then # {{{
   source "$SCRIPT_PATH/inits/keep-pass/keep-pass-env.sh"
 fi # }}}
 # Check personalities # {{{
-[[ -z $PERS_USERS ]] && echoe "Personalities not found!!!" && sleep 2
+[[ -n $PERS_USERS ]] || export PERS_USERS="tom"
 # }}}
 # nvm # {{{
 if [[ -e $HOME/.nvm ]] && ${NODE_USE_NVM:-false}; then
@@ -53,31 +53,40 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
   __fzf_handler_git() { # {{{
     mode=$1; shift
     case $mode in
-    init) # {{{
-      p="$PWD"; origPath="$PWD"
-      prompt="> "
-      expectList="";; # }}}
-    loop) # {{{
-      ;; # }}}
-    expect) # {{{
-      local key=$1
-      case $key in
-      esac;; # }}}
+    init)
+      cmdList=(
+        [1.branch]="git branch | cut -c3- | sort"
+        [2.log]="git log --graph --oneline --decorate --color -15000  --format='%C(240)|%C(172)%h%C(240)|%C(reset)%C(auto)%d %C(dim white)%s%C(reset)' --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes"
+        [3.branch-all]="git branch --all | cut -c3- | sed -e '/\/HEAD ->/d' -e 's|remotes/||' | sort"
+      )
+      fzfParams="--preview-window nohidden";;
+    loop) ;;
+    expect) ;;
     result) # {{{
-      cat - | while read -r item; do
-        [[ "$item" =~ .*\|([0-9a-f]{5,})\|.* ]] || continue
-        printf "%s\n" "${BASH_REMATCH[1]}"
-      done;; # }}}
+      case $cmdKey in
+      2.log)
+        cat - | while read -r item; do
+          [[ "$item" =~ .*\|([0-9a-f]{5,})\|.* ]] || continue
+          printf "%s\n" "${BASH_REMATCH[1]}"
+        done;;
+      *)
+        cat -;;
+      esac;; # }}}
     preview) # {{{
       local line="$1"
-      [[ "$line" =~ .*\|([0-9a-f]{5,})\|.* ]] || return
-      local sha=${BASH_REMATCH[1]}
-      git log --pretty=fuller --date=local -1 "$sha"
-      echo; echo '    ----'
-      git diff $sha~..$sha --name-status | sed -e 's/^/    /'
-      echo '    ----'; echo
-      git diff -w $sha~..$sha \
-      | if which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi;; # }}}
+      case $cmdKey in
+      2.log)
+        [[ "$line" =~ .*\|([0-9a-f]{5,})\|.* ]] || return
+        local sha=${BASH_REMATCH[1]}
+        git log --pretty=fuller --date=local -1 "$sha"
+        echo; echo '    ----'
+        git diff $sha~..$sha --name-status | sed -e 's/^/    /'
+        echo '    ----'; echo
+        git diff -w $sha~..$sha \
+        | if which colordiff >/dev/null 2>&1; then colordiff -u; else cat -; fi;;
+      *)
+        git log -1 -n50 --graph --color $line;;
+      esac;; # }}}
     esac
   } # }}}
   __fzf_handler_fs() { # {{{
@@ -138,26 +147,49 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
       esac; shift
     done # }}}
     FZF_DEFAULT_OPTS=$(__fzf_defaults "$optsWalker" "$optsDef $opts")
-    (
-      export -f $handler
-      expectList= prompt=
+    fzf-chooser() { # {{{
+      local expectList= prompt= list=() keys=() key_nextCmd="ctrl-n" fzfParams=
+      declare -Ag cmdList=()
+      export cmdKey=
+      local -i cmdI=-1
       $handler init
-      fzfCmd="$(__fzfcmd)"
+      if (( ${#cmdList[@]} )); then
+        cmdI=0
+        expectList+=" --expect $key_nextCmd"
+        keys=( $(printf "%s\n" "${!cmdList[@]}" | sort -n) )
+      fi
+      export -f $handler
       while true; do
-        $handler loop
-        list="$(FZF_DEFAULT_OPTS_FILE='' $fzfCmd "$@" --prompt "$prompt" --preview "$handler preview {}" $expectList)"
-        if [[ -n $expectList ]]; then
-          local expectKey=$(echo "$list" | sed -n '1p')
-          if [[ -n $expectKey ]]; then
-            $handler expect $expectKey
-            continue
-          fi
-          list="$(echo "$list" | sed '1d')"
+        prompt=
+        if (( cmdI >= 0 )); then
+          cmdKey="${keys[cmdI]}"
+          FZF_DEFAULT_COMMAND="${cmdList[$cmdKey]}"
+          prompt="$((cmdI+1))/${#keys[@]}.${cmdKey#*.}> "
         fi
-        [[ -n $list ]] && echo "$list"
-        break
+        $handler loop
+        readarray -t list < <(FZF_DEFAULT_OPTS_FILE='' fzf \
+          --highlight-line \
+          --bind=alt-r:toggle-raw \
+          --prompt "$prompt" \
+          --preview "$handler preview {}" \
+          $expectList $fzfParams "$@")
+        [[ -z $expectList || -z ${list[0]} ]] && break
+        if (( cmdI >= 0 )) && [[ ${list[0]} == $key_nextCmd ]]; then
+          cmdI=(cmdI+1)%${#keys[@]}
+        else
+          $handler expect ${list[0]}
+        fi
       done
-    ) | $handler result | tr '\n' ' '
+      unset list[0]
+      (( ${#list[@]} )) || return
+      printf "%s\n" "$cmdKey"
+      printf "%s\n" "${list[@]}"
+    } # }}}
+    local res=()
+    readarray -t res < <(fzf-chooser)
+    (( ${#res[@]} )) || return
+    local cmdKey=${res[0]};  unset res[0]
+    printf "%s\n" "${res[@]}" | $handler result | tr '\n' ' '
   } # }}}
   __fzf-file-widget() { # {{{
     local selected="$(__fzf_select__ "$@")"
@@ -175,16 +207,22 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
     __fzf-dir-widget "$@"
   } # }}}
   __fzf-git-widget() { # {{{
-    local selected="$(__fzf_select__ --cmd "git log --graph --oneline --decorate --color --format='%C(240)|%C(172)%h%C(240)|%C(reset)%C(auto)%d %C(dim white)%s%C(reset)' --exclude=refs/remotes/* --exclude=refs/tags/* --decorate-refs-exclude=refs/tags/tmp/sync/* --branches --remotes" --handler "__fzf_handler_git")"
+    local selected="$(
+      __fzf_select__ --handler "__fzf_handler_git")"
     [[ -n $selected ]] || return 0
     READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
     READLINE_POINT=$(( READLINE_POINT + ${#selected} ))
   } # }}}
   __fzf-history() { # {{{
-    local rlPoint=$READLINE_POINT
-    READLINE_POINT=
-    READLINE_LINE="$( history -r; __fzf_history__)"
-    READLINE_POINT=$rlPoint
+    [[ -s $HISTFILE ]] || return 0
+    local histEntry="$(
+      set +o pipefail; history -r;
+      tac "$HISTFILE" \
+      | awk '!($0 in a) {a[$0]; print}' \
+      | fzf --ansi --scheme=history --bind=ctrl-r:toggle-sort,alt-r:toggle-raw --highlight-line --query "$READLINE_LINE")"
+    [[ -n $histEntry ]] || return
+    READLINE_LINE="$histEntry"
+    READLINE_POINT=${#READLINE_LINE}
   } # }}}
   __fzf-env-widget() { # {{{
     declare -a resA
@@ -208,34 +246,104 @@ if $FZF_INSTALLED && [[ -n $PS1 ]]; then # {{{
     READLINE_LINE="${READLINE_LINE:0:$READLINE_POINT}$selected${READLINE_LINE:$READLINE_POINT}"
     READLINE_POINT=$((READLINE_POINT + ${#selected}))
   } # }}}
+  __fzf-inserter-widget() { # {{{
+    declare input=() output=()
+    local i= query=
+    for i in $(remove-dups --sep ' ' "$FZF_INSERTER_FILES") $APPS_CFG_PATH/fzf-inserter $(find-up.sh ./.fzf-inserter); do
+      [[ -e $i ]] || continue
+      mapfile -t -O ${#input[@]} input <$i
+    done
+    [[ -n $FZF_INSERTER_V ]] && mapfile -t -O ${#input[@]} input < <(echo -e "$FZF_INSERTER_V")
+    (( ${#input[@]} )) || return
+    local toRemove=() j= k=
+    for i in ${!input[@]}; do
+      [[ -n ${input[i]} ]] || continue
+      [[ ${input[i]} == '# -'* ]] || continue
+      local k="${input[i]#\# -}"
+      toRemove[i]=
+      for j in ${!input[@]}; do
+        [[ "${input[j]}" =~ $k ]] && toRemove[j]=
+      done
+    done
+    (( ${#toRemove[@]} )) && unset $(printf "input[%d] " ${!toRemove[@]})
+    if [[ ! $READLINE_LINE =~ ' '$ ]]; then
+      query="${READLINE_LINE##* }"
+      found=false
+      for i in "${input[@]}"; do
+        i=${i#*:: }
+        [[ $i == $query* ]] && found=true && break
+      done
+      if $found; then
+        READLINE_LINE="${READLINE_LINE%$query}"
+      else
+        query=
+      fi
+    fi
+    mapfile -t output < <(set -o pipefail;
+      printf "%s\n" "${input[@]}" \
+      | sed -e '/^\s*$/d' -e '/^#/d' \
+      | sort -u \
+      | sed -e '/.*:: .*/s/\(.*::\) \(.*\)/'"$CGray"'\1'"$COff"' \2/' \
+      | fzf -m --ansi --query "$query")
+    (( ${#output[@]} )) || return
+    local toAdd=$(printf "%s " "${output[@]#*:: }")
+    toAdd="${toAdd% }"
+    READLINE_LINE="${READLINE_LINE:0:READLINE_POINT}$toAdd${READLINE_LINE:READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#toAdd} ))
+  } # }}}
+  __fzf-tab-completer() { # {{{
+    local complDef= complFun= selections=
+
+    declare -ax COMP_WORDS=( $READLINE_LINE)
+    declare -x COMP_CWORD=${#COMP_WORDS[@]}
+    local cmd=${COMP_WORDS[0]}
+    [[ -n $cmd ]] || return 0
+
+    complDef=$(complete -p "$cmd" 2>/dev/null)
+    [[ -z $complDef ]] && complDef=$(complete -p "$(compgen -c -- "$cmd")" 2>/dev/null)
+    [[ -n $complDef ]] || return
+
+    [[ $complDef =~ \ -F\ ([^[:space:]]+) ]] || return
+    complFun="${BASH_REMATCH[1]}"
+    [[ "$(type -t "$complFun")" == "function" ]] || return
+
+    declare -x COMP_LINE="${COMP_WORDS[@]}"
+    declare -x COMP_POINT=${#COMP_LINE}
+    [[ ${COMP_WORDS[-1]} == -* && $READLINE_LINE != *' ' ]] && (( COMP_CWORD-=1 ))
+    COMPREPLY=()
+    $complFun "${COMP_WORDS[@]}"
+    (( ${#COMPREPLY[@]} > 0 )) || return
+
+    selections=$(printf "%s\n" "${COMPREPLY[@]}" | fzf --multi | xargs)
+    [[ -n "$selections" ]] || return
+    [[ ${COMP_WORDS[-1]} =~ ^(-+)* && $READLINE_LINE != *' ' ]] && selections=${selections#${BASH_REMATCH[1]}}
+    [[ $selections == */ ]] || selections="$selections "
+
+    READLINE_LINE="${READLINE_LINE:0:READLINE_POINT}${selections}${READLINE_LINE:READLINE_POINT}"
+    READLINE_POINT=$(( READLINE_POINT + ${#selections} ))
+  } # }}}
   bind -m vi-command -r "\C-r"
   bind -m vi-insert  -r "\C-r"
   bind -m vi-command -x '"\C-w\C-e": "__fzf-env-widget"'
   bind -m vi-insert  -x '"\C-w\C-e": "__fzf-env-widget"'
   bind -m vi-command -x '"\C-w\C-g": "__fzf-git-widget"'
   bind -m vi-insert  -x '"\C-w\C-g": "__fzf-git-widget"'
+  bind -m vi-command -x '"\C-w\C-i": "__fzf-inserter-widget"'
+  bind -m vi-insert  -x '"\C-w\C-i": "__fzf-inserter-widget"'
   bind -m vi-command -x '"\C-w\C-r": "__fzf-history"'
   bind -m vi-insert  -x '"\C-w\C-r": "__fzf-history"'
+  bind -m vi-insert  -x '"\C-w\C-t": "__fzf-tab-completer"'
   bind -m vi-command -x '"\C-r": "__fzf-history"'
   bind -m vi-insert  -x '"\C-r": "__fzf-history"'
   bind -m vi-command -x '"\C-t": "__fzf-file-widget"'
   bind -m vi-insert  -x '"\C-t": "__fzf-file-widget"'
+  bind -m vi-insert  -x '"\C-y": "__fzf-tab-completer"'
   bind -m vi-insert     '"\ec": "\C-gcd\C-m"'
   bind -m vi-command -x '"\ed": "__fzf-cd-widget"'
   bind -m vi-insert  -x '"\ed": "__fzf-cd-widget"'
+  bind -m vi-insert  -x '"\e\t": "__fzf-tab-completer"' # alt-tab
 fi # }}}
 # }}}
-if ${TMUX_POPUP:-false}; then # {{{
-  if ! $TMUX_POPUP_SILENT; then
-    echoe -m popup "s=[$s]"
-    echoe -m popup "d=[$d]"
-  fi
-  export BASH_PHISTORY_FILE=
-  export TMUX_SESSION=POPUP
-  if [[ ! -z $d ]]; then
-    set-utils -h "$d" +basic +hist +remember-conf-dir=.remb +note-file=notes.txt
-  fi
-fi # }}}
 if $IS_DOCKER; then # {{{
   if ! $IS_VSCODE && $BASHRC_FULL_START; then # {{{
     $ENV_SCRIPTS/docker-tools/clipboard-docker.sh &
@@ -246,4 +354,3 @@ if $IS_VSCODE; then # {{{
   set-utils -h "$APPS_CFG_PATH/vscode" +basic +hist +remember-conf-dir=.remb +note-file=notes.txt
 fi # }}}
 unset -f set-utils
-

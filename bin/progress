@@ -150,12 +150,12 @@ _progress() { # @@ # {{{
                     *)    delay=1;;
                   esac
                   fi # }}}
-                  if [[ $method == 'spin' && $(echo $delay | awk '{print $1 * 100}') -lt 50 ]]; then # {{{
+                  if [[ $method == 'spin' ]] && (( $(awk -v d=$delay 'BEGIN {printf "%.0f", d*100}') < 50 )); then # {{{
                     delay=0.5
                   fi # }}}
                   rm -f $mark_file
                   $tmux_progress && tmux_progress $tmux_entry end 0
-                  sleep $(calc -qp "$delay + 0.05"); return ${err:-20};; # }}}
+                  sleep $(awk -v d="$delay" 'BEGIN {print d + 0.05}'); return ${err:-20};; # }}}
     --wait-pv | --wait) # {{{
                   [[ $1 == '--wait-pv' ]] && method='pv' && report_error=false
                   shift
@@ -214,7 +214,7 @@ _progress() { # @@ # {{{
     [[ ! -z $msg ]] && echo "$msg " >>$out
     echo -n "${color}" >>$out
     if [[ ! -z $endTime ]]; then
-      cnt="$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{printf "%.0f", $1/$2}')"
+      cnt="$(awk -v cTime=$((endTime - EPOCHSECONDS)) -v d=$delay 'BEGIN {printf "%d", ct/d}')"
       writes="$cnt"
     fi
     for ((; cnt>=0; --cnt)); do
@@ -246,7 +246,7 @@ _progress() { # @@ # {{{
           break
         fi
       fi # }}}
-    done | tail -s 0.1 --follow=name "$fName" 2>/dev/null | pv -s $cnt -i $(echo "$delay" | awk '{printf "%d", $1/2}') -t -e --progress | cat - >/dev/null
+    done | tail -s 0.1 --follow=name "$fName" 2>/dev/null | pv -s $cnt -i $(awk -v d=$delay 'BEGIN {printf "%d", d/2}') -t -e --progress | cat - >/dev/null
     echo -n "${COff}" >>$out
     stty echo 2>/dev/null
     retVal=0 pressed_key=
@@ -294,7 +294,7 @@ _progress() { # @@ # {{{
       unset chars
       local j="--infinity"
       if [[ ! -z $endTime ]]; then # {{{
-        local cnt=$(echo "$((endTime-${EPOCHSECONDS:-$(epochSeconds)})) $delay" | awk '{printf "%d", $1/$2}')
+        local cnt="$(awk -v cTime=$((endTime - EPOCHSECONDS)) -v d=$delay 'BEGIN {printf "%d", ct/d}')"
         j="--once --cnt $cnt"
       fi # }}}
       chars="$($ENV_SCRIPTS/progress/random-text-drawer.sh --no-tput $j "$rndTxt")"
@@ -379,7 +379,7 @@ _progress() { # @@ # {{{
           ( eval $cmd >/dev/null 2>&1 ) && break
         fi
       fi
-      if [[ ! -z $endTime && ${EPOCHSECONDS:-$(epochSeconds)} -gt $endTime ]]; then
+      if [[ ! -z $endTime ]] && (( EPOCHSECONDS > endTime )); then
         [[ $cmd == 'false' ]] && retVal=$((10+1)) || retVal=1
         break
       fi

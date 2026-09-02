@@ -15,7 +15,7 @@ color-cache-dump() { # {{{
     esac; shift
   done
   echor -C "%yellow:{colorCache}:"
-  for i in $(echo "${!colorCache[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+  for i in $(echo "${!colorCache[*]}" | tr ' ' '\n' | sort); do
     if ! $full; then
       [[ $i =~ ^C[A-Z].+ && ! -z ${!i} ]] && continue
       [[ ! -z ${COLORS[$i]} ]] && continue
@@ -58,11 +58,11 @@ color-cache-dump() { # {{{
     fi
   done
   echor -C "%yellow:{COLORS}:"
-  for i in $(echo "${!COLORS[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+  for i in $(echo "${!COLORS[*]}" | tr ' ' '\n' | sort); do
     echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
   done
   echor -C "%yellow:{colorMap} (user):"
-  for i in $(echo "${!colorMap[*]}" | tr ' ' '\n' | LC_COLLATE=C sort); do
+  for i in $(echo "${!colorMap[*]}" | tr ' ' '\n' | sort); do
     echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
   done
 } # }}}

@@ -10,7 +10,6 @@ end
 
 hl.env("CLUTTER_BACKEND", "wayland")
 hl.env("GDK_BACKEND", "wayland,x11")
-hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("SDL_VIDEODRIVER", "wayland")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
@@ -23,6 +22,12 @@ hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Amber")
 hl.env("HYPRCURSOR_SIZE", "20")
 hl.env("XCURSOR_THEME", "Bibata-Modern-Amber")
 hl.env("XCURSOR_SIZE", "20")
+hl.env("QT_QPA_PLATFORM", "wayland;xcb")
+hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+hl.env("QT_AUTO_SCREEN_SCALE_FACTOR","1")
+hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
+hl.env("QT_LOGGING_RULES", "qt.qpa.fonts=true")
+hl.env("QT_FONT_DPI", "96")
 
 local hostname = get_hostname()
 
@@ -39,7 +44,6 @@ local mainMod = "SUPER"
 
 hl.on("hyprland.start", function ()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("/usr/bin/gnome-keyring-daemon --start --components=secrets,pkcs11")
     hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
@@ -104,6 +108,7 @@ hl.config({
         kb_model = "",
         kb_options = "caps:ctrl_modifier",
         kb_rules = "",
+        numlock_by_default = true,
 
         repeat_rate = 50,
         repeat_delay = 300,
@@ -164,7 +169,7 @@ hl.gesture({
 
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager) )
 hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.window.close())
-hl.bind(mainMod .. " + SPACE", hl.dsp.exec_cmd(menu))
+hl.bind(mainMod .. " + SPACE",     hl.dsp.exec_cmd(menu))
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qalculate-gtk"))
 hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("gvim"))
@@ -180,7 +185,7 @@ hl.bind(mainMod .. " + CTRL + J", hl.dsp.layout("togglesplit"))
 hl.bind(mainMod .. " + CTRL + SHIFT + L", hl.dsp.exec_cmd("hyprlock"))
 hl.bind(mainMod .. " + CTRL + SHIFT + S", hl.dsp.exec_cmd("systemctl suspend"))
 
-hl.bind("SHIFT + ALT + V", hl.dsp.exec_cmd('cliphist list | rofi -dmenu -p "Clipboard" | cliphist decode | wl-copy'))
+hl.bind(mainMod .. " + CTRL + V", hl.dsp.exec_cmd('cliphist list | rofi -dmenu -p "Clipboard" | cliphist decode | wl-copy'))
 
 hl.bind("Print", hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh"))
 
@@ -207,8 +212,8 @@ hl.bind(mainMod .. " + CTRL + SHIFT + right", hl.dsp.window.move({ workspace = "
 
 hl.bind(mainMod .. " + grave", hl.dsp.workspace.toggle_special("magic"))
 hl.bind(mainMod .. " + TAB",   hl.dsp.exec_cmd("~/.config/hypr/scripts/workspace-toggle.sh previous"))
-hl.bind("ALT + TAB", hl.dsp.exec_cmd("snappy-switcher next"))
-hl.bind("ALT + SHIFT + TAB", hl.dsp.exec_cmd("snappy-switcher previous"))
+hl.bind("ALT + TAB", hl.dsp.exec_cmd("snappy-switcher next --mod alt"))
+hl.bind("ALT + SHIFT + TAB", hl.dsp.exec_cmd("snappy-switcher previous --mod alt"))
 
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })

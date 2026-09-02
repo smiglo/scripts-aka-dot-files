@@ -5,20 +5,20 @@ draw_bold_text_with_bright_colors = true
 TERM = "alacritty"
 
 [font.bold]
-family = "Fira Mono"
-style = "Bold"
+family = "FiraCode Nerd Font"
+style = "Medium"
 
 [font.bold_italic]
-family = "Fira Mono"
-style = "Bold Italic"
+family = "FiraCode Nerd Font"
+style = "Medium Italic"
 
 [font.italic]
-family = "Fira Mono"
+family = "FiraCode Nerd Font"
 style = "Italic"
 
 [font.normal]
-family = "Fira Mono"
-style = "Regular"
+family = "FiraCode Nerd Font"
+style = "Light"
 
 [font]
 size = 14

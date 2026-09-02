@@ -224,6 +224,9 @@ status_git() { # @@ # {{{
   cd "$pPath"
   local gitdir="$(git rev-parse --path-format=absolute --git-dir)"
   [[ -n $gitdir ]] || return
+  local confFile="$RUNTIME_PATH/tmux-git-status.bash"
+  $IS_DOCKER && confFile="$HOST/.runtime/tmux-git-status.bash"
+  [[ -e $confFile ]] && source $confFile
   local b= stat= i=
   b="$(git symbolic-ref HEAD || git describe HEAD || echo "-")"
   b=${b##refs/heads/} b=${b#tags/} b="${b##remotes/}"
@@ -293,6 +296,7 @@ status_git() { # @@ # {{{
   # TMUX_STATUS_GIT_BRANCH_MAP+=' test/(.*):T/${BASH_REMATCH[1]}'
   # TMUX_STATUS_GIT_BRANCH_MAP+=' topic/(.*):T/${BASH_REMATCH[1]}'
   TMUX_STATUS_GIT_BRANCH_MAP+=" master:m main:m home-work:hw next:n devel:d trunk:t"
+  TMUX_STATUS_GIT_BRANCH_CLEAN+=" WT/"
   local changed=false ignoreChanged=false bGitConfig="$(git config branch.$b.short-name 2>/dev/null)"
   if [[ -n $bGitConfig ]]; then # {{{
     b="$bGitConfig"

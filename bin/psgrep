@@ -21,7 +21,7 @@ psgrep() { # @@ # {{{
       local params="xh -o pid,ppid,cmd"
       $IS_MAC && params="x -o pid=,ppid=,command="
       local thisPid="$$"
-      local list="$(COLUMNS=999; ps $params)"
+      local list="$(export COLUMNS=999; ps $params)"
       list="$(echo "$list" | command grep -v "$thisPid")"
       list="$(echo "$list" | awk '{print $3,$4}' | sed -e '/^-bash/d' -e 's,^\(/.*/\)\?\(bash\|sh\)\s\+,,' | awk '{print $1}' | sed 's|^/.*/||' | sort -u)"
       list="$(echo "$list" | sed 's/[^a-zA-Z0-9_.-]//g')"
@@ -73,7 +73,7 @@ psgrep() { # @@ # {{{
   ! $useFzf && loop=false
   getProccesses() { # {{{
     local list=
-    list="$(COLUMNS=999; command ps $psParams $psColumns)"
+    list="$(export COLUMNS=999; command ps $psParams $psColumns)"
     list="$(echo "$list" | command grep -v "$thisPid\|$((thisPid + 1))\|psgrep\.sh")"
     echo "$list"
   } # }}}

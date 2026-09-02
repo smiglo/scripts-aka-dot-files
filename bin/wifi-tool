@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  $IS_MAC && echo "---" && exit 0
+  case ${3:-$2} in
+  -c | --connect | conn | c | connect)
+    eval declare -A netBbsids=( $WIFI_BBSIDS )
+    case $(($# - 2)) in
+    1) echo "- $WIFI_DEFAULT_NETWORK $WIFI_NETWORKS";;
+    2) echo "- ${netBbsids[$4]}";;
+    esac;;
+  *) echo "-l --list -c --connect l c";;
+  esac
+  exit 0
+fi # }}}
+
+$IS_MAC && die "Not implemented"
+is-installed -w nmcli || die "nmcli not installed"
+
+cmd=${1:-list}
+shift
+cmd=${cmd#-}; cmd=${cmd#-}
+case $cmd in
+l | list) # {{{
+  nmcli d wifi list --rescan yes;; # }}}
+c | conn | connect) # {{{
+  networks="$(echo "$WIFI_NETWORKS" | xargs)"
+  ssid=${WIFI_DEFAULT_NETWORK:-${networks%% *}} bssid=
+  eval declare -A netBbsids=( $WIFI_BBSIDS )
+  case $1 in # {{{
+  '') ;;
+  -)  bssid="-"; shift;;
+  *)  ssid=$1; shift;;
+  esac # }}}
+  [[ -n $ssid ]] || die "No SSID"
+  if [[ ! -z $1 ]]; then # {{{
+    bssid=$1
+  elif [[ $bssid == '-' ]]; then
+    bssid=
+  else
+    bssid=${netBbsids[$ssid]%% *}
+  fi # }}}
+  echoe "Getting bssids for $ssid"
+  networks="$(nmcli d wifi list --rescan yes | awk "/ $ssid /")"
+  [[ -n $networks ]] || die "No bssids for $ssid"
+  bssidCurrent="$(echo "$networks" | awk '/^\*/ {print $2}')"
+  [[ -z $bssid ]] && bssid="$(echo "$networks" | cut -c4- | head -n1 | awk '{print $1}')"
+  if [[ $bssid == $bssidCurrent ]]; then
+    echoe "Already connected to $ssid on AP $bssid"
+  else
+    echoe "Connecting to $ssid on AP $bssid"
+    nmcli d wifi connect $bssid
+  fi;; # }}}
+esac

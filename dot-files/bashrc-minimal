@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+# functions # {{{
+init-env() { # {{{
+  mkdir -p $HOME/env
+  which git >/dev/null 2>&1 || { echo "ERR: git not installed" >&2; return 1; }
+  (
+    cd $HOME/env
+    (
+      set -e
+      [[ -e scripts ]] || git clone -b next --depth 1 https://github.com/smiglo/scripts-aka-dot-files.git scripts
+      [[ -e vim ]] || git clone -b next --depth 1 https://github.com/smiglo/vim-setup.git vim
+    ) || { echo "ERR: clone failed"; return 1; }
+    cd scripts
+    case $1 in
+    '') ./bin/setup-env.sh --core-env;;
+    -n | --dry) ;;
+    --full) ./bin/setup-env.sh --all;;
+    esac
+  )
+} # }}}
+__mgF() { # {{{
+  grep --color=auto -irE "$@" * 2>/dev/null
+} # }}}
+__ps1-prompt() { # {{{
+  local lastErr=$?
+  PS1='\w'
+  case $lastErr in
+  0) PS1+="\[$CYellow\]";;
+  *) PS1+="\[$CRed\]";;
+  esac
+  PS1+="$\[$COff\] "
+  return $lastErr
+}
+# }}}
+# # }}}
+# env # {{{
+# hist # {{{
+export HISTCONTROL="erasedups:ignoreboth"
+export HISTFILE="$HOME/.histfile"
+export HISTFILESIZE="-1" # }}}
+# colors # {{{
+export COff='[0m'
+export CBold='[1m'
+export CItalic='[3m'
+export CUnderline='[4m'
+export CStrike='[9m'
+export CBlack='[0;30m'
+export CRed='[0;31m'
+export CGreen='[0;32m'
+export CYellow='[0;33m'
+export CBlue='[0;34m'
+export CPurple='[0;35m'
+export CCyan='[0;36m'
+export CWhite='[0;37m' # }}}
+export PROMPT_COMMAND="__ps1-prompt"
+# }}}
+# bash-opts # {{{
+shopt -s autocd
+shopt -s cdspell
+shopt -s checkwinsize
+shopt -s cmdhist
+shopt -s dirspell
+shopt -u dotglob
+shopt -s extglob
+shopt -s globstar
+shopt -s histappend
+shopt -s histverify
+shopt -s progcomp
+shopt -s progcomp_alias
+set +f
+# }}}
+
+[[ -e ${BASH_SOURCE[0]%/*}/.inputrc ]] && bind -f ${BASH_SOURCE[0]%/*}/.inputrc
+bind '"\C-l": "\C-g clear -x\C-m"'
+
+which stty >/dev/null 2>&1 && stty -ixon 2>/dev/null
+which dircolors >/dev/null 2>&1 && eval "$(dircolors -b)"
+if [[ "$(tty)" =~ ^/dev/tty[0-9]+$ ]]; then
+  dumpkeys 2>/dev/null | sed 's/58 = Caps_Lock/58 = Control/' | loadkeys -q 2>/dev/null
+elif which setxkbmap >/dev/null 2>&1; then
+  setxkbmap -option 'caps:ctrl_modifier'
+fi
+which fzf >/dev/null 2>&1 && eval "$(fzf --bash)"
+
+# aliases # {{{
+alias G="grep --color=auto -iE"
+alias ls='ls --color=auto -B'
+alias ll='ls -Alhv'
+alias mg="__mgF"
+# }}}

@@ -20,10 +20,10 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
       mountSrc="$HOME/.tmp/.memFS"
       if [[ ! -e $mountSrc/mounted ]]; then
         ramfsLabel="ramfs"
-        ramfsDev=$(hdid -nomount ram://$((${RUNTIME_MOUNT_RAMFS_SIZE:-512*1024*1024}/512)))
-        if [[ -n $ramfsDev ]] && newfs_hfs -v "$ramfsLabel" $ramfsDev; then
+        ramfsDev=$(hdid -nomount ram://$((${RUNTIME_MOUNT_RAMFS_SIZE:-512*1024*1024}/512)) 2>/dev/null| xargs)
+        if [[ -n $ramfsDev ]] && newfs_hfs -v "$ramfsLabel" $ramfsDev >/dev/null 2>&1; then
           mkdir -p $mountSrc
-          if mount -o noatime,nobrowse -t hfs $ramfsDev $mountSrc; then
+          if $RUNTIME_MOUNT_SUDO_PRE mount -o noatime,nobrowse -t hfs $ramfsDev $mountSrc; then
             touch $mountSrc/mounted
             for aDir in $mounts_default; do
               case $aDir in
@@ -33,12 +33,16 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
               *) aSrc=${aDir//\//%}; aDir="$aDir";;
               esac
               mkdir -p $mountSrc/$aSrc $aDir
+              if [[ -d $aDir ]]; then
+                rsync -ahtpH $aDir/  $mountSrc/$aSrc/ >/dev/null
+                rm -rf $aDir
+              fi
               ln -sf $mountSrc/$aSrc $aDir
             done
             unset aDir aSrc aDst
           else
             echo "cannot mount: $ramfsDev -> $mountSrc" >&2
-            hdiutil detach /ramfsDev
+            hdiutil detach $ramfsDev >/dev/null 2>&1
           fi
         else
           echo "cannot make ramfs or hfs, '$ramfsDev' -> '$ramfsLabel'" >&2
@@ -99,7 +103,7 @@ if $BASHRC_FULL_START || [[ $1 == '-f' ]]; then
     esac
     unset mountSrc mounts_default
   fi
-  unset RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT RUNTIME_MOUNT_MAC_USE_RAMFS
+  unset RUNTIME_MOUNT_MEM_DIRS RUNTIME_MOUNT_USE_MOUNT RUNTIME_MOUNT_DO_MOUNT RUNTIME_MOUNT_MAC_USE_RAMFS RUNTIME_MOUNT_SUDO_PRE
 fi
 if ${BASHRC_MOUNT_TRACING:-false}; then # {{{
   set +xv

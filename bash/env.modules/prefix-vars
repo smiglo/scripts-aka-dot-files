@@ -99,7 +99,7 @@ vDumpArrayNicely() { # {{{
   fi
   local -n ref=$n
   echo "declare -p $n >/dev/null 2>&1 || declare $decl $n"
-  for i in $(echo ${!ref[*]} | tr ' ' '\n' | LC_COLLATE=C sort); do
+  for i in $(echo ${!ref[*]} | tr ' ' '\n' | sort); do
     echo "$n[$i]=\"${ref[$i]}\""
   done
 } # }}}

@@ -72,7 +72,6 @@ if $BASHRC_COMPLETION_FULL; then # {{{
   # }}}
   # Oth # {{{
   complete | command grep -q " cdd$" || complete $COMPLETE_DEFAULT_PARAMS -W "$(cd_wrapper -- @@ - -i | tr '\n' ' ')" cdd
-  declare -F _filedir >/dev/null && eval "$(type -a _filedir | tail -n +2 | sed 's/compopt -o filenames 2>/compopt -o filenames -o noquote 2>/')"
   compl-add --smart ./build.sh
   # }}}
   # tldr # {{{

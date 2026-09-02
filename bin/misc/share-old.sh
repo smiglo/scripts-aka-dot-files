@@ -160,9 +160,9 @@ _share() { # @@ # {{{
         [[ ! -e $i ]] && echor "Src: [$i] not exists, skipping" && continue
         list+="$i "
         cnt=$((cnt+1))
-      done < <(echo "$in" | LC_COLLATE=C sort -f)
+      done < <(echo "$in" | sort -f)
       [[ -z $list ]] && echor "Nothing to put" && return 1
-      echormf 1 "To put: $(echo $list | LC_COLLATE=C sort -f | tr '\n' ' ')"
+      echormf 1 "To put: $(echo $list | sort -f | tr '\n' ' ')"
       if [[ $cnt -gt 15 ]]; then
         progress --wait 10s --key --msg "$(echor -1 "Copy all $cnt files?")" </dev/tty || return 0
       fi
@@ -176,7 +176,7 @@ _share() { # @@ # {{{
     [[ ! -e $fName ]] && echor "Src: [$name] not exists" && return 1
     case $mode in
     list) # {{{
-      find $fName -path '*/*.git' -prune -o -type f | { if $short; then sed 's|.*/'$(basename $fName)'/||'; else cat -; fi; } | LC_COLLATE=C sort -f
+      find $fName -path '*/*.git' -prune -o -type f | { if $short; then sed 's|.*/'$(basename $fName)'/||'; else cat -; fi; } | sort -f
       ;; # }}}
     get) # {{{
       cp $cfgFile $cfgFile.local
@@ -184,7 +184,7 @@ _share() { # @@ # {{{
       (
         cd $fName
         local list="$(find . -path './*.git' -prune -o -print | cut -c3- )"
-        echormf 1 "To get: $(echo "$list" | LC_COLLATE=C sort -f | tr '\n' ' ' | sed 's/^ *//')"
+        echormf 1 "To get: $(echo "$list" | sort -f | tr '\n' ' ' | sed 's/^ *//')"
         case $copyMode in
         cp)    $dry cp -a --parents $list $p/;;
         rsync) $dry rsync $rsyncP $list $p/;;

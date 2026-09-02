@@ -38,10 +38,15 @@ if [[ ! -z $PS1 ]]; then
     emacs)
       ;;
     vi-command) # vi-movement-mode
+      bind -x '"\C-n\C-n": "tmux-popup -E -c n"'
       pre='i'
       ;;
     vi-insert) # vi-editing-mode
       bind -x '"\C-kk": "history -r && echoe -c -m bash history reloaded"'
+      bind -x '"\C-n\C-n": "tmux-popup -E -c n"'
+      bind -x '"\C-n\C-l": "tmux-popup -E -c nl"'
+      bind -x '"\C-n\C-t": "tmux-popup -E -c bt"'
+      bind -x '"\C-n\C-g": "tmux-popup -E -c pg"'
       bind    '"\C-kil": "\C-g logout\C-m"'
       bind    '"\C-kib": "\C-g byebye\C-m"'
       if is-installed ranger; then
@@ -112,7 +117,7 @@ elif $IS_DOCKER; then # {{{
   [[ -z $TMUX ]] && export PS1_STATUS="short_git_ssh:default"
   [[ -z $PS1_HOSTNAME ]] && export PS1_HOSTNAME=${HOSTNAME:0:3} # }}}
 elif [[ " $PERS_USERS " != *\ $USER\ * && $USER != 'root' ]]; then # {{{
-  export PS1_STATUS="usuper_full:short_git"
+  export PS1_STATUS="short_git:usuper_full"
 fi # }}}
 if [[ -n "$SSH_CLIENT" && ! -n $TMUX ]]; then
   ${PS1_SSH_CHANGE:-true} && export PS1_STATUS="short_git_ssh:default_ssh"

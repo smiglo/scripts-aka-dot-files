@@ -86,7 +86,20 @@ buildEntry() { # {{{
 } # }}}
 convertTime() { # {{{
   local ts="$1"
-  time2s --is-hms "$ts" && ts="$(time2s $ts)"
+  if time2s --is-hms "$ts"; then
+    ts="$(time2s $ts)"
+  elif [[ $ts =~ ^([0-9]{2})([0-9]{2})?$ ]]; then
+    ts=${BASH_REMATCH[1]}:${BASH_REMATCH[2]:-00}
+  elif [[ $ts =~ ^([0-9]{2})\.([0-9]{2})([0-9]{2})?$ ]]; then
+    ts=$(date +%Y%m)${BASH_REMATCH[1]}.${BASH_REMATCH[2]}:${BASH_REMATCH[3]:-00}
+  elif [[ $ts =~ ^([0-9]{2})([0-9]{2})\.([0-9]{2})([0-9]{2})?$ ]]; then
+    ts=$(date +%Y)${BASH_REMATCH[1]}${BASH_REMATCH[2]}.${BASH_REMATCH[3]}:${BASH_REMATCH[4]:-00}
+  elif [[ $ts =~ ^([0-9]{2})([0-9]{2})([0-9]{2})\.([0-9]{2})([0-9]{2})?$ ]]; then
+    local y=$(date +%Y)
+    ts=${y:0:2}${BASH_REMATCH[1]}${BASH_REMATCH[2]}.${BASH_REMATCH[3]}:${BASH_REMATCH[4]:-00}
+  elif [[ $ts =~ ^([0-9]{4})([0-9]{2})([0-9]{2})\.([0-9]{2})([0-9]{2})?$ ]]; then
+    ts=${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}.${BASH_REMATCH[4]}:${BASH_REMATCH[5]:-00}
+  fi
   ts="$(time2s "${ts/./ }" -o abs-s 2>/dev/null)"
   $narrowToMinutes && ts=$((ts / 60 * 60))
   echo "$ts"

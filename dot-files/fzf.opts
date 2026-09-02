@@ -11,6 +11,7 @@
 --layout=reverse-list
 --preview '$ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c prev --prev 10 -f {1}'
 --preview-window 'hidden'
+--highlight-line
 --bind 'f1:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c less -f {1})'
 --bind 'f2:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c vim -f {1})'
 --bind 'f3:execute($ENV_SCRIPTS/fzf-tools/fzf-exe.sh -c pane -f {1})'
@@ -20,3 +21,4 @@
 --bind 'ctrl-s:toggle-sort'
 --bind 'ctrl-y:preview-up'
 --bind 'ctrl-e:preview-down'
+--bind 'alt-r:toggle-raw'

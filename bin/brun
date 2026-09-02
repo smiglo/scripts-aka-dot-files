@@ -674,7 +674,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
       $cmd @@ '?' && getCommands $cmd
     done
     getCommands --external
-    [[ $cur == -* ]] && echo "--dry --verbose --dump --shell --log-file"
+    [[ $cur == -* ]] && echo "--dry --verbose -v --dump --shell --log-file"
     echo "-"
   fi # }}}
   if is-installed $BRUN_DEFAULT_COMMAND; then
@@ -686,7 +686,7 @@ while [[ -n $1 ]]; do # {{{
   case $1 in
   --dry) BRUN_DRY=true; BRUN_VERBOSE=true;;
   --dump) BRUN_DUMP=true; BRUN_VERBOSE=true;;
-  --verbose) BRUN_VERBOSE=true;;
+  --verbose | -v) BRUN_VERBOSE=true;;
   --log-file) BRUN_LOG_FILE="$2"; shift;;
   --shell) # {{{
     compl="$($0 @@)"

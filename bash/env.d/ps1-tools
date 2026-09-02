@@ -213,7 +213,7 @@ PS1_setter() { # {{{
         } # }}}
         cd_go_up "$PWD"
         unset cd_go_up
-        if [[ ${PS1_HIST_CHANGE_TO_LOCAL:-true} && ! ${TMUX_POPUP:-false} && $HISTFILE == $HISTFILE_ORIG && ( -e $PWD/.history || -e $PWD/.history.ign ) ]]; then # {{{
+        if [[ ${PS1_HIST_CHANGE_TO_LOCAL:-true} && $HISTFILE == $HISTFILE_ORIG && ( -e $PWD/.history || -e $PWD/.history.ign ) ]]; then # {{{
           [[ -z $BASH_ORIG_HISTFILE ]] && export BASH_ORIG_HISTFILE="$HISTFILE"
           export HISTFILE="$PWD/.history"
           [[ -e $PWD/.history.ign && ! -e $PWD/.history ]] && export HISTFILE="$PWD/.history.ign"
@@ -281,7 +281,11 @@ PS1_setter() { # {{{
               [[ $ps1_ignored == $HOME || $ps1_ignored == '/' ]] && ps1_ignored=
             fi
             if [[ ! -z $ps1_ignored && $tmp == $ps1_ignored* ]]; then
-              tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
+              if [[ ! $tmp =~ ^$ps1_ignored/[^/]+ ]]; then
+                tmp=".../${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
+              else
+                tmp="${tmp/#$ps1_ignored/${ps1_ignored/*\/}}"
+              fi
               [[ $ps1_ignored == $HOME* ]] && tmp="~/$tmp"
             fi
             p="$(PS1_adjustPath "$tmp")";;
@@ -343,14 +347,14 @@ PS1_setter() { # {{{
     split-line) # {{{
       [[ ${#ps1_dummy} -ge 4 ]] || break
       if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || [[ ${#ps1_dummy} -gt $PS1_CFG_WIDTH || ${#ps1_dummy} -gt $((COLUMNS - PS1_COLUMNS_MARGIN)) ]] ); then
-        if [[ -z $PS1_CONVERTER_NEW_LINE ]]; then
-          PS1_CONVERTER_NEW_LINE=
+        PS1_CONVERTER_NEW_LINE=
+        if ${PS1_CFG_ADD_NEW_LINE_CHAR:-false} && [[ -z $PS1_CONVERTER_NEW_LINE ]]; then
           PS1_colorFormat PS1_CONVERTER_NEW_LINE - 'new-line' "${PS1_CFG_NEW_LINE:-${UNICODE_EXTRA_CHARS[new-line]} }"
         fi
         PS1+="\n$PS1_CONVERTER_NEW_LINE"
       fi;; # }}}
     hist) # {{{
-      if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE =~ .*/\.history(\.ign)?$ ) ]] && ! ${TMUX_POPUP:-false}; then
+      if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE =~ .*/\.history(\.ign)?$ ) ]]; then
         :
       else
         PS1_colorFormat PS1 - 'hist' "$PS1_CFG_HIST" " "
@@ -438,14 +442,14 @@ ps1_toggle() { # @@ # {{{
   local oldIFS=$IFS
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
-    time | oneline | oneline-short)
+    time | oneline | oneline-short | ols)
       echo "on off";;
     *)
       local ret="next"
       ret+=" hl hn hr ht hw $(echo hist-{local,no,no-pers,restore,stat,wnd})"
       ret+=" split nl gt"
       ret+=" time-delta time-start time-curr td ts tc t-on t-off time t"
-      ret+=" oneline oneline-short"
+      ret+=" oneline oneline-short ols"
       for i in ${PS1_MODES[*]}; do
         IFS=':' read fullName shortName <<<"$i"
         ret+=" $fullName"
@@ -491,7 +495,7 @@ ps1_toggle() { # @@ # {{{
     time-curr  | tc) __ps1_var_toggle 'PS1_CFG_ADD_TIME_CURRENT';;
     esac
     return 0;; # }}}
-  oneline | oneline-short) # {{{
+  oneline | oneline-short | ols) # {{{
     if [[ -z $2 ]]; then
       __ps1_var_toggle 'PS1_CFG_ADD_SPLIT' true
     else
@@ -503,7 +507,7 @@ ps1_toggle() { # @@ # {{{
     if ${PS1_CFG_ADD_SPLIT:-true}; then
       ps1_toggle time ${PS1_CFG_ORIG_ADD_TIME_CURRENT:-true}
       case $1 in
-      oneline-short)
+      oneline-short | ols)
         PS1_STATUS=${PS1_CFG_ORIG_STATUS:-short_git:default};;
       *)
         [[ -n $PS1_CFG_ORIG_STATUS ]] && PS1_STATUS=$PS1_CFG_ORIG_STATUS;;
@@ -512,7 +516,7 @@ ps1_toggle() { # @@ # {{{
       PS1_CFG_ORIG_ADD_TIME_CURRENT=${PS1_CFG_ADD_TIME_CURRENT:-true}
       ps1_toggle time false
       case $1 in
-      oneline-short)
+      oneline-short | ols)
         PS1_CFG_ORIG_STATUS=$PS1_STATUS
         PS1_STATUS="very_short:${PS1_STATUS#*:}";;
       esac
@@ -548,6 +552,7 @@ ps1_toggle() { # @@ # {{{
       wndName=${wndName%%[-:.]*}
       export HISTFILE=$TMUX_SESSION_PATH/history.$wndName
       export HISTFILE_ORIG=$HISTFILE
+      declare -p HISTFILE HISTFILE_ORIG >$ENV_SNAPSHOT/histfile
       history -r
       return 0;; # }}}
     hist-local | hl) # {{{

@@ -233,15 +233,28 @@ bck() { # {{{
   esac
 } # }}}
 appender() { # {{{
+  local comment=
+  while [[ -n $1 ]]; do
+    case $1 in
+    -c) comment="$2"; shift;;
+    *) break;;
+    esac; shift
+  done
   local src=$1 dst=$2 doLink=${3:-true} p= foundCount=0 lastFound= subPath="dot-files"
+  if [[ -z $comment ]]; then
+    case $dst in
+    *vimrc*) comment='"' ;;
+    *) comment="###";;
+    esac
+  fi
   bck $dst
   if [[ -e $SCRIPT_PATH/$subPath/$src ]]; then
     log -s=$verbose "$src - in root"
     if [[ -f $SCRIPT_PATH/$subPath/$src ]]; then
       (
-        echo "### MAIN ### # {{{"
+        echo "$comment MAIN ### # {{{"
         cat $SCRIPT_PATH/$subPath/$src
-        echo "# }}}"
+        echo "$comment # }}}"
       ) >>$dst
     else
       log -s=$verbose "$src - not a file"
@@ -254,9 +267,9 @@ appender() { # {{{
     [[ -e $PROFILES_PATH/$p/$subPath/$src ]] || continue
     log -s=$verbose "$src - in $p"
     (
-      echo "### $p ### # {{{"
+      echo "$comment $p ### # {{{"
       cat $PROFILES_PATH/$p/$subPath/$src
-      echo "# }}}"
+      echo "$comment # }}}"
     ) >>$dst
     ((++foundCount))
     lastFound="$PROFILES_PATH/$p/$subPath/$src"
@@ -264,9 +277,9 @@ appender() { # {{{
   if [[ -e $appPath/dot-files/$src ]]; then
     log -s=$verbose "$src - in runtime"
     (
-      echo "### runtime ### # {{{"
+      echo "$comment runtime ### # {{{"
       cat $appPath/dot-files/$src
-      echo "# }}}"
+      echo "$comment # }}}"
     ) >>$dst
     ((++foundCount))
     lastFound="$appPath/dot-files/$src"
@@ -302,14 +315,25 @@ include-config() { # {{{
   ref+=" $( get-steps $1 $2)"
 } # }}}
 os-install() { # {{{
-  case $OS_KIND in
-  ubuntu) sudo apt-get install -y --no-install-recommends --fix-missing "$@" || { log "apt failed"; return 1; };;
-  arch) sudo pacman -Sy --needed "$@" || { log "pacman failed"; return 1; };;
+  local os=$OS_KIND
+  if [[ -z $os ]]; then # {{{
+    if [[ $OSTYPE == darwin* ]]; then
+      os="mac"
+    else
+      os=$(source /etc/os-release; echo $ID)
+    fi
+  fi # }}}
+  local sudoC="sudo"
+  (( UID )) || sudoC=
+  case $os in
+  ubuntu) $sudoC apt-get install -y --no-install-recommends --fix-missing "$@" || { log "apt failed"; return 1; };;
+  arch) $sudoC pacman -Sy --needed "$@" || { log "pacman failed"; return 1; };;
+  fedora) $sudoC dnf install "$@" || { log "dnf failed"; return 1; };;
   mac)
     if ${SETUP_ENV_BREW_SUDO:-false}; then
       brew install -y "$@" || { log "brew failed"; return 1; }
     else
-      sudo brew install -y "$@" || { log "brew failed"; return 1; }
+      $sudoC brew install -y "$@" || { log "brew failed"; return 1; }
     fi;;
   *) log "undefined OS"; return 1;
   esac
@@ -329,15 +353,19 @@ check-list() { # {{{
 # }}}
 # install steps: core & packages, order matters # {{{
 install-packages() { # {{{
-  local list=$(check-list packages)
+  local packageVar="packages"
+  $initCoreEnv && packageVar="packagesEssential"
+  local list=$(check-list ${1:-$packageVar})
   [[ -n $list ]] || return 0
   case $OS_KIND in
   ubuntu) # {{{
-    is-os-allowed +sudo || { log "no sudo"; return 1; }
+    local sudoC="sudo"
+    (( UID )) || sudoC=
+    is-os-allowed +sudo || (( UID == 0 )) || { log "no sudo"; return 1; }
     if ! is-installed -w add-apt-repository; then
       log "no add-apt-repository, installing it first"
-      sudo apt-get update
-      sudo apt-get install -y --no-install-recommends --fix-missing software-properties-common
+      $sudoC apt-get update
+      $sudoC apt-get install -y --no-install-recommends --fix-missing software-properties-common
     fi
     declare -A apts=()
     apts[main]="-c"
@@ -354,13 +382,15 @@ install-packages() { # {{{
     done
     log "apts: ${!apts[*]}"
     for i in ${!apts[*]}; do
-      sudo add-apt-repository -y ${apts[$i]} $i || { log "cannot add apt-repo: $i (${apts[$i]})"; return 1; }
+      $sudoC add-apt-repository -y ${apts[$i]} $i || { log "cannot add apt-repo: $i (${apts[$i]})"; return 1; }
     done
     list="$newList";; # }}}
   arch) # {{{
-    is-os-allowed +sudo || { log "no sudo"; return 1; };; # }}}
+    is-os-allowed +sudo || (( UID == 0 )) || { log "no sudo"; return 1; };; # }}}
   mac) # {{{
     is-installed brew || { log "no brew"; return 1; };; # }}}
+  fedora) # {{{
+    is-os-allowed +sudo || (( UID == 0 )) || { log "no sudo"; return 1; };; # }}}
   esac
   log -s=$verbose "$list"
   os-install $list || return 1
@@ -382,6 +412,9 @@ install-basics() { # {{{
     [[ -d $SCRIPT_PATH/bash/profiles/$i ]] || { log "profile '$i' does not exists"; return 1; }
     ln -sf $SCRIPT_PATH/bash/profiles/$i $PROFILES_PATH/$i
   done
+  if [[ ! -s $RUNTIME_PATH/runtime.bash && -n $PERS_USERS ]]; then
+    echo "export PERS_USERS=\"$PERS_USERS\"" >>$RUNTIME_PATH/runtime.bash
+  fi
 } # }}}
 install-bin-misc() { # {{{
   check-fingerprint "$(declare -p binMiscList)" bin-misc || { log -s=$verbose "nothing new to install"; return 0; }
@@ -456,9 +489,9 @@ install-tmux-fingers() { # {{{
       sudo apt-get update
       sudo apt-get install -y crystal
       sudo rm -f /etc/apt/sources.list.d/84codes_crystal.list
-      ./install-wizard.sh install-from-source
+      which tmux >/dev/null 2>&1 tmux && ./install-wizard.sh install-from-source
     else
-      ./install-wizard.sh download-binary
+      which tmux >/dev/null 2>&1 tmux && ./install-wizard.sh download-binary
     fi
   )
   (( $? == 0 )) || { "tmux-fingers: installation failed"; return 1; }
@@ -471,13 +504,15 @@ install-dot-files() { # {{{
   fi
   local i=
   log -s=$verbose "list: $(declare -p list)"
+  local sudoC="sudo"
+  (( UID )) || sudoC=
   for i in ${!list[*]}; do
     local dst="${list[$i]:-.${i##*/}}" dstForSudo= src="$i" doLink=true
     [[ $dst == @* ]] && doLink=false && dst="${dst#@}"
     [[ $dst == *:* ]] && src=${dst%%:*} && dst=${dst#*:}
-    if [[ $dst == /* && $dst != $HOME/* ]]; then
-      is-os-allowed +sudo || { log "$i - missing sudo perms"; return 1; }
-      sudo mkdir -p ${dst%/*} || { log "$i - cannot mkdir '${dst%/*}'"; return 1; }
+    if [[ $dst == /* && $dst != $HOME/* ]] || [[ $UID == 0 && $dst == /root/* ]]; then
+      is-os-allowed +sudo || (( UID == 0 )) || { log "$i - missing sudo perms"; return 1; }
+      $sudoC mkdir -p ${dst%/*} || { log "$i - cannot mkdir '${dst%/*}'"; return 1; }
       dstForSudo=$dst
       dst=$TMP_MEM_PATH/${dst##*/}
     else
@@ -505,7 +540,7 @@ install-dot-files() { # {{{
     *)
       appender $src $dst $doLink || { log "$i - file not found ($src)"; return 1; }
     esac
-    [[ -z $dstForSudo ]] || sudo mv $dst $dstForSudo
+    [[ -z $dstForSudo ]] || $sudoC mv $dst $dstForSudo
   done
 } # }}}
 # }}}
@@ -744,7 +779,9 @@ ubuntu | arch) isLinux=true;;
 esac # }}}
 if [[ -z $useSudo ]]; then # {{{
   useSudo=${SETUP_ENV_USE_SUDO:-true}
-fi # }}}
+fi
+! $useSudo || which sudo >/dev/null 2>&1 || useSudo=false
+# }}}
 if [[ -z $hasGui ]]; then # {{{
   hasGui=${SETUP_ENV_HAS_GUI:-true}
   case $OS_KIND,$IS_VIRTUAL_OS in
@@ -753,6 +790,7 @@ if [[ -z $hasGui ]]; then # {{{
   esac
 fi # }}}
 declare -A packages=()
+declare -A packagesEssential=()
 declare -A binMiscList=()
 declare -A dotFilesBasicList=()
 declare -A dotFilesList=()
@@ -765,7 +803,6 @@ declare -A pipTools=()
 appPath="$APPS_CFG_PATH/setup-env"
 stepsAll="$(get-steps $thisFile)"
 for si in $stepsAll; do coreEnv[$si]=; done
-unset coreEnv[packages]
 include-config $SCRIPT_PATH/inits/setup-env.conf
 for si in ${stepsCLI:-$stepsAll}; do
   [[ $si =~ ^ext- ]] && continue
@@ -792,6 +829,7 @@ log -s=$printEnv "stepsCLI     : $(declare -p stepsCLI)"
 log -s=$printEnv "stepsList    : $(declare -p stepsList)"
 log -s=$printEnv "coreEnv      : $(declare -p coreEnv)"
 log -s=$printEnv "packages     : $(declare -p packages)"
+log -s=$printEnv "packagesEsse : $(declare -p packagesEssential)"
 log -s=$printEnv "binMiscList  : $(declare -p binMiscList)"
 log -s=$printEnv "dotBasicList : $(declare -p dotFilesBasicList)"
 log -s=$printEnv "dotFilesList : $(declare -p dotFilesList)"

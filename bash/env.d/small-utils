@@ -102,7 +102,7 @@ byebye() { # {{{
       ( sleep 5 && power-manager.sh --now ) &
       disown
     else
-      ( sleep 5 && suspend ) &
+      ( sleep 5 && systemctl suspend -i ) &
       disown
     fi
   fi
@@ -264,12 +264,12 @@ gp() { # {{{
     if [[ -d "$f" ]]; then
       doFind=true; findDir="$f"
     elif [[ ! -e "$f" ]]; then
-      doFind=true; findP=("-a" "-name" "$f" )
+      doFind=true; findP=("-a" "-name" "*$f*" )
     fi
   else
     doFind=true
   fi
-  if $find; then
+  if $doFind; then
     f="$(find $findDir -maxdepth 1  \( -type f -o -type l \) "${findP[@]}" -print | xargs -r ls -dt | fzf --multi -1 -0)"
     [[ -n $f ]] || eval $(die "file not found")
   fi
@@ -300,7 +300,7 @@ src() { # {{{
 } # }}}
 sudo() { # {{{
   if [[ ! -z $1 ]]; then
-    command sudo $@
+    command sudo "$@"
   else
     command sudo --preserve-env=HOME -s
   fi
@@ -310,62 +310,6 @@ up() { # {{{
   ( TERM='xterm-256color' command up "$@" )
 } # }}}
 # OS specifics # {{{
-if ! $IS_MAC; then
-  wifi-tool() { # {{{
-    if [[ $1 == '@@' ]]; then # {{{
-      case ${4:-$3} in
-      -c | --connect | conn | c | connect)
-        case $2 in
-        2)     echo "- $WIFI_DEFAULT_NETWORK";;
-        2 | 3) echo "- $WIFI_DEFAULT_BBSIDS";;
-        esac;;
-      *) echo "-l --list -c --connect l c";;
-      esac
-      return 0
-    fi # }}}
-    local cmd=${1:-list}
-    shift
-    cmd=${cmd#-}; cmd=${cmd#-}
-    case $cmd in
-    l | list) # {{{
-      nmcli d wifi list --rescan yes;; # }}}
-    c | conn | connect) # {{{
-      local ssid=$WIFI_DEFAULT_NETWORK bssid=
-      case $1 in # {{{
-      '') ;;
-      -)  bssid="-"; shift;;
-      *)  ssid=$1; shift;;
-      esac # }}}
-      [[ -z $ssid ]] && echoe -f "No SSID" && return 1
-      if [[ ! -z $1 ]]; then # {{{
-        bssid=$1
-      elif [[ $bssid == '-' ]]; then
-        bssid=
-      else
-        local wifiId="$(echo "$ssid" | sha1sum | cut -c1-7)"
-        local bssidId=WIFI_DEFAULT_BSSID_$wifiId
-        local -n bssidVal=$bssidId
-        bssid=$bssidVal
-      fi # }}}
-      echoe -f "Getting bssids for $ssid"
-      local networks="$(nmcli d wifi list --rescan yes | awk "/ $ssid /")"
-      [[ -z $networks ]] && echoe -f "No bssids for $ssid" && return 1
-      local bssidCurrent="$(echo "$networks" | awk '/^\*/ {print $2}')"
-      [[ -z $bssid ]] && bssid="$(echo "$networks" | cut -c4- | head -n1 | awk '{print $1}')"
-      if [[ $bssid == $bssidCurrent ]]; then
-        echoe -f "Already connected to $ssid on AP $bssid"
-      else
-        echoe -f "Connecting to $ssid on AP $bssid"
-        nmcli d wifi connect $bssid
-      fi;; # }}}
-    esac
-  }
-  COMPLETION_GENERIC_FUNCTIONS+=" wifi-tool" # }}}
-else
-  wifi-tool() { # {{{
-    echoe -f "Not implemented"
-  } # }}}
-fi
 if $IS_ARCH; then # {{{
   rebootF() { # {{{
     if [[ $(tty) == /dev/tty* ]]; then

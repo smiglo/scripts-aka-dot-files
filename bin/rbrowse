@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  case $2 in
+  --endpoint)
+    ls $0.d | sed 's/endpoint-//';;
+  -d | --dst)
+    tr ' ' '\n' <<<"${RBROWSE_ENDPOINTS}" | awk -v FS='[@:]' '{print $1}';;
+  --dir)
+    echo "/ ~"
+    tr ' ' '\n' <<<"${RBROWSE_ENDPOINTS}";;
+  -p | --pane) echo ".1";;
+  *)
+    compl-get-args <$0
+    echo "DST-then-DIR"
+    tr ' ' '\n' <<<"${RBROWSE_ENDPOINTS}" | awk -v FS='[@:]' '{print $1}';;
+  esac
+  exit 0
+fi # }}}
+
+get-vim-panes() { # {{{
+  local pid= pane=
+  while read pane pid; do
+    if ! $IS_MAC; then
+      pstree -Ac $pid | grep -q -e '[-]--vim'
+    else
+      pstree $pid | grep -q -i -e '[v]im'
+    fi || continue
+    echo "$pane"
+  done < <(tmux list-panes -F '#P #{pane_pid}')
+} # }}}
+to-pane() { # {{{
+  if (( $# == 4 )); then
+    tmux send-keys -t ".$1" ":tabedit $(endpoint-vim-list "$2" "$3" "$4")" enter enter
+  else
+    local f=
+    for f in "${selected[@]}"; do
+      tmux send-keys -t ".$pane" ":tabedit $(endpoint-vim-list "$f")" enter enter
+    done
+  fi
+} # }}}
+vim-open() { # {{{
+  local -a sources=() f=
+  for f in "${selected[@]}"; do
+    sources+=( $(endpoint-vim-list "$f") )
+  done
+  vim --Fast "${sources[@]}"
+} # }}}
+file-preview() { # {{{
+  local mode=$1 dst=$2 aDir=$3 file=$4 fastPreview=false
+  local tmpFile="$TMPDIR/rbrowse.tmp"
+  [[ $(basename "$file") == *.* ]] && tmpFile="$TMPDIR/rbrowse.tmp.${file##*.}"
+  [[ $file == /* ]] || file="${aDir%/}/$file"
+  case $file in
+  */) echo "no preview for directories ($file)";;
+  *) # {{{
+    case $mode in
+    preview) # {{{
+      $fastPreview || is-installed which || fastPreview=false
+      if $fastPreview; then
+        echo "$file"; echo
+      endpoint-cat "$file" || { echo "cannot read $file"; return; }
+        return
+      fi;; # }}}
+    esac
+    rm -f "$tmpFile"
+  endpoint-cat "$file" >"$tmpFile" || { echo "cannot read $file"; return; }
+    case $mode in
+    preview) # {{{
+      local t="$(file --mime "$tmpFile")"
+      [[ "$t" =~ binary ]] && { echo "$file is binary"; return; }
+      [[ ${tmpFile##*/} != "rbrowse.tmp" && "$t" =~ (shellscript|text/plain) ]] && t="-S bash" || t=""
+      echo "$file"; echo
+      highlight -O ansi $t "$tmpFile" 2>/dev/null;; # }}}
+    less) less "$tmpFile";;
+    vim) vim --Fast "$tmpFile";;
+    esac
+    rm -f "$tmpFile";; # }}}
+  esac
+} # }}}
+
+aDir=
+dst=
+endpointType=
+pane=
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -d | --dst)
+    shift; dst="$1"
+    (( $# == 2 )) && aDir="$2"; shift $#;;
+  --dir) aDir="$2"; shift;;
+  --endpoint) endpointType="$2"; shift;;
+  -p | --pane) pane="${2#.}"; shift;;
+  .)
+    if (( $# == 2 )); then
+      endpointType="fs"; aDir="$2"; shift $#
+    else
+      endpointType="fs"; aDir="."
+    fi;;
+  *)
+    dst="$1"
+    (( $# == 2 )) && aDir="$2"; shift $#;;
+  esac; shift
+done # }}}
+
+if [[ -z $dst && -n $RBROWSE_ENDPOINTS ]]; then # {{{
+  dst="${RBROWSE_ENDPOINTS%%:*}"
+  [[ $dst == *@* ]] && endpointType="${dst#*@}" && dst="${dst%%@*}"
+fi # }}}
+[[ -n $endpointType ]] || endpointType="ssh"
+case $endpointType in
+ssh)
+  [[ -n $dst ]] || die "no remote";;
+esac
+
+[[ -e $0.d/endpoint-$endpointType ]] || die "no implementation for '$endpointType'"
+apis=( endpoint-is-alive endpoint-init endpoint-term endpoint-ls endpoint-find endpoint-cat endpoint-vim-list endpoint-cp )
+unset -f "${apis[@]}"
+source $0.d/endpoint-$endpointType
+apis_missing=()
+for i in "${!apis[@]}"; do
+  declare -F "${apis[i]}" >/dev/null || eval $(die -c "missing apis: ${apis[i]}")
+  unset apis[i]
+done
+(( ${#apis[@]} == 0 )) || die
+
+export -f endpoint-cat endpoint-vim-list to-pane file-preview
+
+endpoint-is-alive || die "no connection with the endpoint '$dst'"
+endpoint-init
+
+if [[ -z $aDir ]]; then # {{{
+  aDir="~"
+  for i in $RBROWSE_ENDPOINTS; do
+    [[ $i =~ $dst(@.*)?:(.*) ]] || continue
+    aDir=${BASH_REMATCH[2]}; break
+  done
+fi # }}}
+
+updateList=true
+declare -i inFind=0
+declare -a vimPanes=()
+declare -a list=()
+declare -a findPrompt=( "" "find ")
+if [[ -z $pane ]]; then # {{{
+  vimPanes=( $(get-vim-panes) )
+  [[ -v vimPanes[0] ]] && pane="${vimPanes[0]}"
+fi # }}}
+while true; do
+  aDir="${aDir%/}/"
+  if $updateList; then # {{{
+    updateList=false
+    if ((inFind)); then
+      endpoint-find
+    else
+      endpoint-ls
+    fi
+  fi # }}}
+  for i in ${!list[@]}; do # {{{
+    case ${list[$i]} in
+    ./) unset list[i];;
+    ../) [[ $aDir == "/" ]] && unset list[i];;
+    esac
+  done # }}}
+  printf -v prompt "%s| %s%s> " "$pane" "${findPrompt[inFind]}" "$aDir"
+  readarray -t fzf_out < <( printf "%s\n" "${list[@]}" | \
+    fzf --no-sort --multi \
+        --prompt "$prompt" \
+        --preview "file-preview preview \"$dst\" \"${aDir%/}\" {1}" --preview-window 'hidden' \
+        --bind "f1:execute(file-preview less \"$dst\" \"${aDir%/}\" {1})" \
+        --bind "f2:execute(file-preview vim  \"$dst\" \"${aDir%/}\" {1})" \
+        --bind "f3:execute(to-pane \"$pane\" \"$dst\" \"${aDir%/}\" {1})" \
+        --expect ctrl-f \
+        --expect ctrl-g \
+        --expect ctrl-p \
+        --expect ctrl-r \
+        --expect ctrl-s \
+        --expect ctrl-u \
+  )
+  (( ${#fzf_out[@]} )) || break
+  expect_key="${fzf_out[0]}"
+  unset fzf_out[0]
+  selected=("${fzf_out[@]}")
+  action="${expect_key:-${selected[0]}}"
+  case $action in
+  ctrl-f) # {{{
+    inFind=inFind==0
+    updateList=true;; # }}}
+  ctrl-g) # {{{
+    endpoint-cp;; # }}}
+  ctrl-p) # {{{
+    vimPanes=( $(get-vim-panes) )
+    [[ ${#vimPanes[@]} ]] || { read -t1 -p "no panes with vim"; continue; }
+    [[ -z $pane || ${#vimPanes[@]} == 1 ]] && pane="${vimPanes[0]}" && continue
+    for i in ${!vimPanes[@]}; do
+      [[ ${vimPanes[i]} == $pane ]] || continue
+      pane="${vimPanes[(i+1)%${#vimPanes[@]}]}"
+      continue 2
+    done
+    pane="${vimPanes[0]}";; # }}}
+  ctrl-r) # {{{
+    updateList=true
+    continue;; # }}}
+  ctrl-s) # {{{
+    if [[ -z $pane ]]; then # {{{
+      declare -a vimPanes=( $(get-vim-panes) )
+      pane="${vimPanes[0]}"
+      [[ -n $pane ]] || { read -t1 -p "no pane with vim"; continue; }
+    fi # }}}
+    case ${selected[0]} in
+    */) read -t1 -p "not supported for dirs";;
+    *)  to-pane;;
+    esac;; # }}}
+  ctrl-u) # {{{
+    [[ $aDir != "/" ]] && aDir="$(dirname $aDir)"
+    updateList=true
+    inFind=0
+    continue;; # }}}
+  ../) # {{{
+    aDir="$(dirname "$aDir")"
+    updateList=true;; # }}}
+  */) # {{{
+    [[ $action == /* ]] && aDir="$action" || aDir+="$action"
+    updateList=true
+    inFind=0;; # }}}
+  *) # {{{
+    vim-open || break;; # }}}
+  esac
+done
+endpoint-term

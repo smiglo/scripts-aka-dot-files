@@ -34,6 +34,9 @@ _completer() { # {{{
     param="${COMP_WORDS[1]}"
     if [[ " $($SCRIPT_PATH/bin/git/extra-completion.sh --list) " == *" $param "* ]]; then
       cmd="$SCRIPT_PATH/bin/git/extra-completion.sh"
+    elif is-installed git-$param; then
+      cmd="git-$param"
+      param=
     else
       local git_alias="$(git config alias.$param)"
       [[ ! -z $git_alias ]] && param="${git_alias%% }"
@@ -55,25 +58,25 @@ _completer() { # {{{
   old | new) # {{{
     local wCmd="$(which $cmd 2>/dev/null)"
     local cmdBody=
-    if [[ -n $wCmd ]]; then # {{{
-      cmdBody="$(< $wCmd)"
-      [[ $wCmd == ./* ]] && wCmd="$PWD/${wCmd#./}"
-      local dirCmd="$(basename $(dirname $wCmd))"
-      wCmd="${wCmd#$HOME/}" && wCmd="${wCmd//\//-}"
-      if is-installed compl-$wCmd; then
-        cmd="compl-$wCmd"
-      elif is-installed compl-$dirCmd-$cmd; then
-        cmd="compl-$dirCmd-$cmd"
-      elif is-installed compl-$cmd; then
+    if declare -F $cmd >/dev/null 2>&1; then # {{{
+      cmdBody="$(type $cmd)"
+      if is-installed compl-$cmd; then
         cmd="compl-$cmd"
       fi # }}}
-    elif declare -F $cmd >/dev/null 2>&1; then # {{{
-      cmdBody="$(type $cmd)"
-      wCmd="f-$cmd"
-      if is-installed compl-$wCmd; then
+    elif [[ -n $wCmd ]]; then # {{{
+      cmdBody="$(< $wCmd)"
+      [[ $wCmd == ./* ]] && wCmd="$PWD/${wCmd#./}"
+      local dirCmd="${wCmd%/*}" && dirCmd="${dirCmd##*/}"
+      wCmd="${wCmd#$HOME/}" && wCmd="${wCmd//\//-}"
+      local cmdRaw="${cmd##*/}"
+      if [[ -e ${COMPLETER_DIR:-$APPS_CFG_PATH/compl}/compl-$cmdRaw ]]; then
+        cmd="${COMPLETER_DIR:-$APPS_CFG_PATH/compl}/compl-$cmdRaw"
+      elif is-installed compl-$wCmd; then
         cmd="compl-$wCmd"
-      elif is-installed compl-$cmd; then
-        cmd="compl-$cmd"
+      elif is-installed compl-$dirCmd-$cmdRaw; then
+        cmd="compl-$dirCmd-$cmdRaw"
+      elif is-installed compl-$cmdRaw; then
+        cmd="compl-$cmdRaw"
       fi
     fi;; # }}} # }}}
   esac

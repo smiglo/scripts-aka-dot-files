@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# vim: fdl=0 ft=sh
+
+endpoint-is-alive() { # {{{
+  ssh -q "$dst" "exit 0" || return 1
+} # }}}
+endpoint-init() { # {{{
+  export connection=$(mktemp -u --tmpdir ssh.sock.XXXXXXXXXX)
+  ssh -q -f -oControlMaster=yes -oControlPath=$connection $dst "sleep 9999" || eval $(die "cannot init connection")
+} # }}}
+endpoint-term() { # {{{
+  ssh -q -oControlPath=$connection -O exit $dst >/dev/null 2>&1 || die "connection not terminated"
+} # }}}
+endpoint-ls() { # {{{
+  readarray -t list < <(ssh -q -S$connection "$dst" "ls -1ap --group-directories-first $aDir" 2>/dev/null)
+} # }}}
+endpoint-find() { # {{{
+  readarray -t list < <(ssh -q -S$connection "$dst" "find ${aDir%/} -print 2>/dev/null | xargs -r ls -apd 2>/dev/null")
+  local i= prefix=${list[0]}
+  unset list[0]
+  for i in ${!list[@]}; do
+    list[i]=${list[i]#$prefix}
+  done
+} # }}}
+endpoint-cat() { # {{{
+  ssh -q -S$connection "$dst" "cat $1"
+} # }}}
+endpoint-vim-list() { # {{{
+  (( $# == 3 )) && local dst="$1" aDir="$2" && shift 2
+  local f="$1"
+  [[ $f == /* ]] || f="${aDir%/}/$f"
+  printf "%q" "scp://$dst/$f"
+} # }}}
+endpoint-cp() { # {{{
+  local -a sources=() f=
+  for f in "${selected[@]}"; do
+    if [[ $f != /* ]]; then
+      [[ $aDir == '~'* ]] && f="${aDir%/}/$f" || f="/${aDir%/}/$f"
+    else
+      f="/$f"
+    fi
+    sources+=("$dst:$f")
+  done
+  scp $SCP_PARAMS -r "${sources[@]}" ./
+} # }}}

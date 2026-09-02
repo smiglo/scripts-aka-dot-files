@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  case $2 in
+  -f | --file) echo "@@-f";;
+  -n | --lines) echo "10 100 500 1000";;
+  *) compl-get-args <$0;;
+  esac
+  exit 0
+fi # }}}
+
+is-installed -w ed || die "ed not found"
+
+ringFile="${1:-$TMP_MEM_PATH/ring-file.$PPID}"
+linesMax=500
+
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -f | --file) ringFile="$2"; shift;;
+  -n | --lines) linesMax="$2"; shift;;
+  *) break;;
+  esac; shift
+done # }}}
+
+[[ -e $ringFile ]] || touch $ringFile
+declare -i linesF=$(wc -l <$ringFile)
+declare -i linesToRemove=0
+
+while IFS= read -r l; do
+  if (( linesF >= linesMax )); then
+    linesToRemove=linesF-linesMax+1
+    linesF=linesMax-1
+    ed $ringFile >/dev/null <<EOF
+1,${linesToRemove}d
+wq
+EOF
+  fi
+  echo "$l" >>$ringFile
+  linesF+=1
+done

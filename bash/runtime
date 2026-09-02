@@ -76,6 +76,7 @@ if [[ -z $FZF_INSTALLED || -z $VIM_FZF_RUNTIME_PATH ]]; then
 fi
 unset fzfPath # }}}
 # tools # {{{
+searchColor=136
 # phistory # {{{
 [[ -z $BASH_PHISTORY_FILE ]] && export BASH_PHISTORY_FILE="$HOME/.bash_phistory"
 if $BASHRC_FULL_START && [[ -e "$BASH_PHISTORY_FILE" ]]; then
@@ -98,7 +99,8 @@ fi
 export ACK_OPTIONS="-k --smart-case --color-filename=cyan --color-lineno=green --color-match=yellow"
 export ACK_PAGER="less"
 export ACK_PAGER_COLOR="less" # }}}
-export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;214"
+export AG_OPTIONS="--color-path=38;5;6 --color-line-number=38;5;10 --color-match=38;5;$searchColor"
+export RG_OPTIONS="$AG_OPTIONS"
 # AIder # {{{
 if false && is-installed -w aider; then
   export AIDER_DARK_MODE=true
@@ -156,6 +158,46 @@ export GIT_PS1_DESCRIBE_STYLE="branch"
 unset GIT_PS1_SHOWCOLORHINTS
 [[ -n $PERS_EMAIL ]] && export GIT_USER_DEFAULT="${PERS_NAME_LONG}:${PERS_EMAIL}"
 [[ -n $PERS_EMAIL_123 ]] && export GIT_USER_123="${PERS_USER_SHORT}:${PERS_EMAIL_123}" # }}}
+export GREP_COLORS="mt=38;5;$searchColor:ne:fn=magenta"
+if [[ -z $LESS ]]; then # {{{
+  export LESS='-diJRSwX -# 4 -x4 -+F -~ --follow-name --save-marks'
+  case $OS_KIND in
+  fedora) ;;
+  *) LESS+=' -z-4';;
+  esac
+  ver=$(less -V | head -n1 | awk '{print 2}')
+  if (( ver >= 600 )); then
+    export LESS+=' --rscroll=•'
+    export LESS+=' --use-color -Dub -Dd+y -DPm -DS0.'"$searchColor"' -DEr -DNK -Dkg -DWM* -DMR* -DRm'
+  else
+    export LESS+=' --use-color -Dub$Dd+y$DPm$DS0.'"$searchColor"'$DEr$DNK$Dkg$DWM$DMR$DRm'
+  fi
+  unset ver
+  export LESSCHARSET='utf-8'
+  case $OS_KIND in
+  ubuntu)
+    LESSPIPE_PATH=${LESSPIPE_PATH:-"/usr/bin/lesspipe"}
+    if [[ -x "$LESSPIPE_PATH" ]]; then
+      eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
+    fi
+    if which -w dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
+      export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
+    fi;;
+  arch)
+    if which source-highlight-esc.sh >/dev/null 2>&1; then
+      export LESSOPEN="| source-highlight-esc.sh %s 2>/dev/null"
+    fi;;
+  esac
+fi # }}}
+export _RR_TRACE_DIR="./.rr"
+export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
+[[ -e $RLWRAP_HOME ]] || mkdir -p $RLWRAP_HOME &>/dev/null
+export RLWRAP_OPTS="-A -b '' -e '' -D 2"
+export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
+export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
+export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
+unset searchColor
+# # }}}
 # Tmux - local # {{{
 if false; then
   if [[ ! -e $HOME/.bin/tmux-local-bin && -e $HOME/.config/tmux-local/.use-local && -e $HOME/.config/tmux-local/local/bin/tmux ]]; then
@@ -168,16 +210,7 @@ if false; then
     [[ -e $HOME/.config/tmux-local/local/share/man/man1/tmux.1 ]] && export MANPATH="$HOME/.config/tmux-local/local/share/man:$MANPATH"
   fi
 fi # }}}
-export _RR_TRACE_DIR="./.rr"
-export RLWRAP_HOME="$APPS_CFG_PATH/rlwrap"
-[[ -e $RLWRAP_HOME ]] || mkdir -p $RLWRAP_HOME &>/dev/null
-export RLWRAP_OPTS="-A -b '' -e '' -D 2"
-export RSYNC_DEFAULT_PARAMS_VERBOSE="-ahtpH --no-whole-file --modify-window=2 --progress"
-export RSYNC_DEFAULT_PARAMS="$RSYNC_DEFAULT_PARAMS_VERBOSE --no-v --no-progress --info=progress2"
-export RSYNC_DEFAULT_PARAMS_FAT="--update --times -rlptgoD --size-only --no-o --no-g --no-p -O"
-# # }}}
 # Env - not grouped # {{{
-export COLUMNS LINES
 export DATE_FMT="%Y%m%d-%H%M%S"
 export TIME_FMT="%H:%M:%S"
 export DATE2_FMT="%Y%m%d"
@@ -198,7 +231,8 @@ if ${REMINDER_MONITOR_AUTOSTART:-true} && [[ -z $REMINDER_MONITOR_CMD && -e "$SC
 fi
 export TMUX_SB_INTERVAL=15
 [[ -e $TOOLS_PATH/pwndbg/gdbinit.py ]] && export GDB_PWNDBG_INIT="$TOOLS_PATH/pwndbg/gdbinit.py"
-export LC_COLLATE=C
+export LC_COLLATE=C.UTF-8
+export LC_NUMERIC=C.UTF-8
 export GOBIN="$HOME/.local/bin"
 [[ -z $NODE_USE_NVM && -e $HOME/.nvm ]] && export NODE_USE_NVM=true
 if [[ -z $PRJ_PATH ]]; then
@@ -224,6 +258,7 @@ if [[ -z $VIM_YCM_PATH ]]; then
     fi
   fi
 fi # }}}
+[[ -s $CLIP_FILE.env ]] || declare -p DISPLAY WAYLAND_DISPLAY >$CLIP_FILE.env 2>/dev/null
 # }}}
 # Sharable setup # {{{
 if [[ -z $SHARABLE_PATH ]]; then # {{{
@@ -246,7 +281,7 @@ if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
   fi
   ${SHARABLE_PRINT_MOUNTED_MSG:-false} && import-module echor
   if $connectivity || ! $SHARABLE_REAL; then # {{{
-    if $SHARABLE_REAL && ( $BASHRC_FULL_START  || [[ $1 == '--mnt-sharable' ]] ); then # {{{
+    if $SHARABLE_REAL && ( $BASHRC_FULL_START || [[ $1 == '--mnt-sharable' ]] ); then # {{{
       [[ $1 == '--mnt-sharable' ]] && shift && rm -f $BASHRC_RUNTIME_PATH/sharable.conf $BASHRC_RUNTIME_PATH/sharable-runtime.bash
       [[ -e $BASHRC_RUNTIME_PATH/sharable.conf ]] && source $BASHRC_RUNTIME_PATH/sharable.conf
       [[ ! -n $TMUX ]] && export CD_LAST_DIRS_STORED+=":shr@$SHARABLE_PATH"
@@ -302,7 +337,7 @@ if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
 fi # }}}
 export SHARABLE_PATH SHARED_BASH_PATH
 # }}}
-# Tmp/Mem setup # {{{
+# Tmp/Mem/Tmux setup # {{{
 export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
 export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
 [[ -e $HOME/Desktop/mem ]] && export CD_LAST_DIRS_STORED+=":m@$HOME/Desktop/mem"
@@ -363,8 +398,10 @@ set-utils() { # {{{
   done # }}}
 } # }}}
 # }}}
-# Mem Subentries # {{{
+# Tmux & Mem Subentries # {{{
 if [[ -n $TMUX ]]; then
+  [[ -e $TMUX_SESSION_PATH/env ]] && source $TMUX_SESSION_PATH/env
+  export PATH=$TMUX_SESSION_PATH/bin:$PATH
   set-utils -d
   export TMUX_RUNTIME="$UTILS_PATH/runtime"
   if [[ $UID != 0 ]]; then
@@ -381,7 +418,7 @@ else
   [[ ! -e $TMUX_RUNTIME ]] && command mkdir -p $TMUX_RUNTIME
 fi # }}}
 # Clean TMP # {{{
-if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]] && ! $IS_DOCKER && ! ${TMUX_POPUP:-false} ) || [[ $1 == '--clean-tmp'* ]]; then
+if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]] && ! $TMUX_POPUP && ! $IS_VSCODE && [[ ! "$(tty)" =~ ^/dev/tty[0-9]+$ ]] ) || [[ $1 == '--clean-tmp'* ]]; then
   now=${EPOCHSECONDS:-$(epochSeconds)}
   check_file=$TMP_PATH/.tmp-last-check
   do_clean=false
@@ -419,7 +456,6 @@ if ( $BASHRC_SHELL_START && [[ $what_to_do != 'min' && $what_to_do != 'basic' ]]
       paths+=" p=\"$TMP_PATH/.vim/sessions\";threshold=42"
       paths+=" p=\"$HOME/Desktop/mem\";threshold=4"
       paths+=" p=\"$HOME/Desktop/tmp\";threshold=4"
-      paths+=" p=\"$HOME/Downloads\";threshold=31;keep=\"priv\""
       for p in $APPS_CFG_PATH/tmux/sessions/*; do # {{{
         [[ $p == */ROOT ]] && continue
         paths+=" p=\"$p/grep-last\";size=15"
@@ -515,11 +551,11 @@ if $IS_MAC && is-installed -w brew; then # {{{
       | tr '\n' ':')"
     ccachePath=$(ls -d $prefix/Cellar/ccache/*/libexec 2>/dev/null)
     [[ -n $ccachePath ]] && brewPaths+="$ccachePath:"
-    echo "${brewPaths%:}" >>$pathFile
-    unset brewPaths prefix ccachePath
+    echo "${brewPaths%:}" >$pathFile
+    unset brewPaths ccachePath
   fi
   [[ -s $pathFile ]] && PATH="$(< $pathFile):$PATH"
-  unset pathFile
+  unset pathFile prefix
 fi # }}}
 # }}}
 # Runtime file # {{{

@@ -44,6 +44,7 @@ __bashrc_exit() { # {{{
   ! $keep && ${BASHRC_PROFILER:-false} && v+=" $(echo ${!BASHRC_PROFILER_*})"
   $addInstalling && v+=" RCSTUFF_BASHRC_INSTALLING"
   v+=";"
+  v+=" export BASHRC_FULL_START=false;"
   history -r
   ${BASHRC_PROFILER:-false} && time-measure -v bashrc_exit --msg 'exit'
   if ${BASHRC_TRACE:-false}; then # {{{
@@ -189,12 +190,13 @@ elif $BASHRC_USE_FAST_ENV; then # {{{
       fi
     fi # }}}
     if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1) && ! $IS_VSCODE; then
-      eval $(__bashrc_exit --for-attach)
-      tmux attach $TMUX_LAST_SESSION
-      return 0
-    else
-      eval $(__bashrc_exit)
+      if ! ip addr | grep -qF "inet ${SSH_CONNECTION%% *}/"; then
+        eval $(__bashrc_exit --for-attach)
+        tmux attach $TMUX_LAST_SESSION
+        return 0
+      fi
     fi
+    eval $(__bashrc_exit)
   fi
 fi # }}}
 $BASHRC_DBG && echoe -m bashrc "wtd=[$what_to_do], args=[$@]"
@@ -260,96 +262,100 @@ export PHISTORY_IGNORED_COMMANDS="$(remove-dups "$PHISTORY_IGNORED_COMMANDS")"
 # }}}
 $BASHRC_PROFILER && time-measure -v bashrc_step
 # Only in interactive mode # {{{
-if [[ "$what_to_do" == 'full' ]]; then # {{{
-  if [[ ! -z $TMUX_USE_NICE_PRIO ]]; then # {{{
-    command ps -U $USER -o pid,nice,comm,cmd | command grep -e "^[^\s]\+\s\+$TMUX_USE_NICE_PRIO" | command grep -v "tmux: server" | while read i; do
-      pid="${i/ *}"
-      $BASHRC_DBG && echoe -m bashrc "Renicing process $(echo $i | awk '{print $3, "[", $4, "]"}') [pid=$pid]"
-      sudo renice -n 0 $pid >/dev/null 2>&1
-    done
-    unset i
-  fi # }}}
-  # Do not start extra features if root and BASH_START_EXTRA_FEATURES was not defined explicity # {{{
-  if [[ $UID == 0 ]] && ${BASH_START_EXTRA_FEATURES:-true}; then
-    export BASH_EXTRA_FEATURES="tmux-startup $BASH_EXTRA_FEATURES_ADD_ROOT"
-    export TMUX_INIT_SESSIONS='ROOT'
-    export TMUX_STATUS_RIGHT_EXTRA_SORTED='tmux_info time'
-    export TMUX_SESSION_DEFAULT="$TMUX_INIT_SESSIONS"
-  fi # }}}
-  # Start extra features # {{{
-  if ${BASH_START_EXTRA_FEATURES:-true}; then
-    [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES="ssh-agent tmux-startup $BASH_EXTRA_FEATURES_ADD"
-    isStartAllowed() { # {{{
-      $RCSTUFF_FORCE && return 0
-      local prefix='skip' onEnd=0 onFound=1 i=
-      if [[ $TERM == 'linux' ]]; then
-        prefix='do' onEnd=1 onFound=0
-      fi
-      set -- all $@
-      for i; do
-        [[ -e $HOME/$prefix.$i || -e $TMP_PATH/$prefix.$i || -e $TMP_MEM_PATH/$prefix.$i ]] && echoe -m bashrc "File [$prefix.$i] found" && return $onFound
+if [[ ! "$(tty)" =~ ^/dev/tty[0-9]+$ ]]; then
+  if [[ "$what_to_do" == 'full' ]]; then # {{{
+    if [[ ! -z $TMUX_USE_NICE_PRIO ]]; then # {{{
+      command ps -U $USER -o pid,nice,comm,cmd | command grep -e "^[^\s]\+\s\+$TMUX_USE_NICE_PRIO" | command grep -v "tmux: server" | while read i; do
+        pid="${i/ *}"
+        $BASHRC_DBG && echoe -m bashrc "Renicing process $(echo $i | awk '{print $3, "[", $4, "]"}') [pid=$pid]"
+        sudo renice -n 0 $pid >/dev/null 2>&1
       done
-      return $onEnd
-    } # }}}
-    if [[ ! -n $TMUX ]]; then
-      # Set up ssh-agent # {{{
-      if [[ $BASH_EXTRA_FEATURES == *ssh-agent* ]] && isStartAllowed 'ssh'; then
-        if ! $IS_VSCODE; then
-          if [[ -n "$SSH_CLIENT" ]]; then
-            [[ $(who | command grep -v "(:" | sort -k5,5 -u | wc -l) == 0 ]] && unset SSH_CLIENT SSH_TTY
-          fi
-          if [[ ! -n "$SSH_CLIENT" ]]; then
-            source $SCRIPT_PATH/bin/fix-ssh-agent.sh start-if
+      unset i
+    fi # }}}
+    # Do not start extra features if root and BASH_START_EXTRA_FEATURES was not defined explicity # {{{
+    if [[ $UID == 0 ]] && ${BASH_START_EXTRA_FEATURES:-true}; then
+      export BASH_EXTRA_FEATURES="tmux-startup $BASH_EXTRA_FEATURES_ADD_ROOT"
+      export TMUX_INIT_SESSIONS='ROOT'
+      export TMUX_STATUS_RIGHT_EXTRA_SORTED='tmux_info time'
+      export TMUX_SESSION_DEFAULT="$TMUX_INIT_SESSIONS"
+    fi # }}}
+    # Start extra features # {{{
+    if ${BASH_START_EXTRA_FEATURES:-true}; then
+      [[ -z $BASH_EXTRA_FEATURES ]] && BASH_EXTRA_FEATURES="ssh-agent tmux-startup $BASH_EXTRA_FEATURES_ADD"
+      isStartAllowed() { # {{{
+        $RCSTUFF_FORCE && return 0
+        local prefix='skip' onEnd=0 onFound=1 i=
+        if [[ $TERM == 'linux' ]]; then
+          prefix='do' onEnd=1 onFound=0
+        fi
+        set -- all $@
+        for i; do
+          [[ -e $HOME/$prefix.$i || -e $TMP_PATH/$prefix.$i || -e $TMP_MEM_PATH/$prefix.$i ]] && echoe -m bashrc "File [$prefix.$i] found" && return $onFound
+        done
+        return $onEnd
+      } # }}}
+      if [[ ! -n $TMUX ]]; then
+        # Set up ssh-agent # {{{
+        if [[ $BASH_EXTRA_FEATURES == *ssh-agent* ]] && isStartAllowed 'ssh'; then
+          if ! $IS_VSCODE; then
+            if [[ -n "$SSH_CLIENT" ]]; then
+              [[ $(who | command grep -v "(:" | sort -k5,5 -u | wc -l) == 0 ]] && unset SSH_CLIENT SSH_TTY
+            fi
+            if [[ ! -n "$SSH_CLIENT" ]]; then
+              source $SCRIPT_PATH/bin/fix-ssh-agent.sh start-if
+            else
+              source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
+            fi
           else
             source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
           fi
-        else
-          source $SCRIPT_PATH/bin/fix-ssh-agent.sh fix
-        fi
-      fi # }}}
-      $ENV_SCRIPTS/tmux/tm.sh --monitors
-      # Start TMUX # {{{
-      if ${BASHRC_START_TMUX:-true}; then
-        # Start tmux if not started or not attached # {{{
-        if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]] && isStartAllowed 'tmux' && ! $IS_VSCODE && ! $RCSTUFF_FORCE; then
-          if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1); then
-            eval $(__bashrc_exit --for-attach)
-            tmux attach $TMUX_LAST_SESSION
-            return 0
-          elif ! $BASHRC_PLAIN_INSTALL; then
-            if ${BASHRC_TMUX_ATTACH:-false}; then
+        fi # }}}
+        $ENV_SCRIPTS/tmux/tm.sh --monitors
+        # Start TMUX # {{{
+        if ${BASHRC_START_TMUX:-true}; then
+          # Start tmux if not started or not attached # {{{
+          if [[ $BASH_EXTRA_FEATURES == *tmux-startup* ]] && isStartAllowed 'tmux' && ! $IS_VSCODE && ! $RCSTUFF_FORCE; then
+            if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1); then
+              if ! ip addr | grep -qF "inet ${SSH_CONNECTION%% *}/"; then
+                eval $(__bashrc_exit --for-attach)
+                tmux attach $TMUX_LAST_SESSION
+                return 0
+              fi
+            elif ! $BASHRC_PLAIN_INSTALL; then
+              if ${BASHRC_TMUX_ATTACH:-false}; then
+                eval $(__bashrc_exit --for-attach)
+                tmux attach $TMUX_LAST_SESSION
+                return 0
+              fi
+            elif ! tmux ls 2>/dev/null | command grep -q "attached"; then
+              unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING isStartAllowed RCSTUFF_FORCE
+              if (( LINES < 35 || COLUMNS < 100 )) && ${BASHRC_TMUX_WAIT_TO_MAXIMIXE:-true} && $BASHRC_FULL_START && ! $IS_DOCKER && [[ -z $SSH_CONNECTION ]]; then
+                read -t ${BASHRC_TMUX_WAIT_TO_MAXIMIXE_TIMEOUT:-2} -s -n1 -p  "Sleeping for a while to give time to maxime window" >&2 </dev/tty
+                echo >&2
+              fi
+              $BASHRC_DBG && echoe -m bashrc "Starting tmux..."
+              eval $(__bashrc_exit --nr --keep)
+              export BASHRC_PLAIN_INSTALL=false
+              progress --clean
+              $SCRIPT_PATH/bin/tmux-startup.sh --lock
               eval $(__bashrc_exit --for-attach)
               tmux attach $TMUX_LAST_SESSION
               return 0
             fi
-          elif ! tmux ls 2>/dev/null | command grep -q "attached"; then
-            unset $(echo "${!RCSTUFF_*}" | tr ' ' '\n' | command grep "_INSTALLED$" | xargs) RCSTUFF_BASHRC_INSTALLING isStartAllowed RCSTUFF_FORCE
-            if [[ ${LINES:-0} -lt 35 || ${COLUMNS:-0} -lt 100 ]] && ${BASHRC_TMUX_WAIT_TO_MAXIMIXE:-true} && $BASHRC_FULL_START && ! $IS_DOCKER && [[ -z $SSH_CONNECTION ]]; then
-              read -t ${BASHRC_TMUX_WAIT_TO_MAXIMIXE_TIMEOUT:-2} -s -n1 -p  "Sleeping for a while to give time to maxime window" >&2 </dev/tty
-              echo >&2
-            fi
-            $BASHRC_DBG && echoe -m bashrc "Starting tmux..."
-            eval $(__bashrc_exit --nr --keep)
-            export BASHRC_PLAIN_INSTALL=false
-            progress --clean
-            $SCRIPT_PATH/bin/tmux-startup.sh --lock
-            eval $(__bashrc_exit --for-attach)
-            tmux attach $TMUX_LAST_SESSION
-            return 0
-          fi
+          fi # }}}
+        else
+          echoe -m bashrc "Start of tmux disabled via env"
         fi # }}}
-      else
-        echoe -m bashrc "Start of tmux disabled via env"
-      fi # }}}
-    fi
-    unset isStartAllowed
+      fi
+      unset isStartAllowed
+    fi # }}}
+    # }}}
+  elif [[ "$what_to_do" == 'basic' ]]; then # {{{
+    if ! $J2_USE_J2_WRAPPER && [[ -d $TICKET_TOOL_PATH ]]; then # {{{
+      source $TICKET_TOOL_PATH/ticket-helper-j
+    fi # }}}
   fi # }}}
-  # }}}
-elif [[ "$what_to_do" == 'basic' ]]; then # {{{
-  if ! $J2_USE_J2_WRAPPER && [[ -d $TICKET_TOOL_PATH ]]; then # {{{
-    source $TICKET_TOOL_PATH/ticket-helper-j
-  fi # }}}
-fi # }}}
+fi
 $BASHRC_PROFILER && time-measure -v bashrc_step --msg "interactive[$what_to_do]"
 # window title # {{{
 if [[ -n $TMUX ]]; then

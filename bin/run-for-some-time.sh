@@ -28,7 +28,7 @@ run-for-some-time() { # @@ # {{{
       s=$(time2s ${1%:*} -o s)
       cnt="${1#*:}"
       [[ -z $cnd || $cnt == 0 ]] && cnt="1"
-      sleep_for="$(echo "1 $cnt" | awk '{print $1/$2}')"
+      sleep_for="$(bc -l <<< "scale=3; $1/$2")"
       cnt="$((${s:-0}*$cnt))"
       [[ -z $cnt || cnt == 0 ]] && cnt=30
       ;; # }}}
