@@ -3,7 +3,7 @@
 
 if [[ -z $TICKET_PATH || ! -e $TICKET_PATH ]]; then # {{{
   echoe "Cannot access ticket path [$TICKET_PATH]"
-  [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 1 ||  return 1
+  is-sourced && return 1 || exit 1
 fi # }}}
 ISSUES=
 for i in $(find $TICKET_PATH -maxdepth 4 -name \*-data.txt | sort); do # {{{

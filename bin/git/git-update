@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+topDir="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  [[ -n $topDir ]] || { echo "---"; exit; }
+  echo "- -f"
+  git remote
+  exit
+fi # }}}
+
+[[ -n $topDir ]] || die "not a git repo"
+
+declare -A branches=()
+remote=
+force=false
+
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -f) force=true;;
+  -) branches="-";;
+  *) [[ -z $remote ]] && remote="$1" || branches+=( "$1" );;
+  esac; shift
+done # }}}
+
+if [[ $branches == "-" ]]; then # {{{
+  [[ -n $remote ]] || remote="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
+  [[ -n $remote ]] || die "cannot find remote branch for current one"
+  git pull ${remote%%/*}
+  exit
+fi # }}}
+
+currentBranch="$(git branch --show-current)"
+
+if [[ -z $remote ]]; then # {{{
+  branchRemote="$(git rev-parse --abbrev-ref --symbolic-full-name $currentBranch@{u} 2>/dev/null)"
+  [[ -n $branchRemote ]] && remote=${branchRemote%%/*} || remote="origin"
+fi # }}}
+if [[ -z $branches ]]; then # {{{
+  while IFS=$'\t' read -r branch branchRemote; do
+    [[ $branchRemote == $remote/* ]] || continue
+    branches+=" $branch"
+  done < <(git for-each-ref --format='%(refname:short)	%(upstream:short)' refs/heads/)
+fi # }}}
+
+[[ -n $branches ]] || die "no branches tracked to $remote"
+
+echoe "fetching $remote"
+git fetch $remote >/dev/null 2>&1 || die "cannot fetch"
+
+for branch in $branches; do # {{{
+  branchRemote="$(git rev-parse --abbrev-ref --symbolic-full-name $branch@{u} 2>/dev/null)"
+  src="${branchRemote:-$remote/$branch}"
+  shaB="$(git log -1 --format='%H' $branch)"
+  shaR="$(git log -1 --format='%H' $src 2>/dev/null)"
+  [[ -n $shaR ]] || continue
+  [[ $shaB != $shaR ]] || continue
+  git merge-base --is-ancestor $shaB $shaR || $force || echoe "skipping (notFF) $branch"
+  echoe "updating $branch"
+  if [[ "$branch" == "$currentBranch" ]]; then
+    git reset --hard $src >/dev/null
+  else
+    git branch -f $branch $src >/dev/null
+  fi
+done # }}}

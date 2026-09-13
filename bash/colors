@@ -291,7 +291,7 @@ color-list() { # {{{
       fi
     fi
     declare -p colorMap >/dev/null 2>&1 && echo "${!colorMap[*]}"
-  ) | tr ' ' '\n' | sed '/^ *$/d' | LC_COLLATE=C sort -u
+  ) | tr ' ' '\n' | sed '/^ *$/d' | sort -u
 } # }}}
 cl() { # {{{
   if [[ $1 == '@@' ]]; then # {{{

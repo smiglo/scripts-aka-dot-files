@@ -3,6 +3,9 @@
 # When inspecting large portions of code the scrollbar works better than 'less'
 set pagination off
 
+# Suppress the noisy thread creation and exit logs
+set print thread-events off
+
 # Keep a history of all the commands typed. Search is possible using ctrl-r
 set auto-load safe-path /
 set auto-load local-gdbinit

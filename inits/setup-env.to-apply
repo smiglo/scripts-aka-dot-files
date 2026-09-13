@@ -95,3 +95,6 @@ update-alacritty-move-Nvirtos() { # {{{
     ln -sf $SCRIPT_PATH/dot-files/$i $HOME/$v
   done
 } # }}}
+update-rgrc() { # {{{
+  ln -sf $SCRIPT_PATH/dot-files/rgrc $HOME/.rgrc
+} # }}}

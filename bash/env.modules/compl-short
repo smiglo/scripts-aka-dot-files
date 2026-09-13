@@ -86,8 +86,7 @@ __export_compl-short() { # {{{
     compl-add compl-short
   fi
 } # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_compl-short
   "$@"
 fi
-

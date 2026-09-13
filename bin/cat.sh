@@ -33,7 +33,7 @@ _cat() { # {{{
     done # }}}
     [[ -z $f1 && ! -t 0 ]] && f1="-"
     [[ -z $f1 || $f1 == '-' || -e $f1 ]] || eval $(die "File [$f1] not found")
-    [[ -t 1 ]] && params+=" --terminal-width $((COLUMNS - 2))"
+    [[ -t 1 ]] && params+=" --terminal-width $(($(tput cols) - 2))"
     if [[ -z $f1 || -d "$f1" || -h "$f1" && -d "$(readlink -f "$f1")" ]]; then # {{{
       local cmd=
       if is-installed --which fd; then

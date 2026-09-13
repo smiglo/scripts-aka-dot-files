@@ -72,7 +72,7 @@ fi # }}}
 # Path to issue # {{{
 export path_issue="$(getPath "$issue")"
 if [[ -z $path_issue ]]; then
-  [[ $0 == ${BASH_SOURCE[0]} ]] && exit 0 || return 0
+  is-sourced && return 0 || exit 0
 fi
 # }}}
 fname="$path_issue/${issue}-data.txt"
@@ -242,7 +242,7 @@ if $do_open; then # {{{
 fi # }}}
 if $do_eval; then # {{{
   if [[ -n $TMUX ]]; then
-    if [[ -z $TICKET_CONF_ENV_LAST || $((${EPOCHSECONDS:-$(epochSeconds)} - TICKET_CONF_ENV_LAST)) -gt 10 ]] && [[ $(tmux display-message -t $TMUX_PANE -pF '#W') == "${issue^^}"* ]]; then
+    if [[ -z $TICKET_CONF_ENV_LAST || $((EPOCHSECONDS - TICKET_CONF_ENV_LAST)) -gt 10 ]] && [[ $(tmux display-message -t $TMUX_PANE -pF '#W') == "${issue^^}"* ]]; then
       eval "$($TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent)"
       if [[ ! -z $TICKET_TOOL_POST_ENV ]]; then # {{{
         while read post_env; do
@@ -252,7 +252,7 @@ if $do_eval; then # {{{
     else
       $TICKET_TOOL_PATH/ticket-tool.sh --issue "$issue" 'env' --silent >/dev/null
     fi
-    TICKET_CONF_ENV_LAST="${EPOCHSECONDS:-$(epochSeconds)}"
+    TICKET_CONF_ENV_LAST="$EPOCHSECONDS"
   fi
 fi # }}}
 unset path_issue issue do_eval do_open do_layout fname fnameH post_env getPath always

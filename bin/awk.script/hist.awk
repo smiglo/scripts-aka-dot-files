@@ -34,7 +34,7 @@ END {
   len_i += 1
   len_i_str += 1
   if (!scale) {
-    scale = ENVIRON["COLUMNS"]
+    "tput cols" | getline scale
     if (scale) scale = scale - 5
     else scale = 80
     scale = scale - len_i_str - 2 - len_i - 3 - 2 - 3

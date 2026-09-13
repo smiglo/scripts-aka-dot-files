@@ -3,7 +3,7 @@
 
 if [[ -z $TICKET_PATH ]]; then # {{{
   echoe "Env[TICKET_PATH] not defined (tt-S)"
-  [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit || return
+  is-sourced && return 0 || exit 0
 fi # }}}
 [[ -z $TICKET_LIST ]] && export TICKET_LIST="$TICKET_TOOL_PATH/list-basic.sh" && ${dbg:-false} && echoe "TICKET_LIST set to default setter"
 open=false layout=false
@@ -19,7 +19,7 @@ ISSUES="$@"
 if [[ -z $ISSUES ]]; then # {{{
   if [[ ! -e $TICKET_LIST ]]; then # {{{
     echoe "Issue file does not exist ! (tt-S)"
-    [[ "${BASH_SOURCE[0]}" == "$0" ]] && exit 1 || { unset open; return 1; }
+    is-sourced && { unset open; return 1; } || exit 1
   fi # }}}
   ISSUES="$($TICKET_LIST)"
   if [[ -n $TICKET_CURRENT_TICKETS ]]; then # {{{
@@ -67,7 +67,7 @@ fi # }}}
 for i in $ISSUES; do # {{{
   i="${i,,}"
   i="${i%%:*}"
-  [[ "${BASH_SOURCE[0]}" == "$0" ]] && ${dbg:-false} && echoe "Shall be sourced to source env for [$i]"
+  is-sourced || echoe ${dbg:-false} "Shall be sourced to source env for [$i]"
   source $TICKET_TOOL_PATH/ticket-setup.sh $($open && echo '--open') $($layout && echo '--layout') "$i"
   if [[ -n $TICKET_CURRENT_TICKETS && ! -e "$TICKET_CURRENT_TICKETS/$i" && ( ! -n $TMUX || $(tmux display-message -p -t $TMUX_PANE -F '#P') == '1' ) ]]; then
     t="$(find $TICKET_PATH -maxdepth 4 -name "$i" | head -n1)"

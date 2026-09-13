@@ -1,2 +1,2 @@
-include "pl"
+include "/usr/share/kbd/keymaps/i386/qwerty/pl.map.gz"
 keycode 58 = Control

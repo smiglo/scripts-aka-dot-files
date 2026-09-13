@@ -73,7 +73,7 @@ progress-dot() { # @@ # {{{
         local max=2
         while true; do
           [[ $max == 0 ]] && break
-          [[ $((10 + (inPacket + 1) * inRow)) -lt $COLUMNS ]] && break
+          [[ $((10 + (inPacket + 1) * inRow)) -lt $(tput cols) ]] && break
           case $inPacket-$inRow in
           10-6) inRow=3;;
           *)    inRow=$((inRow - 1));;
@@ -142,7 +142,7 @@ __export_progress() { # {{{
   fi
 }
 export -f __export_progress # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_progress
   "$@"
 fi

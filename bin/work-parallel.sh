@@ -49,15 +49,11 @@ cmd_wrapper() { # {{{
   if [[ $cmdWorker == *:* && -e "${cmdWorker%%:*}" ]]; then
     source ${cmdWorker%%:*} && cmdWorker=${cmdWorker#*:} # form: shell-script:function-to-call - for time optimisation
   fi
-  <"$fin" eval "$cmdWorker" >"$fin.tmp"
+  eval "$cmdWorker" <"$fin" >"$fin.tmp"
 } # }}}
 f=
 cmdWorker="cat -"
-if [[ -e /proc/cpuinfo ]]; then
-  cpu="$(awk '/siblings/ {print $3}' /proc/cpuinfo | head -n1)"
-else
-  cpu=4
-fi
+cpu=$(nproc)
 singleCPU=false
 linesMax=10000
 useProgress=
@@ -93,9 +89,11 @@ cmdWorker="${cmdWorker#\'}"
 cmdWorker="${cmdWorker%\'}"
 [[ -z $cmdWorker ]] && echorm 0 "Empty command" && exit 1
 read lines _ < <(wc -l "$f")
-is-installed parallel split || singleCPU=true
+parallelCmd="parallel"
+! is-installed parallel && is-installed parallel-moreutils && parallelCmd="parallel-moreutils"
+is-installed $parallelCmd split || singleCPU=true
 [[ $lines -gt $linesMax ]] || singleCPU=true
-[[ $lines -gt $cpu ]]      || cpu=$lines
+[[ $lines -gt $cpu ]] || cpu=$lines
 echorv -M cmdWorker
 echorv -M f doRemove
 echorv -M singleCPU cpu lines linesMax
@@ -105,9 +103,8 @@ if $singleCPU; then # {{{
   cmd_wrapper "$f" # }}}
 else # {{{
   split "$f" -d -n l/$cpu -a 3 -e "$f.w"
-  parallel -j $cpu $(which bash) $0    \
-    --cmd "$cmdWorker"                 \
-    --wrapper                          \
+  $parallelCmd -j $cpu $(which bash) \
+    $0 --cmd "$cmdWorker" --wrapper \
     "$f.w" -- $(seq 0 $((cpu-1)))
   for i in $(seq 0 $((cpu-1))); do
     ii="$(printf "%03d" $i)"
@@ -121,4 +118,3 @@ rm -f "$f.tmp"
 if $doRemove; then # {{{
   rm -f "$f"
 fi # }}}
-

@@ -171,7 +171,7 @@ dbgF() { # @@ # {{{
       vGet --all $__dbg_prefixVar
       return 0;; # }}}
     --reset-zero) vSet $__dbg_prefixVar ts_zero;;
-    --reset | --reset-now) vSet $__dbg_prefixVar ts_zero ${EPOCHSECONDS:-$(epochSeconds)};;
+    --reset | --reset-now) vSet $__dbg_prefixVar ts_zero $EPOCHSECONDS;;
     --) __dbg_printEmpty=true; shift; break;;
     -)  __dbg_level="$((-${__dbg_level#-}))";;
     -o1)     __dbg_out="/dev/stdout";;
@@ -342,7 +342,7 @@ __export_dbg() { # {{{
   fi
 }
 export -f __export_dbg # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_dbg
   "$@"
 fi
@@ -354,7 +354,7 @@ fi
 #
 # __dbg_white_list=""
 # # set up # {{{
-# if [[ ${BASH_SOURCE[0]} == $0 ]]; then
+# if ! is-sourced; then
 #   case $1 in
 #   @@) # {{{
 #     case $3 in

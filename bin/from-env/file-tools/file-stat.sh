@@ -10,11 +10,11 @@ _file-stat() { # @@ # {{{
     -f | --format) echo "$DATE_FMT $DATE2_FMT $TIME_FMT relative raw";;
     *)
       echo "-m --mode -f --format -r --relative -p --pretty -c @@-f A C M a c m size %s"
-      echo "--relative-to="{${EPOCHSECONDS:-$(epochSeconds)},7:00};;
+      echo "--relative-to="{$EPOCHSECONDS,7:00};;
     esac
     return 0
   fi # }}}
-  local mode="modif" files= f= fOrig= value= format= pretty=false colorsOn= now=${EPOCHSECONDS:-$(epochSeconds)} err=0 verbose=true
+  local mode="modif" files= f= fOrig= value= format= pretty=false colorsOn= now=$EPOCHSECONDS err=0 verbose=true
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -c)              colorsOn=true;;

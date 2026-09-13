@@ -73,8 +73,8 @@ fi
 echoe() { # {{{
   local module= cModule='[0;90m' cOff='[0m' addColor=
   case $1 in
-  false) return 0;;
-  true) shift;;
+  false | 0) return 0;;
+  true  | 1) shift;;
   esac
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -131,6 +131,8 @@ die() { # {{{
     -s=true | -s=false) silent=${1#-s=};;
     -s=!true)        silent=false;;
     -s=!false)       silent=true;;
+    -s=1 | -s=!0)    silent=true;;
+    -s=0 | -s=!1)    silent=false;;
     --plain)         colorParam="-nc";;
     *) break;;
     esac; shift
@@ -177,13 +179,6 @@ remove-dups() { # {{{
   done < <(printf "%s" "$1" | awk -v RS="$sep" -v ORS='\n' '!($0 in a) {a[$0]; print}')
   echo "${ret%:}"
 } # }}}
-# epochSeconds() # {{{
-if [[ -z $EPOCHSECONDS ]]; then
-  epochSeconds() {
-    command date +%s
-  }
-  export -f epochSeconds
-fi # }}}
 env-snapshot() { # @@:new # {{{
   [[ ! -z $ENV_SNAPSHOT ]] || return 1
   if [[ $1 == '@@' ]]; then # {{{
@@ -207,21 +202,21 @@ env-snapshot() { # @@:new # {{{
     rm -rf $ENV_SNAPSHOT_PRE*;; # }}}
   load) # {{{
     [[ ! -e $ENV_SNAPSHOT/setting ]] || return 1
-    local shopts=$(shopt -p dotglob extglob)
+    local shopts=$(shopt -p dotglob extglob) opt=
     shopt -u dotglob
     shopt -s extglob
-    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set  && ! -e $ENV_SNAPSHOT/set ]]; then
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
       cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
       unset ENV_SNAPSHOT_SRC
     fi
     [[ -e $ENV_SNAPSHOT/set ]] || return 1
     cp $ENV_SNAPSHOT/set $ENV_SNAPSHOT/.src.${TMUX_PANE:-main}
     unalias -a
-    for snap_i in bash env func compl alias; do
+    for snap_i in bash env func compl alias histfile; do
       [[ -e $ENV_SNAPSHOT/$snap_i ]] || continue
       source $ENV_SNAPSHOT/$snap_i 2>$errOut
     done
-    $shopts
+    while read opt; do $opt; done <<<"$shopts"
     if [[ $- == *i* ]]; then
       [[ -e $ENV_SNAPSHOT/bind.glob ]] && source $ENV_SNAPSHOT/bind.glob
     fi
@@ -258,6 +253,7 @@ env-snapshot() { # @@:new # {{{
           -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\)[^=]*=/d' \
           -e '/^declare -[^ ]\? BASH_PHISTORY_\(LAST\|TODAY\|TODAY_LINE\)=/d' \
           -e '/^declare -[^ ]\? SSH_\(CLIENT\|CONNECTION\)=/d' \
+          -e '/^declare -[^ ]\? TMUX_POPUP[^=]*=/d' \
           -e '/^declare -[^ ]\? \('"$v"'\)="/d' \
           -e 's/^declare /declare -g /' \
           >$ENV_SNAPSHOT/env
@@ -307,4 +303,3 @@ fi # }}}
 alias SBF="source ~/.bashrc --force"
 export HISTIGNORE+=":is-installed:is-sourced:import-module:echoe"
 export -f is-installed is-sourced import-module echoe die remove-dups env-snapshot load-colors
-

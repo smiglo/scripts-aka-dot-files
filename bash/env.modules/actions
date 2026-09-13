@@ -173,8 +173,7 @@ __export_actions() { # {{{
   fi
 }
 export -f __export_actions # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_actions
   "$@"
 fi
-

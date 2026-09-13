@@ -834,8 +834,8 @@ case $1 in
 --get | get) shift; getPass "$@";;
 --gen | gen) shift; genPass "$@";;
 --add-env | add-env) shift; genEnvKey --save-mode true "$@";;
---key | key) getPass "$@";;
---save | save) genPass "$@";;
+--key | key) shift; getPass --key "$@";;
+--save | save) shift; genPass --save "$@";;
 --has | has) shift; hasKey "$1";;
 --list | list) shift; listKeys $@;;
 --list-all | list-all) shift; listKeys --all $@;;

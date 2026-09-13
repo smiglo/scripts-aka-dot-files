@@ -31,7 +31,7 @@ RUN apt-get update -yq && apt-get install -y --no-install-recommends --fix-missi
 RUN apt-get update -yq && apt-get install -y --no-install-recommends --fix-missing \
       moreutils whiptail procps gzip unzip \
       net-tools iproute2 traceroute inetutils-ping bind9-dnsutils \
-      unzip wget curl ssh calc xxd gpg less rlwrap socat netcat-openbsd strace tcpdump \
+      unzip wget curl ssh bc calc xxd gpg less rlwrap socat netcat-openbsd strace tcpdump \
       file tree highlight lsof \
       openssl openssh-server libssl-dev sshpass \
       bash-completion \
@@ -92,8 +92,8 @@ RUN locale-gen C.UTF-8 en_US.UTF-8 en_GB.UTF-8 pl_PL.UTF-8 \
         LANGUAGE="en" \
         LANG="en_US.UTF-8" LC_CTYPE="en_US.UTF-8" LC_MESSAGES="en_US.UTF-8" \
         LC_TIME="en_GB.UTF-8" \
-        LC_ADDRESS="pl_PL.UTF-8" LC_IDENTIFICATION="pl_PL.UTF-8" LC_MEASUREMENT="pl_PL.UTF-8" LC_MONETARY="pl_PL.UTF-8" LC_NAME="pl_PL.UTF-8" LC_NUMERIC="pl_PL.UTF-8" LC_PAPER="pl_PL.UTF-8" LC_TELEPHONE="pl_PL.UTF-8" \
-        LC_COLLATE="C" \
+        LC_ADDRESS="pl_PL.UTF-8" LC_IDENTIFICATION="pl_PL.UTF-8" LC_MEASUREMENT="pl_PL.UTF-8" LC_MONETARY="pl_PL.UTF-8" LC_NAME="pl_PL.UTF-8" LC_PAPER="pl_PL.UTF-8" LC_TELEPHONE="pl_PL.UTF-8" \
+        LC_NUMERIC="C.UTF-8" LC_COLLATE="C.UTF-8" \
         LC_ALL=
 
 RUN echo "tzdata tzdata/Areas select Europe" > /tmp/preseed.cfg \

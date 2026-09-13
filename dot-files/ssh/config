@@ -1,5 +1,6 @@
 Host *
   ForwardAgent no
+  IdentitiesOnly yes
   # ControlMaster auto
   # ControlPath ~/.tmp/.mem/.ssh/sockets/%C
   # ControlPersist 60m

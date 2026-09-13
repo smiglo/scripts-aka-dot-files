@@ -67,11 +67,12 @@ battery_tmux_sb_worker() { # @@ # {{{
       fi
       c="${colors[i]}"
       icon="${icons[i]:-$iconDef}"
+      ${TMUX_SB_BATTERY_SINGLE_ICON:-false} && icon="battery-icon"
       break
     done
     echo "$c $showPerc $icon"
   } # }}}
-  declare -a thresholds=( ${TMUX_SB_BATTERY_THRESHOLDS:-30:true 60:true 80:true 95} )
+  declare -a thresholds=( ${TMUX_SB_BATTERY_THRESHOLDS:-25:true 50:true 65 85} )
   declare -a colors=( ${TMUX_SB_BATTERY_COLORS:-196 208 220 070} )
   local value= c= showPerc= icon=
   local ac_on="$(batt-info is-ac)" perc="$(batt-info get-lvl)" max=${thresholds[-1]}
@@ -80,11 +81,8 @@ battery_tmux_sb_worker() { # @@ # {{{
     battery_interval=30
     read c showPerc icon < <(get-color $perc)
     value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[$icon]}"
-    if ! $ac_on; then
-      $IS_MAC && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra-bar]}"
-    fi
-    $showPerc && { value+="#[fg=colour${c:5}]$perc%"; $ac_on && value+=" "; }
-    $ac_on && value+="#[fg=colour2]${UNICODE_EXTRA_CHARS[power]}"
+    ${TMUX_SB_BATTERY_SINGLE_ICON:-false} && value+="#[fg=colour10]${UNICODE_EXTRA_CHARS[extra-bar]}"
+    $showPerc && value+="#[fg=colour${c:5}]$perc%"
   elif $ac_on && (( $perc < $(batt-info get-lvl-max) )); then
     read c _ _ < <(get-color $perc)
     value="#[fg=colour$c]${UNICODE_EXTRA_CHARS[power]}$perc%"
@@ -194,11 +192,7 @@ net_tmux_sb_worker() { # {{{
   11) value="$char$con $(get-unicode-char 'icon-err') GW $coff";;
   *)  value="$char$con ? $value$coff";;
   esac
-  if $isNet; then
-    echo "connectivity=true"  >$BASHRC_RUNTIME_PATH/net.status
-  else
-    echo "connectivity=false" >$BASHRC_RUNTIME_PATH/net.status
-  fi
+  echo "connectivity=$isNet"  >$BASHRC_RUNTIME_PATH/net.status
   printf "%b" "$value"
 } # }}}
 notifications_tmux_sb_worker() { # @@ # {{{
@@ -350,15 +344,15 @@ weather_tmux_sb_worker() { # @@ # {{{
     printf "%b%b" "$c" "$icon"
   } # }}}
   weather_wind_arrow() { # {{{
-    local out=()
-    if   [[ $2 -lt 3 ]];                         then out=(↺ ↻)
-    elif [[ $2 -lt ${WEATHER_WIND_SPEED:-15} ]]; then out=(↓ ↙ ← ↖ ↑ ↗ → ↘)
-    elif [[ $2 -lt ${WEATHER_WIND_SPEED:-30} ]]; then out=(⇓ ⇙ ⇐ ⇖ ⇑ ⇗ ⇒ ⇘)
-    else                                              out=(⇊ ⇇ ⇈ ⇉)
+    local deg=$1 speed=$2 out=()
+    if   (( $speed < 3 ));                         then out=(↺ ↻)
+    elif (( $speed < ${WEATHER_WIND_SPEED:-15} )); then out=(↓ ↙ ← ↖ ↑ ↗ → ↘)
+    elif (( $speed < ${WEATHER_WIND_SPEED:-30} )); then out=(⇓ ⇙ ⇐ ⇖ ⇑ ⇗ ⇒ ⇘)
+    else                                                out=(⇊ ⇇ ⇈ ⇉)
     fi
     local len="${#out[*]}"
-    local radius="$(echo "$len" | awk '{print 360/$1}')"
-    printf "%b %skm/h" "${out[$(echo "$1" | awk "{print int(\$1/$radius+0.5)%$len}")]}" "$2"
+    local radius="$(bc <<< "360/$len")"
+    printf "%b %skm/h" "${out[$(awk -v deg=$deg -v radius=$radius -v len=$len 'BEGIN {print int(deg/radius+0.5)%len}')]}" "$speed"
   } # }}}
   weather_temp_color() { # {{{
     if   [[ $1 -lt -5 ]]; then printf "#[fg=colour33]%d°C"  "$1"
@@ -399,7 +393,7 @@ weather_tmux_sb_worker() { # @@ # {{{
     if [[ $? == 0 && ! -z $weather && $(echo $weather | jq .cod) == 200 ]]; then
       WEATHER_INFO[0]="$now"
       WEATHER_INFO[3]="$(echo "$weather" | jq .main.temp  | cut -d . -f 1)"
-      WEATHER_INFO[4]="$(echo "$weather" | jq .wind.speed | awk '{print int($1*3.6+0.5)}')"
+      WEATHER_INFO[4]="$(echo "$weather" | jq .wind.speed | awk '{printf "%.0f", $1*3.6}')"
       WEATHER_INFO[5]="$(echo "$weather" | jq .wind.deg   | cut -d . -f 1)"
       WEATHER_INFO[6]="$(echo "$weather" | jq .weather[0].id)"
     else
@@ -488,7 +482,7 @@ worker() { # {{{
   done
   INF - "list: $TMUX_STATUS_RIGHT_EXTRA_SORTED"
   while true; do
-    now=${EPOCHSECONDS:-$(epochSeconds)}
+    now=$EPOCHSECONDS
     [[ -e $info_file ]] && source <($lock cat $info_file)
     for i in $TMUX_STATUS_RIGHT_EXTRA_SORTED; do
       [[ ${data[$i]} == "$markIgn" ]] && DBG "$i: ignored" && continue
@@ -539,7 +533,7 @@ case $1 in # {{{
   i=$1
   f="${i}_tmux_sb_worker" && shift
   ! declare -f $f &>/dev/null && echoe -w "Function [$f] not defined" && exit 1
-  now=${EPOCHSECONDS:-$(epochSeconds)}
+  now=$EPOCHSECONDS
   DBG --init --ts-add --prefix D
   source "$UNICODE_EXTRA_CHARS_FILE"
   source <($BASH_PATH/env-ext.sh get --source get-unicode-char)
@@ -572,7 +566,7 @@ case $1 in # {{{
   i=$2; shift 2
   [[ ! -z $i ]] || exit 1
   source "$UNICODE_EXTRA_CHARS_FILE"
-  now=${EPOCHSECONDS:-$(epochSeconds)}
+  now=$EPOCHSECONDS
   f="${i}_tmux_sb_worker"
   ! declare -f $f &>/dev/null && echoe -w "Function [$f] not defined" && exit 1
   w="$($f $@)" || echoe -w "Error when invoking $f"

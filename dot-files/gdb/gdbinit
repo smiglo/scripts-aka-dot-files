@@ -47,7 +47,7 @@ if confDir != root:
       path = os.path.join(root, file)
       _, ext = os.path.splitext(path)
       _, filename = os.path.split(path)
-      if ( ext == '.gdb' or filename == 'gdbinit' ) and (re.match('.*\\.ign.*', filename) is None):
+      if filename in ['.gdb', '.gdbinit', 'gdbinit']:
           print(path)
           gdb.execute('source ' + path)
 end

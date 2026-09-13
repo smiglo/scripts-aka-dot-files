@@ -19,9 +19,9 @@ export BASHRC_RUNTIME_PATH="$RUNTIME_PATH/bashrc"
 [[ -h $BASHRC_RUNTIME_PATH && ! -e $BASHRC_RUNTIME_PATH ]] && rm $BASHRC_RUNTIME_PATH
 export BIN_PATH="$HOME/.bin"
 export BASH_PATH="$ENV_PATH/scripts/bash"
-# os-kind (mac/docker/wsl/virt-os/vscode # {{{
+# os-kind # {{{
 if [[ -z $OS_KIND ]]; then
-  export OS_KIND="ubuntu"
+  export OS_KIND="unknown"
   export IS_MAC=false
   export IS_ARCH=false
   export IS_DOCKER=false
@@ -31,29 +31,29 @@ if [[ -z $OS_KIND ]]; then
   if [[ $OSTYPE == darwin* ]]; then # {{{
     OS_KIND="mac"
     IS_MAC=true # }}}
-  else # {{{
-    case $(source /etc/os-release; echo $ID) in
-    arch) OS_KIND="arch"; IS_ARCH=true;;
+  elif [[ -e /etc/os-release ]]; then # {{{
+    OS_KIND=$(source /etc/os-release; echo $ID)
+    case $OS_KIND in
+    arch) IS_ARCH=true;;
     esac
     if [[ -e /.dockerenv ]]; then # {{{
-      IS_DOCKER=true
-      export HOST="/home/host" # }}}
+      IS_VIRTUAL_OS=true
+      [[ -e /home/host ]] && IS_DOCKER=true && export HOST="/home/host" # }}}
     elif which clip.exe >/dev/null 2>&1; then # {{{
+      IS_VIRTUAL_OS=true
       IS_WSL=true
     fi # }}}
-    ( $IS_DOCKER || $IS_WSL ) && IS_VIRTUAL_OS=true
   fi # }}}
   if [[ $TERM_PROGRAM == "vscode" ]]; then # {{{
     export IS_VSCODE=true
     [[ $ENV_SNAPSHOT == *.main ]] && unset ENV_SNAPSHOT
   fi # }}}
 fi # }}}
+[[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
 export ENV_SNAPSHOT_PRE=$MEM_KEEP/snapshot
 [[ $UID != 0 ]] || ENV_SNAPSHOT_PRE+="-root"
 if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
-  if ${TMUX_POPUP:-false}; then
-    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.tpopup
-  elif $IS_VSCODE; then
+  if $IS_VSCODE; then
     export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.vscode
   elif [[ -n $TMUX ]]; then
     export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
@@ -100,14 +100,14 @@ export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 declare -A ENV_EXT=()
 declare -A ENV_FUNC_GETTER=()
 declare -a ENV_POST_INVOKE=()
+export FZF_INSERTER_FILES=
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
 export GIT_PRE_COMMIT_DEBUGS=
 export GLOBIGNORE=".:.."
-export GREP_COLORS='mt=38;5;214:ne:fn=36'
 export GROFF_NO_SGR="1" # required for colors in less/man
 export HISTCONTROL="erasedups:ignoreboth"
-export HISTFILESIZE=1000
+export HISTFILESIZE=-1
 export HISTFILE=$HOME/.bash_history
 unset HISTTIMEFORMAT
 export HISTIGNORE= # {{{
@@ -135,32 +135,6 @@ export KB_PATHS=
 export KEEP_PASS_JOURNALS=
 export KEEP_PASS_ENV_KEY_MAP=
 [[ -z $KEEP_PASS_MASTER_KEY ]] && export KEEP_PASS_MASTER_KEY="$MEM_KEEP/keep-pass.mkey"
-if [[ -z $LESS ]]; then # {{{
-  export LESS='-diJRSwX -# 4 -x4 -z-4 -+F -~ --follow-name --save-marks'
-  ver=$(less -V | head -n1 | awk '{print 2}')
-  if (( ver >= 600 )); then
-    export LESS+=' --rscroll=•'
-    export LESS+=' --use-color -Dub -Dd+y -DPm -DS0.214 -DEr -DNK -Dkg -DWM* -DMR* -DRm'
-  else
-    export LESS+=' --use-color -Dub$Dd+y$DPm$DS0.214$DEr$DNK$Dkg$DWM$DMR$DRm'
-  fi
-  unset ver
-  export LESSCHARSET='utf-8'
-  case $OS_KIND in
-  ubuntu)
-    LESSPIPE_PATH=${LESSPIPE_PATH:-"/usr/bin/lesspipe"}
-    if [[ -x "$LESSPIPE_PATH" ]]; then
-      eval "$(SHELL=/bin/sh $LESSPIPE_PATH)"
-    fi
-    if which -w dpkg >/dev/null 2>&1 && dpkg -L libsource-highlight-common >/dev/null 2>&1; then
-      export LESSOPEN="| $(dpkg -L libsource-highlight-common | command grep lesspipe) %s"
-    fi;;
-  arch)
-    if which source-highlight-esc.sh >/dev/null 2>&1; then
-      export LESSOPEN="| source-highlight-esc.sh %s 2>/dev/null"
-    fi;;
-  esac
-fi # }}}
 export MANPATH=
 export PAGER="less"
 export PHISTORY_IGNORED_COMMANDS= # {{{
@@ -175,6 +149,7 @@ export PHISTORY_IGNORED_COMMANDS+=":dbg:dbgF:FAT:ERR:WRN:INF:DBG:TRC"
 export PHISTORY_IGNORED_COMMANDS+=":time-measure"
 export PHISTORY_IGNORED_COMMANDS+=":type" # }}}
 export PS1_ENV_PWD=
+export RIPGREP_CONFIG_PATH="$HOME/.rgrc"
 export QUOTING_STYLE='literal'
 export SCRIPT_PATH=
 export SHARABLE_PATH=
@@ -193,7 +168,6 @@ export TMUX_LOCK_TIMEOUT="$(( 20 * 60 ))"
 [[ -n "$SSH_CLIENT" ]] && export TMUX_LOCK_TIMEOUT="0"
 export TMUX_NEST="$MEM_KEEP/tmux.nest"
 export TMUX_PREFIX_2='C-q'
-[[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
 export TMUX_REMOTE_PREFIXES=
 export TMUX_STATUS_LEFT_EXTRA_MAP=
 export TMUX_STATUS_RIGHT_EXTRA=
@@ -226,6 +200,8 @@ export UGID="$UID:$(command id -g)"
 export VIM_CTRLP_IGNORE_DIRS="NOT_EXISTING_DIR_PATTERN_TO_IGNORE"
 export VIM_PRJ_EXCLUDE=
 export VIM_PRJ_PARAMS=
+export WIFI_NETWORKS=
+export WIFI_BBSIDS=
 # }}}
 # Editor # {{{
 if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then

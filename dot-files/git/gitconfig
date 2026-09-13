@@ -22,8 +22,7 @@
 [color] # {{{
   ui = auto # }}}
 [diff] # {{{
-  tool = vimdiff
-  guitool = kdiff3 # }}}
+  guitool = meld # }}}
 [merge] # {{{
   tool = vimdiff
   conflictStyle = zdiff3
@@ -68,7 +67,7 @@
   lgfaa = lgo --fzf -m - -b - -l 'log --pretty=default --graph --all'
   log-hide-tags = config --add log.excludeDecoration "refs/tags/*"
   log-show-tags = config --unset-all log.excludeDecoration "refs/tags/*"
-  melddiff = difftool -y -t meld
+  melddiff = difftool --no-prompt --tool=meld --dir-diff
   m  = merge
   me = merge
   mt = mergetool
@@ -107,8 +106,8 @@
   l2 = %C(172)%h,%C(reset)%C(auto)%d%C(reset) %C(green)%cs,%C(reset) %C(65)%cr%C(reset)%n  %C(white)%s%C(reset) %C(blue)<%an>%C(reset)
   date-first = %C(65)%ad:%C(reset) %C(172)%h%C(reset)%C(auto)%d%C(reset) %C(white)%s%C(reset) %C(blue)<%an>%C(reset) # }}}
 [push] # {{{
-  autoSetupRemote = true
-  default = upstream # }}}
+  default = simple
+  autoSetupRemote = true # }}}
 [fetch] # {{{
   prune = true
   recurseSubmodules = false # }}}
@@ -152,25 +151,38 @@
 [difftool "kdiff3"] # {{{
   path = kdiff3
   trustExitCode = false # }}}
+[difftool "meld"] # {{{
+  cmd = meld "$LOCAL" "$REMOTE" # }}}
 # }}}
 # merge tools # {{{
 [mergetool] # {{{
   keepBackup = false # }}}
-[mergetool "kdiff3"] # {{{
-  path = kdiff3
-  trustExitCode = false # }}}
 [mergetool "vimdiff"] # {{{
   layout = "LOCAL,BASE,REMOTE / MERGED + BASE,LOCAL + BASE,REMOTE + LOCAL,REMOTE"
   trustExitCode = true # }}}
+[mergetool "kdiff3"] # {{{
+  path = kdiff3
+  trustExitCode = false # }}}
+[mergetool "meld"] # {{{
+  cmd = meld "$LOCAL" "$BASE" "$REMOTE" --output "$MERGED" # }}}
 # }}}
 # external # {{{
 [delta] # {{{
   hyperlinks = true
   line-numbers = true
+  decorations = true
   navigate = true
   true-color = always
   width = -4
-  theme = zenburn # }}}
+  theme = zenburn
+  plus-style = syntax "#003800"
+  minus-style = syntax "#3f0001"
+  file-modified-label = "Δfile:"
+  file-removed-label = "Δfile:"
+  file-added-label = "Δfile:"
+  file-renamed-label = "Δfile:"
+  navigate-regex = "Δfile:"
+# }}}
 [svn] # {{{
   # push empty directory removals back to svn as directory deletes
   rmdir = true

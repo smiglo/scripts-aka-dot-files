@@ -56,7 +56,7 @@ progress_bar_worker() { # {{{
   local dir="$MEM_KEEP" f_prefix="tmux_sb_progress_" f= ret=
   for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do # {{{
     local entry=
-    local interval= params= now="${EPOCHSECONDS:-$(epochSeconds)}" lastChange= delta=30 mod_delta=$((15*60)) progress=
+    local interval= params= now="$EPOCHSECONDS" lastChange= delta=30 mod_delta=$((15*60)) progress=
     local state='cont' color= text= doNext= useProgress=true extraParams= expire=
     [[ ! -e "$f" ]] && continue
     source "$f"
@@ -133,7 +133,7 @@ progress_bar() { # @@ # {{{
     return 0
     # }}}
   elif [[ $1 == 'purge' ]]; then # {{{
-    local cur_time=${EPOCHSECONDS:-$(epochSeconds)} delta=$((15*60))
+    local cur_time=$EPOCHSECONDS delta=$((15*60))
     for f in $(ls $dir/${f_prefix}*.sh 2>/dev/null); do
       grep -q '^state=".*end"$' "$f" && sed -i 's/^state="\(.*end\)\"$/state="\1-now"/' "$f" && continue
       if [[ ( $2 == 'all-all' ) || ( $2 == 'all' && "$(stat -c "%Y" "$f")" -lt "$(($cur_time - $delta))" ) ]]; then
@@ -224,6 +224,9 @@ status_git() { # @@ # {{{
   cd "$pPath"
   local gitdir="$(git rev-parse --path-format=absolute --git-dir)"
   [[ -n $gitdir ]] || return
+  local confFile="$RUNTIME_PATH/tmux-git-status.bash"
+  $IS_DOCKER && confFile="$HOST/.runtime/tmux-git-status.bash"
+  [[ -e $confFile ]] && source $confFile
   local b= stat= i=
   b="$(git symbolic-ref HEAD || git describe HEAD || echo "-")"
   b=${b##refs/heads/} b=${b#tags/} b="${b##remotes/}"
@@ -293,6 +296,7 @@ status_git() { # @@ # {{{
   # TMUX_STATUS_GIT_BRANCH_MAP+=' test/(.*):T/${BASH_REMATCH[1]}'
   # TMUX_STATUS_GIT_BRANCH_MAP+=' topic/(.*):T/${BASH_REMATCH[1]}'
   TMUX_STATUS_GIT_BRANCH_MAP+=" master:m main:m home-work:hw next:n devel:d trunk:t"
+  TMUX_STATUS_GIT_BRANCH_CLEAN+=" WT/"
   local changed=false ignoreChanged=false bGitConfig="$(git config branch.$b.short-name 2>/dev/null)"
   if [[ -n $bGitConfig ]]; then # {{{
     b="$bGitConfig"
@@ -385,7 +389,7 @@ status_right_extra() { # @@ # {{{
   [[ -z $tm_time ]] && tm_time="$(date +'%H:%M')"
   local session="${tm_info%%:*}" l= ret= pane_id="%${tm_info##*%}"
   tm_info="${tm_info%\%*}"
-  local cur_time=${EPOCHSECONDS:-$(epochSeconds)} update_time= value= do_update= out=
+  local cur_time=$EPOCHSECONDS update_time= value= do_update= out=
   local logtime_params=
   if [[ $TMUX_STATUS_RIGHT_EXTRA_SORTED =~ logtime ]]; then
     logtime_params="$(tmux show-environment -t $session "TMUX_SB_LOGTIME_PARAMS" 2>/dev/null)"
@@ -393,7 +397,7 @@ status_right_extra() { # @@ # {{{
   fi
   [[ -z $TMUX_SB_WORKER ]] && return 0
   source <($TMUX_SB_WORKER --get-all-values)
-  if [[ -z ${data["_last_update"]} || ${data["_last_update"]} -lt $((${EPOCHSECONDS:-$(epochSeconds)} - 3 * 60)) ]] && ! ${TMUX_SB_WORKER_IGNORE:-false}; then
+  if [[ -z ${data["_last_update"]} || ${data["_last_update"]} -lt $((EPOCHSECONDS - 3 * 60)) ]] && ! ${TMUX_SB_WORKER_IGNORE:-false}; then
     ret+="#[bg=colour124]#[fg=colour226,bold] W$(getIcon exclamation) #[bg=default,none]"
   fi
   local list="$($TMUX_SB_WORKER --list)"
@@ -827,7 +831,7 @@ pasteKey() { # @@ # {{{
     shift
   done
   if [[ -e "$f" ]]; then # {{{
-    local delta=30 keep= count= fTime="$(stat -c "%Y" "$f")" cTime="${EPOCHSECONDS:-$(epochSeconds)}"
+    local delta=30 keep= count= fTime="$(stat -c "%Y" "$f")" cTime="$EPOCHSECONDS"
     source <(grep "^\(delta\|keep\|count\)=" "$f")
     if [[ true == true \
       && ( $delta == 0 || $fTime -gt $((cTime-delta)) ) \
@@ -922,7 +926,7 @@ case $1 in
   (
     echo "$@"
     $dbgFull && set -xv
-    cur_time=${EPOCHSECONDS:-$(epochSeconds)}
+    cur_time=$EPOCHSECONDS
     if $sTime; then
       time "$@"
     else

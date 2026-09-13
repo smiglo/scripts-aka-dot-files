@@ -706,9 +706,7 @@ __export_echor() { # {{{
   fi
 }
 export -f __export_echor # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_echor
   "$@"
 fi
-
-

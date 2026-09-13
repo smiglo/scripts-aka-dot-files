@@ -12,11 +12,6 @@ currentTime=0
 import-module mutex-locking echor
 # }}}
 # Functions # {{{
-if ! declare -f epochSeconds >/dev/null 2>&1; then # {{{
-  epochSeconds() {
-    date +%s
-  }
-fi # }}}
 do_update() { # {{{
   pwd=$PWD
   local i
@@ -28,7 +23,7 @@ do_update() { # {{{
   cd $pwd
 } # }}}
 saveTime() { # {{{
-  [[ $currentTime == 0 ]] && currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
+  [[ $currentTime == 0 ]] && currentTime="$EPOCHSECONDS"
   if [[ -e $DATE_FILE ]] && grep -q '^tLastUpdateTime=' $DATE_FILE; then
     sed -i 's/^tLastUpdateTime=.*/tLastUpdateTime='$currentTime'/' $DATE_FILE
     return
@@ -37,7 +32,7 @@ saveTime() { # {{{
 } # }}}
 checkTime() { # {{{
   local tLastUpdateTime="0"
-  currentTime="${EPOCHSECONDS:-$(epochSeconds)}"
+  currentTime="$EPOCHSECONDS"
   [[ ! -e $DATE_FILE ]] && echo "tLastUpdateTime=0" > $DATE_FILE
   $forced && return 0
   if ${SETUP_UPDATER_ASK_EVERYDAY:-true}; then

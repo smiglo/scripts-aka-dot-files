@@ -45,7 +45,7 @@ __export_struct() { # {{{
   export -f struct-new struct-init struct-pack struct-unpack
 }
 export -f __export_struct # }}}
-if [[ $0 == ${BASH_SOURCE[0]} ]]; then
+if ! is-sourced; then
   __export_struct
   "$@"
 fi

@@ -55,7 +55,7 @@ _net() { # @@ # {{{
     --no-f | --no-fix) fix=false;;
     --wait)            waitFor=true;;
     --wait-check)      waitJustCheck=true;;
-    --wait=*)          waitFor=true; waitTime=${1#--wait=};;
+    --wait=*)          waitFor=true; waitTime=$(time2s ${1#--wait=} -o s);;
     --wait-msg)        waitMsg="$2"; shift;;
     -ff | --fix-first) # {{{
         if [[ -z $NET_CHECK_FIX_COMMAND ]]; then

@@ -51,6 +51,7 @@ __xclip() { # {{{
   fi
   local tmuxP=
   [[ -n $TMUX ]] || tmuxP="-S ${TMUX_TMPDIR:-$HOME/.tmux/socket}/tmux-$UID/default"
+  [[ -s $CLIP_FILE.env ]] && source $CLIP_FILE.env
   case $1 in
   --put) # {{{
     shift
@@ -61,7 +62,9 @@ __xclip() { # {{{
       *) f=$1;;
       esac; shift
     done
-    sed 's/\s*$//' "$f" | sed -z 's/\n\+$/\n/' | tee $CLIP_FILE.put | eval $CLIP_CMD_PUT
+    sed 's/\s*$//' "$f" | sed -z 's/\n\+$//' >$CLIP_FILE.put
+    (( $(wc -l <$CLIP_FILE.put) == 0 )) || echo >>$CLIP_FILE.put
+    cat $CLIP_FILE.put | eval $CLIP_CMD_PUT
     tmux $tmuxP load-buffer -b clip $CLIP_FILE.put 2>/dev/null
     $updateClipFileOnPut && cp $CLIP_FILE.put $CLIP_FILE
     local clipSsh=$HOME/.tmp/clip.ssh

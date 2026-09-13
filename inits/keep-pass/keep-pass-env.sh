@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-if [[ $1 == '--impl' ]]; then # {{{
+case $1 in
+--impl-pp) # {{{
   shift
   list="$PP_DEFAULT_KEY"
   while [[ ! -z $1 ]]; do # {{{
@@ -11,25 +12,26 @@ if [[ $1 == '--impl' ]]; then # {{{
     *) list="$@"; break;;
     esac; shift
   done # }}}
-  [[ ! -z $list ]] || list="$(keep-pass --list-all | fzf --prompt 'key > ' --preview 'keep-pass --get --key {1} --no-intr')"
-  [[ ! -z $list ]] || exit 1
-  [[ ! -z $PWD_S_EVAL ]] && eval $PWD_S_EVAL
+  [[ -n $list ]] || list="$(keep-pass --list-all | fzf --prompt 'key > ' --preview 'keep-pass --get --key {1} --no-intr')"
+  [[ -n $list ]] || exit 1
+  declare -A pwdSuff=()
+  [[ -n $PP_SUFF_EVAL ]] && eval $PP_SUFF_EVAL
   for i in $list; do # {{{
     v="$(keep-pass --get --key $i)"
-    [[ ! -z $v ]] || { echoe -w "cannot find key '$i'"; continue; }
-    cnt=0
-    while [[ ! -z $v ]]; do
-      cnt=$((cnt+1))
+    [[ -n $v ]] || { echoe -w "cannot find key '$i'"; continue; }
+    declare -i cnt=0
+    while [[ -n $v ]]; do
+      ((++cnt))
       j="${v%% :: *}"
       [[ $j == $v ]] && v="" || v="${v#* :: }"
-      [[ -z $v && $i =~ [^-]*-([^-]*)(-.*)? ]] && j+="${PWD_S[${BASH_REMATCH[1]}]}"
+      [[ -z $v && $i =~ -([^-]+)$ ]] && j+="${pwdSuff[${BASH_REMATCH[1]}]}"
       if [[ -t 1 ]]; then
         echo -en "$j" | xclip --put
         ${PP_FORCE_XCLIP_KILL:-false} && killall -9 xclip
-        if [[ ! -z $v || ! $list =~ \ ?$i$ ]]; then
-          read -s -p "copied ($i$([[ ! -z $v || $cnt -gt 1 ]] && echo "/$cnt")), press a key"; echo
+        if [[ -n $v || ! $list =~ \ ?$i$ ]]; then
+          read -s -p "copied ($i$([[ -n $v || $cnt -gt 1 ]] && echo "/$cnt")), press a key"; echo
         else
-          echo "copied ($i$([[ ! -z $v || $cnt -gt 1 ]] && echo "/$cnt"))"
+          echo "copied ($i$([[ -n $v || $cnt -gt 1 ]] && echo "/$cnt"))"
         fi >&2
       else
         echo "$j"
@@ -38,8 +40,8 @@ if [[ $1 == '--impl' ]]; then # {{{
     done
   done # }}}
   [[ -t 1 ]] && read -st3 -n1
-  exit 0
-fi # }}}
+  exit 0;; # }}}
+esac
 kp-pp() { # {{{
   if [[ $1 == '@@' ]]; then # {{{
     case $3 in
@@ -52,10 +54,10 @@ kp-pp() { # {{{
   fi # }}}
   local ppFile="$SCRIPT_PATH/inits/keep-pass/keep-pass-env.sh"
   if [[ -t 1 ]]; then
-    tmux-popup --no-wait --no-show --no-i --title "pp" -E "$ppFile" --impl "$@"
+    tmux-popup --no-wait --no-show --no-i --title "pp" -E "$ppFile" --impl-pp "$@"
     clr --hist
   else
-    $ppFile --impl "$@"
+    $ppFile --impl-pp "$@"
   fi
 }
 compl-add kp-pp # }}}

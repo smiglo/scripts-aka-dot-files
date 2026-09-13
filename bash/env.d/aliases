@@ -48,10 +48,10 @@ alias ll="ls -Alhv"
 alias l.="ll -d .*"
 # }}}
 # rsync # {{{
-alias rsync='rsync $RSYNC_DEFAULT_PARAMS'
-alias rsync-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
-alias rsync-fat='rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
-alias rsync-fat-v='rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
+alias rsync='command rsync $RSYNC_DEFAULT_PARAMS'
+alias rsync-v='command rsync $RSYNC_DEFAULT_PARAMS_VERBOSE'
+alias rsync-fat='command rsync $RSYNC_DEFAULT_PARAMS $RSYNC_DEFAULT_PARAMS_FAT'
+alias rsync-fat-v='command rsync $RSYNC_DEFAULT_PARAMS_VERBOSE $RSYNC_DEFAULT_PARAMS_FAT'
 # }}}
 # scripted # {{{
 alias bat="cat.sh -p" # @@
@@ -105,6 +105,10 @@ else
   alias hl="$ENV_SCRIPTS/grep-tools/hl-bash.sh"
   compl-add hl
 fi
+alias grep="grep --color=auto"
+alias egrep="egrep --color=auto"
+alias fgrep="fgrep --color=auto"
+alias zgrep="zgrep --color=auto"
 # }}}
 # cpp-tools # {{{
 alias gdb-core-enable='ulimit -c unlimited; echo "%e-%p-%t.core" >/proc/sys/kernel/core_pattern'
@@ -192,7 +196,7 @@ else # {{{
 fi # }}}
 alias clang='clang $CLANG_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
 alias clang++='clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W'
-alias scp='scp -r'
+alias scp="scp ${SCP_PARAMS:--r}"
 
 if is-installed -w lolcat; then # {{{
   export LOLCAT_PARAMS="-F 0.2 -p 3"
@@ -210,6 +214,7 @@ if is-installed -w lolcat; then # {{{
 fi # }}}
 is-installed -w r2 && alias r2help="r2 -q -c '?*~...' -"
 is-installed -w ts && alias ts='ts -s %.S'
+is-installed -w eza && alias lz='eza -Alh --git'
 
 ALIASES_AUTO_SUDO_PROMPT="progress --msg \"Auto-SUDO\" --dots --cnt 40 --no-err"
 case $OS_KIND in # {{{
@@ -220,9 +225,6 @@ mac)
   alias df='df -h'
   if (( UID )); then
     alias port="$ALIASES_AUTO_SUDO_PROMPT && sudo port"
-    if is-installed -w htop >/dev/null 2>&1; then
-      alias htop="sudo htop"
-    fi
   fi;;
 arch)
   if (( UID )); then
@@ -276,7 +278,7 @@ if is-installed -w grc >/dev/null 2>&1; then # {{{
   if type column >/dev/null 2>&1; then
     for grc_cmd in $(echo -e "$grc_prgs_cols"); do
       is-installed -w $grc_cmd || continue
-      alias ${grc_cmd/:*}="__util_grc_f() { [[ -z \$1 && -t 1 ]] && { command ${grc_cmd//:/ } | column -t | grcat conf.${grc_cmd%%:*}; } || command ${grc_i//:/ } "\$@"; }; __util_grc_f"
+      alias ${grc_cmd/:*}="__util_grc_f() { [[ -z \$1 && -t 1 ]] && { command ${grc_cmd//:/ } | column -t | grcat conf.${grc_cmd%%:*}; } || command ${grc_cmd//:/ } "\$@"; }; __util_grc_f"
     done
   else
     grc_prgs+="$grc_prgs_cols"

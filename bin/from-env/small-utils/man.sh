@@ -25,7 +25,7 @@ _man() { # {{{
     echo "$list" | while read -r l; do
       hasMan=false
       if [[ -n "$(man -w $l 2>/dev/null)" ]]; then
-        COLUMNS=$(($(tput cols)-3))
+        export COLUMNS=$(($(tput cols)-3))
         [[ " $LESS " =~ " -N " ]] && ((COLUMNS-=8))
         if ! $fallback; then
           man $l

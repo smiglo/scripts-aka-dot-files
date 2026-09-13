@@ -57,7 +57,7 @@ if [[ $1 == '@@' ]]; then # {{{
 fi # }}}
 
 getNow() { # {{{{
-  echo ${EPOCHSECONDS:-$(epochSeconds)}
+  echo $EPOCHSECONDS
 } # }}}
 timeToWakeUp() { # {{{
   local at=$1

@@ -17,7 +17,7 @@ fi
 # INIT # {{{
 ${TMUX_DISABLED:-false} && exit 0
 TMUX_INIT_LOCK=$TMP_MEM_PATH/.tmux_startup.lock
-LOCK="$([[ "${BASH_SOURCE[0]}" == "$0" ]] && echo 'false' || echo 'true')"
+LOCK="$(is-sourced && echo "true" || echo "false")"
 case $1 in
   --lock)
     LOCK=true; shift;;
@@ -507,7 +507,7 @@ fi
 sessions=
 sessionName=
 sessionEnvParams=
-do_attach="$([[ "${BASH_SOURCE[0]}" == "$0" ]] && echo 'false' || echo 'true')"
+do_attach="$(is-sourced && echo "true" || echo "false")"
 todo="pre init env post"
 dbg=false
 [[ -z $1 ]] && set -- --do-env ${TMUX_SESSION:-$([[ -n $TMUX ]] && tmux display-message -p -t $TMUX_PANE -F '#S')}

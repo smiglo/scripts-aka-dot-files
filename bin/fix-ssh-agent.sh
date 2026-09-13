@@ -7,7 +7,7 @@ if [[ $1 == '@@' ]]; then
   exit 0
 fi
 
-if [[ "$BASH_SOURCE" == "$0" ]]; then
+if ! is-sourced; then
   echoe -w "Script has to be sourced!"
   echoe
   echoe -w "Usage:"

@@ -797,7 +797,8 @@ loglast() { # {{{
       $full_plot | sed '$,$ d' | tr -s ' ' | cut -d' ' -f 2,11 | sed -e 's/^0//g' -e 's/ 0/ /g' -e 's/:0/:/g' -e 's/-0/-/g' | while read line; do
         printf "%-6s" '8'
         for i in $line; do
-          local res="$(calc -q -- ${i/:*}+${i/*:}/60 | sed -e 's/~//' -e 's/\s//' | cut -c-5)"
+          local res="$(bc -l <<< "${i%:*}+${i#*:}/60")"
+          printf -v res "%.02f" "$res"
           if [[ $res != -* ]]; then
             printf " %-6s" "$res"
           else

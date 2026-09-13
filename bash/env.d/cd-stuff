@@ -254,10 +254,10 @@ __cd_util_mode_interactive() { # {{{
       local dirLvl=${#dirLvl}
       (( dirLvl >= 4 )) && md=$((md + dirLvl-3))
     fi
-    md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
+    md="$(awk -v md=$md 'BEGIN {print int(md * 1.5)}')";;
   -*)
     md=${md#-}
-    md="$(echo "$md 1.5" | awk '{print int($1 * $2)}')";;
+    md="$(awk -v md=$md 'BEGIN {print int(md * 1.5)}')";;
   esac # }}}
   if [[ -n $TMUX ]]; then # {{{
     tmux_p="$(tmux show  -vq @tmux_path)"
@@ -275,7 +275,7 @@ __cd_util_mode_interactive() { # {{{
         [[ ! -d "$(__cd_util --tilde-conv "$v")" ]] && continue
         cd_list+="$(printf ":%-6s --> %s" "$k" "${v/$HOME/~}")\n"
       done
-      cd_list="$(echo -e "$cd_list" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
+      cd_list="$(echo -e "$cd_list" | sort -f -k3,3 | sed -e '/^$/d')"
       __cd_util --add-to-cache I "$cd_list"
     fi # }}}
     if [[ "$add_stored" == "smart" ]]; then # {{{
@@ -301,7 +301,7 @@ __cd_util_mode_interactive() { # {{{
     [[ ! -d "$(__cd_util --tilde-conv "$v")" ]] && continue
     tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/~}")\n"
   done
-  fixed_list="$(echo -e "$tmp" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
+  fixed_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
   # }}}
   if [[ $add_predefined != 'none' ]]; then # {{{
     predefined_list="ROOT@/"
@@ -315,7 +315,7 @@ __cd_util_mode_interactive() { # {{{
       [[ $add_predefined != 'smart' || "$(__cd_util --tilde-conv "$v")" == ${root}* ]] || continue
       tmp+="$(printf "@%-6s --> %s" "$k" "${v/$HOME/~}")\n"
     done
-    predefined_list="$(echo -e "$tmp" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
+    predefined_list="$(echo -e "$tmp" | sort -f -k3,3 | sed -e '/^$/d')"
   fi # }}}
   if $add_user_list; then # {{{
     user_list=
@@ -326,7 +326,7 @@ __cd_util_mode_interactive() { # {{{
       [[ -z $k || $k == $v ]] && k="${v##*/}" && k="${k:0:6}"
       user_list+="$(printf "+%-6s --> %s" "$k" "${v/$HOME/~}")\n"
     done
-    user_list="$(echo -e "$user_list" | LC_COLLATE=C sort -f -k3,3 | sed -e '/^$/d')"
+    user_list="$(echo -e "$user_list" | sort -f -k3,3 | sed -e '/^$/d')"
   fi # }}}
   fzf_wrapper() { # {{{
     local mode="$1" wd="$3" dir=
@@ -390,7 +390,7 @@ __cd_util_mode_interactive() { # {{{
         fd -Ld $depth $exclude $($hidden && echo "--hidden") --type d 2>/dev/null \
         | awk -F'/' '{print NF-1, $0}' \
         | sed -e 's|/$||' \
-        | LC_COLLATE=C sort -s -k1,1n -k2,2f \
+        | sort -s -k1,1n -k2,2f \
         | cut -d' ' -f2-)"
       [[ ! -z $res ]] && list+="$res\n" || empty=true
     fi # }}}
@@ -401,7 +401,7 @@ __cd_util_mode_interactive() { # {{{
         command cd $dst
         fd -Ld 1 $($hidden && echo "--hidden") --type d '.*' ..  2>/dev/null \
         | sed -e 's|/$||' \
-        | LC_COLLATE=C sort -f)\n"
+        | sort -f)\n"
       local i=0 pdir= tmp=
       while read tmp pdir; do
         i=$((i+1))
@@ -415,7 +415,7 @@ __cd_util_mode_interactive() { # {{{
           command cd $dst
           fd -Ld 1 $($hidden && echo "--hidden") --type d '.*' "$(realpath "$ddAdd")" 2>/dev/null \
           | sed -e 's|/$||' -e 's|'$HOME'|~|' \
-          | LC_COLLATE=C sort -f \
+          | sort -f \
           | sed -e 's|^.*/\(.*\)|...'$cnt'/\1 --> \0|')\n"
         ddAdd+="/.."
         dd=${dd%/*}

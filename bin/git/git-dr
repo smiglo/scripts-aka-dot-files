@@ -41,8 +41,8 @@ if [[ $1 == '@@' ]]; then
   exit 0
 fi
 remote=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+branch=${remote#*/}
 remote=${remote%%/*}
-branch=$(git rev-parse --abbrev-ref HEAD)
 params=
 showCmd=false
 while [[ ! -z $1 ]]; do
