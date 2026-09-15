@@ -5,7 +5,7 @@ topDir="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 if [[ $1 == "@@" ]]; then # @@:new # {{{
   [[ -n $topDir ]] || { echo "---"; exit; }
-  echo "- -f"
+  echo "- -f -s --subm --no-subm"
   git remote
   exit
 fi # }}}
@@ -15,14 +15,26 @@ fi # }}}
 declare -A branches=()
 remote=
 force=false
+subm=
+args=( "$@" )
 
 while [[ -n $1 ]]; do # {{{
   case $1 in
   -f) force=true;;
+  --no-subm) subm=false;;
+  -s | --subm) subm=true;;
   -) branches="-";;
+  ---in-submodule)
+    source $BASH_PATH/essentials
+    echoe "updating $CGreen${PWD##*/}$COff";;
   *) [[ -z $remote ]] && remote="$1" || branches+=( "$1" );;
   esac; shift
 done # }}}
+
+[[ -n $subm ]] || case $PWD in
+$SCRIPT_PATH) subm=true;;
+*) subm=false;;
+esac
 
 if [[ $branches == "-" ]]; then # {{{
   [[ -n $remote ]] || remote="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
@@ -56,11 +68,23 @@ for branch in $branches; do # {{{
   shaR="$(git log -1 --format='%H' $src 2>/dev/null)"
   [[ -n $shaR ]] || continue
   [[ $shaB != $shaR ]] || continue
-  git merge-base --is-ancestor $shaB $shaR || $force || echoe "skipping (notFF) $branch"
-  echoe "updating $branch"
+  ! git merge-base --is-ancestor $shaR $shaB || { echoe "skipping (newer) $branch"; continue; }
+  if git merge-base --is-ancestor $shaB $shaR; then
+    echoe "updating $branch"
+  elif $force; then
+    git tag-sync -r $shaB
+    echoe "updating (hard) $branch"
+  else
+    echoe "skipping (notFF) $branch"
+    continue
+  fi
   if [[ "$branch" == "$currentBranch" ]]; then
     git reset --hard $src >/dev/null
   else
     git branch -f $branch $src >/dev/null
   fi
 done # }}}
+
+if $subm; then # {{{
+  git submodule --quiet foreach "git update ---in-submodule ${args[@]}"
+fi # }}}
