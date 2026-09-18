@@ -22,9 +22,33 @@ if [[ $1 == '@@' ]]; then # {{{
   exit 0
 fi # }}}
 
+get-pid-from-pane() { # {{{
+  local pane=$1
+  local pidPane="$(tmux display-message -t "$pane" -pF '#{pane_pid}')" pid=
+  [[ -n $pidPane ]] || eval $(die -r "cannot get pid for '$pane'")
+  if $IS_MAC; then
+    pid="$(pid-tree $pidPane | sed -n 2p)"
+  else
+    pid="$(ps -g $pidPane -o "pid=" | sed -n 2p)"
+  fi
+  [[ -n $pid ]] || eval $(die -r "cannot get child process of $pidPane in '$pane'")
+  echo "$pid"
+} # }}}
+clean-up() { # {{{
+  if [[ ! -z $workerCmdPid ]]; then # {{{
+    kill-rec $workerCmdPid 2>/dev/null
+    wait $workerCmdPid
+  fi # }}}
+  if [[ -n $fileMarker ]]; then
+    rm -f $fileMarker
+  fi
+  $reportError || exit 0
+  exit $exitVal
+} # }}}
+
 import-module progress time-tools
 
-delay="5m"
+delay=
 checkCmd=
 workerCmd=
 workerCmdPid=
@@ -49,33 +73,37 @@ while [[ ! -z $1 ]]; do # {{{
   --no-err) reportError=false;;
   --no-info) showInfo=false;;
   --step) step="$2"; shift;;
+  -w | --wait) delay="$2"; shift;;
   --pane) # {{{
-    pidPane="$(tmux display-message -t "$2" -pF '#{pane_pid}')"
-    [[ -n $pidPane ]] || die "cannot get pid for '$2'"
-    if $IS_MAC; then
-      pid="$(pid-tree $pidPane | sed -n 2p)"
-    else
-      pid="$(ps -g $pidPane -o "pid=" | sed -n 2p)"
-    fi
-    [[ -n $pid ]] || die "cannot get child process of $pidPane in '$2'"
-    delay="3h"
+    pid=$(get-pid-from-pane $2) || exit 1
+    [[ -z $delay ]] && delay="3h"
     shift;; # }}}
   --pid) # {{{
     pid="$2"
-    delay="3h"
+    [[ -z $delay ]] && delay="3h"
     shift;; # }}}
-  -w | --wait) delay="$2"; shift;;
-  *) delay=$1;;
+  *) # {{{
+    if [[ $1 =~ .*\.[0-9]+$ ]]; then
+      pid=$(get-pid-from-pane $1) || exit 1
+      [[ -z $delay ]] && delay="3h"
+    elif [[ $1 =~ ^[0-9]+$ ]] || time2s --is-hms $1; then
+      delay="$1"; shift $#
+    else
+      pid=$($ENV_SCRIPTS/tmux/tm.sh --pids -a | awk '$3 ~ /^'"$1"'/ {print $1}' | head -n1)
+      [[ -n $pid ]] || die "cannot find running command '^$1'"
+      [[ -z $delay ]] && delay="3h"
+    fi;; # }}}
   esac; shift
 done # }}}
+[[ -z $delay ]] && delay="15m"
 
-if [[ -n $pid ]]; then
+if [[ -n $pid ]]; then # {{{
   if $IS_MAC; then
     pidCmd="ps xa -o pid= | grep -q '^\s*${pid}$'"
   else
     pidCmd="pgrep --quiet -p $pid"
   fi
-fi
+fi # }}}
 [[ -z $fileMarker ]] || rm -f $fileMarker
 
 if [[ ! -z $workerCmd ]]; then # {{{
@@ -83,17 +111,6 @@ if [[ ! -z $workerCmd ]]; then # {{{
   workerCmdPid=$!
 fi # }}}
 
-clean-up() { # {{{
-  if [[ ! -z $workerCmdPid ]]; then # {{{
-    kill-rec $workerCmdPid 2>/dev/null
-    wait $workerCmdPid
-  fi # }}}
-  if [[ -n $fileMarker ]]; then
-    rm -f $fileMarker
-  fi
-  $reportError || exit 0
-  exit $exitVal
-} # }}}
 trap "clean-up" INT EXIT
 
 delay=$(time2s $delay -o s)
