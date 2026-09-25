@@ -146,7 +146,7 @@
 [diff "bin"] # {{{
   textconv = hexdump -v -C # }}}
 [difftool "vimdiff"] # {{{
-  cmd = vimdiffgit $LOCAL $REMOTE
+  cmd = _vimdiffgit $LOCAL $REMOTE
   trustExitCode = true # }}}
 [difftool "kdiff3"] # {{{
   path = kdiff3

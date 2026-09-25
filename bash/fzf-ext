@@ -10,7 +10,7 @@ __fzf_handler_git() { # {{{
     listBranches() { # {{{
       local branches=() b=
       for b in $(git branch | cut -c3-); do
-        branches+=( "$(git log -1 --format=%at $b) $b")
+        branches+=( "$(git log -1 --format=%ct $b) $b")
       done
       printf "%s\n" "${branches[@]}" | sort -k1,1rn | awk '{print $2}'
     }; export -f listBranches # }}}

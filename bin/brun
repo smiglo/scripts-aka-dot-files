@@ -50,6 +50,7 @@ exec-verbose() { # {{{
   else # {{{
     cmdDisp=( "${cmd[@]}" )
   fi # }}}
+  [[ ${cmdDisp[0]} != "eval" ]] || unset cmdDisp[0]
   $dry && verbose=true
   echoe $verbose "${cmdDisp[@]}"
   $dry && return
