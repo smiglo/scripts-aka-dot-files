@@ -11,10 +11,10 @@ endpoint-term() { # {{{
   return 0
 } # }}}
 endpoint-ls() { # {{{
-   readarray -t list < <(ls -1ap --group-directories-first $aDir 2>/dev/null)
+  ls -1ap --group-directories-first $aDir 2>/dev/null
 } # }}}
 endpoint-find() { # {{{
-  readarray -t list < <(cd "$aDir" && fd 2>/dev/null)
+  (cd "$aDir" && fd 2>/dev/null)
 } # }}}
 endpoint-cat() { # {{{
   cat "$1"
@@ -32,4 +32,7 @@ endpoint-cp() { # {{{
     sources+=("$f")
   done
   cp -r "${sources[@]}" ./
+} # }}}
+endpoint-home-dir() { # {{{
+  echo "$HOME"
 } # }}}

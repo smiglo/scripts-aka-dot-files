@@ -297,7 +297,7 @@ load-colors() { # {{{
     color-cache-init
   fi
 } # }}}
-if is-installed --no-cache compl-add; then # {{{
+if [[ -n $PS1 ]] && is-installed --no-cache compl-add; then # {{{
   compl-add --new is-installed env-snapshot
 fi # }}}
 alias SBF="source ~/.bashrc --force"

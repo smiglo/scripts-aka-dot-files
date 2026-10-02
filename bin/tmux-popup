@@ -6,7 +6,8 @@ popupPath="${TMUX_POPUP_PATH:-$APPS_CFG_PATH/tmux/popup}"
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
   --title) echo "TITLE";;
-  *) echo "-E -EE -e -t --title -c CMD --no-wait --no-show"
+  --src) echo "@@-d";;
+  *) echo "-E -EE -e -t --title -c CMD --no-wait --no-show --src"
     declare -A TMUX_POPUP_CMD
     [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
     echo "n r ${!TMUX_POPUP_CMD[*]}";;
@@ -20,11 +21,12 @@ fi # }}}
 import-module echor
 
 [[ -e $popupPath ]] || mkdir -p $popupPath >/dev/null
-tp=$TMUX_PANE cmd= params= silent=false showCmd=true name= addWait= isInteractive=true
+tp=$TMUX_PANE cmd= params= silent=false showCmd=true name= addWait= isInteractive=true srcDir=
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   -E) params="$1"; addWait=false;;
   -EE | -e) params="$1";;
+  --src) srcDir="$2"; shift;;
   --no-i) isInteractive=false;;
   -t) tp=$2; shift;;
   -c) shift; cmd="${@:-help}"; shift $#;;
@@ -130,18 +132,18 @@ else
   [[ -z $params ]] && params="-E"
 fi # }}}
 [[ $params == '-e' ]] && params=
-p="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
+[[ -n $srcDir ]] || srcDir="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
 d="$popupPath/mem"
 mkdir -p $TMP_MEM_PATH/${popupPath//\//-} >/dev/null
 [[ -e $d ]] || ln -sf $TMP_MEM_PATH/${popupPath//\//-} $d
 [[ -e $popupPath/notes.txt ]] || touch $popupPath/notes.txt
 [[ -e $d/notes.txt ]] || ln -sf $popupPath/notes.txt $d/notes.txt
 env_src="$(tmux display-message -p -t $tp -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
-tmux display-popup -t $tp $params -d "$p" -w 75% -h 75% -T " ${name:-popup} " \
+tmux display-popup -t $tp $params -d "$srcDir" -w 75% -h 75% -T " ${name:-popup} " \
   -e "TMUX_POPUP=true" \
   -e "TMUX_POPUP_SILENT=$silent" \
   -e "DISPLAY=$DISPLAY" \
-  -e "s=$p" \
+  -e "s=$srcDir" \
   -e "d=$d" \
   -e "spane=$TMUX_PANE" \
   "$cmd"

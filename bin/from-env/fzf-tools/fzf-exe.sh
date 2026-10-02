@@ -26,7 +26,8 @@ _fzf-exe() { # @@ # {{{
     esac
     return 0
   fi # }}}
-  local cmd= file= line= params= pane=$FROM_PANE prev_lines_before=10 max_prev_lines=999
+  local cmd= file= line= pane=$FROM_PANE prev_lines_before=10 max_prev_lines=999
+  local params=()
   local prev_lines_cnt=$max_prev_lines
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -60,13 +61,13 @@ _fzf-exe() { # @@ # {{{
   case $cmd in # {{{
   less | vim) # {{{
     case $cmd in
-    less)       params="-N";;
-    vim)        params="-cl -c FastVim";;
+    less) params=( -N );;
+    vim)  params=( -cl -c FastVim );;
     esac
-    [[ ! -z $line ]] && params+=" +$line"
-    params+=" $file"
+    [[ ! -z $line ]] && params+=( +$line )
+    params+=( "$file" )
     case $cmd in
-    vim)        params+=" -c 'normal! zv' ";;
+    vim) params+=( -c "normal! zv");;
     esac;; # }}}
   prev) # {{{
     [[ -z $line ]] && line='1'
@@ -125,7 +126,7 @@ _fzf-exe() { # @@ # {{{
       tmux send-keys -t $pane "zR${line}gg"
     fi;; # }}}
   *) # {{{
-    $cmd $params </dev/tty >/dev/tty;; # }}}
+    $cmd "${params[@]}" </dev/tty >/dev/tty;; # }}}
   esac # }}}
 } # }}}
 _fzf-exe "$@"

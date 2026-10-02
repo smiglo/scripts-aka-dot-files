@@ -86,9 +86,7 @@ endpointType=
 pane=
 while [[ -n $1 ]]; do # {{{
   case $1 in
-  -d | --dst)
-    shift; dst="$1"
-    (( $# == 2 )) && aDir="$2"; shift $#;;
+  -d | --dst) dst="$2"; shift;;
   --dir) aDir="$2"; shift;;
   --endpoint) endpointType="$2"; shift;;
   -p | --pane) pane="${2#.}"; shift;;
@@ -115,7 +113,7 @@ ssh)
 esac
 
 [[ -e $0.d/endpoint-$endpointType ]] || die "no implementation for '$endpointType'"
-apis=( endpoint-is-alive endpoint-init endpoint-term endpoint-ls endpoint-find endpoint-cat endpoint-vim-list endpoint-cp )
+apis=( endpoint-is-alive endpoint-init endpoint-term endpoint-ls endpoint-find endpoint-cat endpoint-vim-list endpoint-cp endpoint-home-dir )
 unset -f "${apis[@]}"
 source $0.d/endpoint-$endpointType
 apis_missing=()
@@ -131,14 +129,14 @@ endpoint-is-alive || die "no connection with the endpoint '$dst'"
 endpoint-init
 
 if [[ -z $aDir ]]; then # {{{
-  aDir="~"
   for i in $RBROWSE_ENDPOINTS; do
     [[ $i =~ $dst(@.*)?:(.*) ]] || continue
     aDir=${BASH_REMATCH[2]}; break
   done
+  [[ -n $aDir ]] || aDir="~"
 fi # }}}
+[[ $aDir] == '~'* ]] && aDir="${aDir/\~/$(endpoint-home-dir)}"
 
-updateList=true
 declare -i inFind=0
 declare -a vimPanes=()
 declare -a list=()
@@ -149,13 +147,13 @@ if [[ -z $pane ]]; then # {{{
 fi # }}}
 while true; do
   aDir="${aDir%/}/"
-  if $updateList; then # {{{
-    updateList=false
+  if (( ${#list[@]} == 0 )); then # {{{
     if ((inFind)); then
-      endpoint-find
+      readarray -t list < <(endpoint-find)
     else
-      endpoint-ls
+      readarray -t list < <(endpoint-ls)
     fi
+    (( ${#list[@]} )) || eval "$(die -b "cannot retrieve anything")"
   fi # }}}
   for i in ${!list[@]}; do # {{{
     case ${list[$i]} in
@@ -186,7 +184,7 @@ while true; do
   case $action in
   ctrl-f) # {{{
     inFind=inFind==0
-    updateList=true;; # }}}
+    list=();; # }}}
   ctrl-g) # {{{
     endpoint-cp;; # }}}
   ctrl-p) # {{{
@@ -200,7 +198,7 @@ while true; do
     done
     pane="${vimPanes[0]}";; # }}}
   ctrl-r) # {{{
-    updateList=true
+    list=()
     continue;; # }}}
   ctrl-s) # {{{
     if [[ -z $pane ]]; then # {{{
@@ -213,16 +211,24 @@ while true; do
     *)  to-pane;;
     esac;; # }}}
   ctrl-u) # {{{
-    [[ $aDir != "/" ]] && aDir="$(dirname $aDir)"
-    updateList=true
+    case $aDir in
+    /) continue;;
+    ./) aDir="$(dirname "$(realpath $aDir)")";;
+    */) aDir=${aDir%/}; aDir="${aDir%/*}/";;
+    esac
+    list=()
     inFind=0
     continue;; # }}}
   ../) # {{{
-    aDir="$(dirname "$aDir")"
-    updateList=true;; # }}}
+    case $aDir in
+    /) continue;;
+    ./) aDir="$(dirname "$(realpath $aDir)")";;
+    */) aDir=${aDir%/}; aDir="${aDir%/*}/";;
+    esac
+    list=();; # }}}
   */) # {{{
     [[ $action == /* ]] && aDir="$action" || aDir+="$action"
-    updateList=true
+    list=()
     inFind=0;; # }}}
   *) # {{{
     vim-open || break;; # }}}

@@ -1,45 +1,61 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-_net-is-home() { # @@ # {{{
-  if [[ $1 == '@@' ]]; then # {{{
-    echo "-if -v --env --return-ifa --skip-mac"
-    return 0
-  fi # }}}
-  local ifaces="$NET_IFACES" verbose=false env="HOME" returnIfa=false skipMac=false
-  while [[ ! -z $1 ]]; do # {{{
-    case $1 in
-    --env)        env="${2^^}"; shift;;
-    -if)          ifaces="$2"; shift;;
-    --return-ifa) returnIfa=true;;
-    --skip-mac)   skipMac=true;;
-    -v)           verbose=true;;
-    esac; shift
-  done # }}}
-  local -n net="NET_${env}" net_gwAddr="NET_${env}_GW_ADDR" net_gwMac="NET_${env}_GW_MAC"
-  [[ ! -z $net && ( ! -z $net_gwMac || $skipMac == true ) ]] || { echor -c $verbose "missing envs"; return 10; }
-  is-installed ifconfig $(! $skipMac && echo "arp") || { echor -c $verbose "missing installation"; return 11; }
-  [[ ! -z $ifaces ]] || { echor -c $verbose "missing ifaces"; return 12; }
-  local gwAddr=${net_gwAddr:-$net.1} ifa= desiredNet=false mac=
-  for ifa in $ifaces; do # {{{
-    [[ $(ifconfig $ifa 2>/dev/null | awk '/inet:? / {print $2}') == $net.* ]] || continue
-    if ! $skipMac; then # {{{
-      if ! $IS_MAC; then
-        mac="$(arp -i $ifa -D $gwAddr | awk '/\<'"${gwAddr//./\\.}"'|_gateway\> / {print $3}')"
-      else
-        mac="$(arp -i $ifa -a | awk '/\<'"${gwAddr//./\\.}"'\>/ {print $4}')"
-      fi
-    fi # }}}
-    if $skipMac || [[ $mac == $net_gwMac ]]; then # {{{
-      desiredNet=true
-      echor -c $verbose "found [$ifa]"
-      break
-    fi # }}}
-  done # }}}
-  $desiredNet || { echor -c $verbose "not $env"; return 1; }
-  $returnIfa && echo "$ifa"
-  return 0
-} # }}}
-_net-is-home "$@"
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  exit 0
+fi # }}}
 
+TARGET_SUBNETS="HOME HOME_WORK"
+
+get_interfaces() { # {{{
+  if $IS_MAC; then
+    ifconfig -l
+  else
+    find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%P ' 2>/dev/null
+  fi
+} # }}}
+get_iface_ip() { # {{{
+  local ifa="$1"
+  if $IS_MAC; then
+    ifconfig "$ifa" 2>/dev/null | awk '$1 == "inet" {print $2; exit}'
+  else
+    ip -4 -brief addr show dev "$ifa" 2>/dev/null | awk '{split($3, a, "/"); print a[1]}'
+  fi
+} # }}}
+get_default_gw() { # {{{
+  local ifa="$1"
+  if $IS_MAC; then
+    route -n get default 2>/dev/null | awk -v ifa="$ifa" '$1 == "gateway:" {gw=$2} $1 == "interface:" && $2 == ifa {print gw}'
+  else
+    ip route show dev "$ifa" default 2>/dev/null | awk '$1 == "default" {print $3; exit}'
+  fi
+} # }}}
+get_gw_mac() { # {{{
+  local ifa="$1" gwAddr="$2" mac=
+  if $IS_MAC; then
+    mac="$(arp -i "$ifa" -n "$gwAddr" 2>/dev/null | awk 'NR = 1 {print $4; exit}')"
+  else
+    mac="$(arp -i "$ifa" -n "$gwAddr" 2>/dev/null | awk 'NR > 1 {print $3; exit}')"
+  fi
+  echo "${mac,,}"
+} # }}}
+
+for ifa in ${NET_IS_HOME_IFACES:-$(get_interfaces)}; do # {{{
+  [[ "$ifa" == "lo"* ]] && continue
+  ip_addr="$(get_iface_ip "$ifa")"
+  [[ -n "$ip_addr" ]] || continue
+  netFound=
+  for net in $TARGET_SUBNETS; do # {{{
+    declare -n netAddr="NET_${net}"
+    [[ -n $netAddr && $ip_addr == $netAddr.* ]] && netFound=$net && break
+  done # }}}
+  [[ -n $netFound ]] || continue
+  gw_ip="$(get_default_gw "$ifa")"
+  [[ -n "$gw_ip" ]] || continue
+  ping -c 1 -W 1 "$gw_ip" &>/dev/null || continue
+  gw_mac="$(get_gw_mac "$ifa" "$gw_ip")"
+  [[ -n $gw_mac ]] || continue
+  declare -n gw_mac_expected="NET_${netFound}_GW_MAC"
+  [[ "$gw_mac" == "${gw_mac_expected,,}" ]] && exit 0
+done # }}}
+exit 1
