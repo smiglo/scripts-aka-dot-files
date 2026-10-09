@@ -15,6 +15,9 @@ defaults() { # {{{
   # }}}
   [[ -z $TMUX_TERM ]] || tmux set -qg default-terminal "$TMUX_TERM"
   [[ -z $TMUX_SHELL ]] || tmux set -qg default-shell "$TMUX_SHELL"
+  if (( $TMUX_VERSION >= 38 )); then
+    tmux set -qg theme terminal
+  fi
 } # }}}
 progress_drawer() { # {{{
   [[ -z $1 ]] && return
@@ -885,7 +888,7 @@ new_window() { # {{{
   declare -a tmuxP=(
     -a
     -n "$name"
-    -e ENV_SNAPSHOT_SRC=$ENV_SNAPSHOT_PRE.$env_src
+    -e ENV_SNAPSHOT_SRC=$env_src
     -c "$path"
   )
   if $doSplit; then

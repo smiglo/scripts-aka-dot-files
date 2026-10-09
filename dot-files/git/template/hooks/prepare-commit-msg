@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+if [[ "$COMMIT_SOURCE" == "merge" ]]; then
+  sed -E "1s/ into .+//" "$COMMIT_MSG_FILE" > "${COMMIT_MSG_FILE}.tmp"
+  mv "${COMMIT_MSG_FILE}.tmp" "$COMMIT_MSG_FILE"
+fi

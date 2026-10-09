@@ -3,10 +3,9 @@
 
 [[ -z $DOCKER_CONTAINER_DEFAULT ]] && export DOCKER_CONTAINER_DEFAULT='ubu'
 [[ -z $DOCKER_IMAGE_DEFAULT ]] && export DOCKER_IMAGE_DEFAULT='ubu'
-dockerCmd="docker"
 if [[ $1 == '@@' ]]; then # {{{
-  containers="$($dockerCmd container ls -a --format "{{.Names}}")"
-  images="$($dockerCmd image ls -a --format "{{.Repository}}")"
+  containers="$(docker container ls -a --format "{{.Names}}")"
+  images="$(docker image ls -a --format "{{.Repository}}")"
   case $3 in
   -c) echo "$containers $DOCKER_CONTAINER $DOCKER_CONTAINER_DEFAULT";;
   -i) echo "$images $DOCKER_IMAGE $DOCKER_IMAGE_DEFAULT";;
@@ -46,7 +45,7 @@ case $cName in
 ubu-amd64) iName="ubu-amd64";;
 esac
 cSet=false iSet=false out=/dev/null
-containerList="$($dockerCmd container ls -a --format ". {{.Names}} : {{.Image}}")"
+containerList="$(docker container ls -a --format ". {{.Names}} : {{.Image}}")"
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   --dbg) out=/dev/stderr;;
@@ -65,8 +64,8 @@ advance) # {{{
   cName="${cName%-next}"
   cNameNext="$cName-next"
   [[ $containerList == *". $cNameNext "* ]] || die "no such container [$cNameNext]"
-  [[ $containerList == *". $cName "* ]] && $dockerCmd container remove $cName
-  $dockerCmd container rename $cNameNext $cName;; # }}}
+  [[ $containerList == *". $cName "* ]] && docker container remove $cName
+  docker container rename $cNameNext $cName;; # }}}
 attach-to-vm) # {{{
   $IS_MAC || die "only on mac"
   case $1 in
@@ -94,7 +93,7 @@ build) # {{{
     ) ;; # }}}
   *) # {{{
     $isSet || [[ -z $platform ]] || iName="$iName.${platform##*/}"
-    $dockerCmd build $platform "$@" -t $iName .;; # }}}
+    docker build $platform "$@" -t $iName .;; # }}}
   esac;; # }}}
 clean) # {{{
   $cSet || cName= # mandatory: container name on removal
@@ -107,8 +106,8 @@ clean) # {{{
   elif [[ -z $iName ]]; then
     iName="$(echo "$containerList" | sed '/ '"$cName "'/s/.* : //')"
   fi
-  _docker rm $cName
-  _docker irm $iName;; # }}}
+  docker rm $cName
+  docker irm $iName;; # }}}
 commit) # {{{
   if ( $cSet && $iSet ) || (( $# == 0 )); then
     :
@@ -121,24 +120,24 @@ commit) # {{{
   [[ -z $cName || -z $iName ]] && die "no container/image specified"
   [[ $iName == *:* ]] || iName="$iName:latest"
   iNamePrev="${iName%:latest}:prev"
-  $dockerCmd image ls -a --format "{{.Repository}}" | grep -q "$iNamePrev" && $dockerCmd image rm $iNamePrev
-  $dockerCmd image tag $iName $iNamePrev
-  $dockerCmd commit $cName $iName;; # }}}
+  docker image ls -a --format "{{.Repository}}" | grep -q "$iNamePrev" && docker image rm $iNamePrev
+  docker image tag $iName $iNamePrev
+  docker commit $cName $iName;; # }}}
 exec) # {{{
   $cSet || { cName=${1:-$cName}; shift; }
   [[ -z $cName ]] && die "no container specified"
-  $dockerCmd exec "${@:--it}" $cName /bin/bash;; # }}}
+  docker exec "${@:--it}" $cName /bin/bash;; # }}}
 irm) # {{{
   $iSet || iName= # mandatory: container name on removal
   [[ -z $iName ]] || set -- $iName
   [[ -z $1 ]] && die "no image specified"
   for iName; do
-    $dockerCmd image rm $iName >$out
+    docker image rm $iName >$out
   done;; # }}}
 ls) # {{{
-  $dockerCmd ps -a
+  docker ps -a
   echo
-  $dockerCmd images;; # }}}
+  docker images;; # }}}
 replace) # {{{
   doStart=true
   while [[ ! -z $1 ]]; do # {{{
@@ -151,23 +150,23 @@ replace) # {{{
   $cSet || cName= # mandatory: container name
   [[ ! -z $cName ]] || { cName=$1; shift; }
   [[ -z $cName ]] && die "no container specified"
-  _docker commit $cName
-  _docker rm $cName
-  _docker run $cName
+  docker commit $cName
+  docker rm $cName
+  docker run $cName
   if $doStart; then
-    _docker start $cName
+    docker start $cName
   fi;; # }}}
 root) # {{{
   $cSet || { cName=${1:-$cName}; shift; }
   [[ -z $cName ]] && die "no container specified"
-  $dockerCmd exec -u 0:0 "${@:--it}" $cName /bin/bash;; # }}}
+  docker exec -u 0:0 "${@:--it}" $cName /bin/bash;; # }}}
 rm) # {{{
   $cSet || cName= # mandatory: container name on removal
   [[ -z $cName ]] || set -- $cName
   [[ -z $1 ]] && die "no container specified"
   for cName; do
-    $dockerCmd stop $cName >$out
-    $dockerCmd rm $cName >$out
+    docker stop $cName >$out
+    docker rm $cName >$out
   done;; # }}}
 run) # {{{
   paramsDefault="-dit" doStart= staticImage=false platform= addPorts=
@@ -223,7 +222,7 @@ run) # {{{
     caps=
     ${DOCKER_RUN_UBU_CAPS_GDB:-true} && caps+=" --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
     ${DOCKER_RUN_UBU_CAPS_TCPDUMP:-false} && caps+=" --cap-add=NET_ADMIN --cap-add=NET_RAW"
-    $dockerCmd run \
+    docker run \
       $platform \
       --log-opt max-size=10m --log-opt max-file=3 \
       -u $(id -u):$(id -g) \
@@ -243,9 +242,9 @@ run) # {{{
       --name $cName $iName \
       /bin/bash
     err=$?
-    [[ $err == 0 ]] && $dockerCmd start $cName; err=$?
+    [[ $err == 0 ]] && docker start $cName; err=$?
     if $staticImage && [[ $err == 0 ]]; then # {{{
-      $dockerCmd exec -it $cName bash -c \
+      docker exec -it $cName bash -c \
         "rm -rf $hDir/projects-my ; \
           mkdir -p $hDir/projects-my/ ; \
           cp -r $ENV_PATH/scripts $hDir/projects-my/ ; \
@@ -254,7 +253,7 @@ run) # {{{
           rm -rf $hDir/projects-my/scripts/bash/profiles/*"
       err=$?
     fi # }}}
-    [[ $err == 0 ]] && $dockerCmd exec -it $cName $hDir/env/scripts/bin/setup-env.sh --no-gui --all -p -; err=$?
+    [[ $err == 0 ]] && docker exec -it $cName $hDir/env/scripts/bin/setup-env.sh --no-gui --all -p -; err=$?
     ;; # }}}
   *) # {{{
     if declare -f doc_ext >/dev/null 2>&1; then
@@ -264,7 +263,7 @@ run) # {{{
       err=$?
     fi
     if [[ $err == 255 ]]; then
-      $dockerCmd run \
+      docker run \
         --log-opt max-size=10m --log-opt max-file=3 \
         $(eval echo "$paramsEnv") $paramsDefault "$@" --name $cName $iName
       err=$?
@@ -273,13 +272,13 @@ run) # {{{
   [[ -z $doStart ]] && doStart=false
   [[ $err == 0 ]] || die $err "err occurred [$err]"
   if $doStart; then
-    _docker start $cName
+    docker start $cName
   fi;; # }}}
 start | s) # {{{
   $cSet || { cName=${1:-$cName}; shift; }
   [[ -z $cName ]] && die "docker no container specified"
-  $dockerCmd container ls -a --format "{{.Names}}" | grep -q "^$cName$" || _docker run --no-start $cName $iName
-  $dockerCmd start $cName
+  docker container ls -a --format "{{.Names}}" | grep -q "^$cName$" || docker run --no-start $cName $iName
+  docker start $cName
   pidClip=
   case $cName in
   ubu | ubu-*)
@@ -289,18 +288,18 @@ start | s) # {{{
     exec 2>&3; exec 3>&-;;
   esac
   set-title "$cName"
-  $dockerCmd attach $cName
+  docker attach $cName
   if [[ ! -z $pidClip ]]; then
     $ENV_SCRIPTS/docker-tools/clipboard-docker.sh --kill
   fi;; # }}}
 stop) # {{{
   $cSet || { cName=${1:-$cName}; shift; }
   [[ -z $cName ]] && die "no container specified"
-  $dockerCmd stop $cName >$out;; # }}}
+  docker stop $cName >$out;; # }}}
 i) # {{{
-  $dockerCmd image "$@";; # }}}
+  docker image "$@";; # }}}
 c) # {{{
-  $dockerCmd container "$@";; # }}}
+  docker container "$@";; # }}}
 *) # {{{
-  $dockerCmd $cmd "$@";; # }}}
+  docker $cmd "$@";; # }}}
 esac

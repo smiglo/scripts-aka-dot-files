@@ -423,7 +423,7 @@ cl() { # {{{
     echo -e -n "$out"
   fi
 }
-compl-add --old cl # }}}
+type compl-add >/dev/null 2>&1 && compl-add --old cl # }}}
 # cl wrappers # {{{
 printfc() { cl -F "$@"; }
 clf()     { cl -F "$@"; }

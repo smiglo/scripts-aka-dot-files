@@ -57,16 +57,16 @@ mutex-init() { # @@ # {{{
   fi # }}}
   [[ -n $1 ]] || eval $(die "Mutex not specified")
   local LOCK_DIR="$MEM_KEEP/locks"
-  local newMutex="$1"
+  [[ ! -e $LOCK_DIR ]] && command mkdir -p $LOCK_DIR >/dev/null
+  local newMutex="${1:-mutex.$$}"
   [[ $newMutex != ./* && $newMutex != /* ]] && newMutex="$LOCK_DIR/$newMutex"
+  [[ $MUTEX_LOCK_FILE == $newMutex ]] && eval $(die "Mutex already set [${MUTEX_LOCK_FILE/*\/}], nested mutexes are not allowed")
   export MUTEX_LOCK_FILE="$newMutex"
-  [[ ! -z $MUTEX_LOCK_FILE && $MUTEX_LOCK_FILE != $newMutex ]] || eval $(die "Mutex already set [${MUTEX_LOCK_FILE/*\/}], nested mutexes are not allowed")
   export MUTEX_ACCESS_MIN_DELTA="$((10*60))"
   export MUTEX_CREATED=false
   export MUTEX_DBG=false
   local set_trap=true
   local clean_on_start=false
-  [[ ! -e $LOCK_DIR ]] && command mkdir -p $LOCK_DIR >/dev/null
   shift
   while [[ ! -z $1 ]]; do
     case $1 in

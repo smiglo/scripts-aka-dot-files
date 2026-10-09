@@ -65,6 +65,7 @@ update-gdb-move() { # {{{
   mkdir -p $HOME/.config/gdb
   ln -sf $SCRIPT_PATH/dot-files/gdb/gdbinit $HOME/.gdbinit
   ln -sf $SCRIPT_PATH/dot-files/gdb/040-pwndbg.gdb $HOME/.config/gdb/
+  ln -sf $SCRIPT_PATH/dot-files/gdb/041-pwndbg-conf.gdb $HOME/.config/gdb/
   ln -sf $SCRIPT_PATH/dot-files/gdb/050-gdb-dashboard.gdb $HOME/.config/gdb/
   ln -sf $SCRIPT_PATH/dot-files/gdb/051-gdb-dashboard-conf.gdb $HOME/.config/gdb/
   ln -sf $SCRIPT_PATH/dot-files/gdb/090-init.gdb $HOME/.config/gdb/

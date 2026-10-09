@@ -58,7 +58,10 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
     next) # {{{
       echo "---";; # }}}
     monitor) # {{{
-      echo "--tmux --kill -";; # }}}
+      case $2 in
+      --n-days) echo "7 14 30";;
+      *) echo "--n-days --tmux --kill -";;
+      esac;; # }}}
     esac # }}}
   else # {{{
     echo "add clean edit list load next"
@@ -142,6 +145,8 @@ monitorLogLevel=${REMINDER_MONITOR_LOG_LEVEL:-I}
 monitorLogFile="${REMINDER_MONITOR_LOG_FILE:-$BASHRC_RUNTIME_PATH/reminder-monitor.log}"
 reminderLauncher="$REMINDER_LAUNCHER"
 narrowToMinutes=${REMINDER_NARROW_TO_MINUTES:-true}
+daysInAdvance=${REMINDER_DEFAULT_DAYS_TO_LOAD:-7}
+autoLoadInMonitor=${REMINDER_DEFAULT_AUTO_LOAD:-true}
 mode=
 now=$EPOCHSECONDS
 tzOrig=$TZ
@@ -361,7 +366,7 @@ list) # {{{
   done <$reminderFile;; # }}}
 load) # {{{
   declare -A Days=([sun]=0 [mon]=1 [tue]=2 [wed]=3 [thu]=4 [fri]=5 [sat]=6)
-  daysInAdvance=7 verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0
+  verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0
   eval set -- "$(compl-canonicalize -l "v-add,json,file:,n-days:" -s "vf:" -- "$@")"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -444,9 +449,9 @@ load) # {{{
   $0 $verboseAddParam clean;; # }}}
 monitor) # {{{
   handleKeys=true
-  [[ -z $1 ]] && set -- --tmux
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    --n-days) daysInAdvance="$2"; shift;;
     -) # {{{
       monitorLogFile="/dev/stderr"
       monitorLogLevel="D";; # }}}
@@ -471,11 +476,33 @@ monitor) # {{{
   tooFarTS=0 tooFarInterval=$((5 * 60))
   minuteBefore=60
   updateWorker=true
-  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
+  autoLoadLastCheck=0
+  autoLoadNext=0
+  (( daysInAdvance > 0 )) || autoLoadInMonitor=false
   INF - "monitor thread, pid: $$"
   INF "sleeps: $(declare -p Sleeps), heartbeat: ${heartbeatInterval}s"
+  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
   declare -A infoMsg=()
   while true; do # {{{
+    now=$EPOCHSECONDS
+    if $autoLoadInMonitor && ( [[ ! -e $reminderFile ]] || (( (now - autoLoadLastCheck) >= 3*60*60 )) ); then
+      autoLoadLastCheck=$now
+      if [[ -e $reminderFile ]]; then
+        fileMod=$(file-stat $reminderFile)
+        next=$(( fileMod + 12*60*60 ))
+        (( daysInAdvance > 2 )) && next=$(( fileMod + (daysInAdvance - 2) * 24*60*60 ))
+        if (( autoLoadNext != next )); then
+          autoLoadNext=$next
+          INF "autoload schedule scheduled at $(date +$DATE_FMT -d@$autoLoadNext)"
+        fi
+      else
+        autoLoadNext=0
+      fi
+      if (( now >= autoLoadNext )); then
+        INF "autoloading schedule"
+        $0 load --n-days $daysInAdvance >/dev/null 2>&1
+      fi
+    fi
     sleep-precise -s
     now=$EPOCHSECONDS timeout=1
     (( now - heartbeatTS < heartbeatInterval )) || { DBG - "heartbeat after $((now - heartbeatTS))s"; heartbeatTS=$now; }
