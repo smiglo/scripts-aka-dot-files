@@ -12,15 +12,17 @@ endpoint-term() { # {{{
   ssh -q -oControlPath=$connection -O exit $dst >/dev/null 2>&1 || die "connection not terminated"
 } # }}}
 endpoint-ls() { # {{{
-  readarray -t list < <(ssh -q -S$connection "$dst" "ls -1ap --group-directories-first $aDir" 2>/dev/null)
+  ssh -q -S$connection "$dst" "ls -1ap --group-directories-first $aDir" 2>/dev/null
 } # }}}
 endpoint-find() { # {{{
+  local list=()
   readarray -t list < <(ssh -q -S$connection "$dst" "find ${aDir%/} -print 2>/dev/null | xargs -r ls -apd 2>/dev/null")
   local i= prefix=${list[0]}
   unset list[0]
   for i in ${!list[@]}; do
     list[i]=${list[i]#$prefix}
   done
+  printf "%s\n" "${list[@]}"
 } # }}}
 endpoint-cat() { # {{{
   ssh -q -S$connection "$dst" "cat $1"
@@ -42,4 +44,7 @@ endpoint-cp() { # {{{
     sources+=("$dst:$f")
   done
   scp $SCP_PARAMS -r "${sources[@]}" ./
+} # }}}
+endpoint-home-dir() { # {{{
+  ssh -q -S$connection "$dst" "pwd" 2>/dev/null
 } # }}}

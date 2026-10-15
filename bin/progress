@@ -59,21 +59,21 @@ _progress() { # @@ # {{{
   local argCnt=$#
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
-    --cmd)        shift; cmd=$1;;
+    --cmd)        shift; cmd="$1";;
     --clean)      rm -f $TMP_MEM_PATH/progress-*; return 0;;
-    --delay)      shift; delay=$1;;
-    --msg)        shift; msg=$1;;
-    --cnt)        shift; cnt=$1;;
-    --out)        shift; out=$1;;
-    --color)      shift; color=$1;;
-    --end-color)  shift; end_color=$1;;
-    --end-msg)    shift; end_message=$1;;
-    --steps)      shift; steps=$1;;
+    --delay)      shift; delay="$1";;
+    --msg)        shift; msg="$1";;
+    --cnt)        shift; cnt="$1";;
+    --out)        shift; out="$1";;
+    --color)      shift; color="$1";;
+    --end-color)  shift; end_color="$1";;
+    --end-msg)    shift; end_message="$1";;
+    --steps)      shift; steps="$1";;
     --left)       onRight=false;;
     --right)      onRight=true;;
     --file-mod) # {{{
                   shift
-                  fileModFile=$1
+                  fileModFile="$1"
                   fileModSha=0
                   [[ -e $fileModFile ]] && fileModSha="$(sha1sum $fileModFile | cut -d" " -f1)"
                   cmd='[[ -e '"$fileModFile"' && '"$fileModSha"' != $(sha1sum '"$fileModFile"' | cut -d" " -f1) ]]';; # }}}
@@ -84,7 +84,7 @@ _progress() { # @@ # {{{
     --no-key)     key=false;;
     --keys | --get-key) # {{{
                   key=true
-                  [[ $1 == '--keys' ]] && shift && extra_keys=$1
+                  [[ "$1" == '--keys' ]] && shift && extra_keys="$1"
                   get_key=true;; # }}}
     --every-step) every=true;;
     --pv)         method='pv';;
@@ -159,7 +159,7 @@ _progress() { # @@ # {{{
     --wait-pv | --wait) # {{{
                   [[ $1 == '--wait-pv' ]] && method='pv' && report_error=false
                   shift
-                  [[ $1 != 0 ]] && endTime="$(time2s -o abs-s $1)";; # }}}
+                  [[ $1 != 0 ]] && endTime="$(time2s -o abs-s "$1")";; # }}}
     --dbg)        dbg="l1"; useTput=false;;
     --dbg2)       dbg="l2"; useTput=false;;
     --tput)       useTput=true;;

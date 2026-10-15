@@ -23,6 +23,8 @@ is-enabled() { # {{{
     [[ ! "-$step" =~ "-Ngui" ]] || ! $hasGui || return 1
     [[ ! "-$step" =~ "-linux" ]] || $isLinux || return 1
     [[ ! "-$step" =~ "-Nlinux" ]] || ! $isLinux || return 1
+    [[ ! "-$step" =~ "-mac" ]] || $IS_MAC || return 1
+    [[ ! "-$step" =~ "-Nmac" ]] || ! $IS_MAC || return 1
     [[ ! "-$step" =~ "-docker" ]] || $IS_DOCKER || return 1
     [[ ! "-$step" =~ "-Ndocker" ]] || ! $IS_DOCKER || return 1
     [[ ! "-$step" =~ "-virtos" ]] || $IS_VIRTUAL_OS || return 1
@@ -83,6 +85,9 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
           [[ -f $f ]] && steps+=" $(get-steps $f "update")"
         done # }}}
         [[ -f $appPath/setup-env.to-apply ]] && steps+=" $(get-steps $appPath/setup-env.to-apply "update")"
+        for f in $SETUP_ENV_CONF_EXTRA; do
+          [[ -f $f ]] && steps+=" $(get-steps $f "update")"
+        done
         for s in $steps; do
           stepsList[$s]=
           is-enabled $s "stepsList" && list+=" $s"
@@ -95,6 +100,9 @@ if [[ $1 == "@@" ]]; then # @@:new # {{{
           [[ -e $f ]] && steps+=" $(get-steps $f)"
         done # }}}
         [[ -e $appPath/setup-env.conf ]] && steps+=" $(get-steps $appPath/setup-env.conf)"
+        for f in $SETUP_ENV_CONF_EXTRA; do
+          [[ -f $f ]] && steps+=" $(get-steps $f)"
+        done
         if [[ " $@ " == *" -- "* ]]; then
           echo "$steps"
           exit 0
@@ -156,6 +164,8 @@ is-os-allowed() { # {{{
     -sudo) ! $useSudo || ret=1;;
     +linux) $isLinux || ret=1;;
     -linux) ! $isLinux || ret=1;;
+    +mac) $IS_MAC || ret=1;;
+    -mac) ! $IS_MAC || ret=1;;
     +p=*) [[ " $profiles " == *" ${i#-p=} *" ]] || ret=1;;
     -p=*) ! [[ " $profiles " == *" ${i#-p=} *" ]] || ret=1;;
     *) hosts[$1]=;;
@@ -440,7 +450,7 @@ install-vim() { # {{{
   (
     cd $binVimPath
     ln -sf $vimPath/mvim ./
-    for i in {,g,m,r}{vi,view,vim,vimdiff} vimdiffgit; do
+    for i in {,g,m,r}{vi,view,vim,vimdiff} vimdiffdir vdd _vimdiffgit; do
       [[ "$i" == 'mvim' ]] && continue
       ln -sf mvim $i
     done
@@ -449,7 +459,7 @@ install-vim() { # {{{
     chmod +x $binVimPath/*
     (
       echo '#!/bin/bash'
-      echo 'vim --editor "$@"'
+      echo 'exec vim --editor "$@"'
     ) >vim-editor
     chmod +x vim-editor
   )
@@ -812,6 +822,13 @@ for p in $profiles; do # {{{
   include-config "$profilesPath/$p/inits/setup-env.conf"
 done # }}}
 include-config $appPath/setup-env.conf
+declare -A extraDone=()
+for f in $SETUP_ENV_CONF_EXTRA; do
+  [[ -v extraDone[$f] ]] && continue
+  include-config $f
+  extraDone[$f]=
+done
+unset extraDone
 [[ -n $initCoreEnv ]] || initCoreEnv=true
 $initCoreEnv && updateAll=false
 # }}}
@@ -844,7 +861,7 @@ log -s=$verbose # }}}
 if $update; then # {{{
   [[ -e $SCRIPT_PATH/inits/setup-env.to-apply ]] || { log "nothing to update"; exit 0; }
   source $SCRIPT_PATH/inits/setup-env.to-apply
-  name="$(wide-print "update")"
+  name="$(wide-print "update-env")"
   if $justMark; then
     log "$name marking"
   else

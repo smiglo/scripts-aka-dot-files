@@ -47,6 +47,7 @@ local mainMod = "SUPER"
 
 hl.on("hyprland.start", function ()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
+    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("/usr/bin/gnome-keyring-daemon --start --components=secrets,pkcs11")
     hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")

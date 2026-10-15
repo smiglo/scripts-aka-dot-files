@@ -13,6 +13,7 @@ getMode() { # {{{
   load)                           mode="load";;
   monitor)                        mode="monitor";;
   n  | next      | -n | --next)   mode="next";;
+  schedule)                       mode="schedule";;
   esac
   echo "$mode"
 } # }}}
@@ -53,17 +54,21 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
       case $2 in
       -f | --file) echo "@@-f";;
       --n-days) echo "7 14 30";;
-      *) echo "-f --file --n-days -v -vv -vvv --v-add --json";;
+      *) echo "-f --file --n-days -s -v -vv -vvv --v-add --json";;
       esac;; # }}}
     next) # {{{
       echo "---";; # }}}
     monitor) # {{{
-      echo "--tmux --kill -";; # }}}
+      case $2 in
+      --n-days) echo "7 14 30";;
+      *) echo "--n-days --tmux --kill -";;
+      esac;; # }}}
     esac # }}}
   else # {{{
     echo "add clean edit list load next"
     echo "countdown CountDown"
     echo "monitor"
+    echo "schedule"
     echo "-s -v"
   fi # }}}
   exit 0
@@ -142,6 +147,8 @@ monitorLogLevel=${REMINDER_MONITOR_LOG_LEVEL:-I}
 monitorLogFile="${REMINDER_MONITOR_LOG_FILE:-$BASHRC_RUNTIME_PATH/reminder-monitor.log}"
 reminderLauncher="$REMINDER_LAUNCHER"
 narrowToMinutes=${REMINDER_NARROW_TO_MINUTES:-true}
+daysInAdvance=${REMINDER_DEFAULT_DAYS_TO_LOAD:-7}
+autoLoadInMonitor=${REMINDER_DEFAULT_AUTO_LOAD:-true}
 mode=
 now=$EPOCHSECONDS
 tzOrig=$TZ
@@ -361,11 +368,12 @@ list) # {{{
   done <$reminderFile;; # }}}
 load) # {{{
   declare -A Days=([sun]=0 [mon]=1 [tue]=2 [wed]=3 [thu]=4 [fri]=5 [sat]=6)
-  daysInAdvance=7 verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0
+  verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0 silent=false
   eval set -- "$(compl-canonicalize -l "v-add,json,file:,n-days:" -s "vf:" -- "$@")"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -v) (( ++vLevel ));;
+    -s) silent=true;;
     --v-add) verboseAddParam="-v";;
     --json) useJson=true;;
     -f | --file) scheduleFile="$2"; shift;;
@@ -387,8 +395,8 @@ load) # {{{
     useJson=true
     [[ $scheduleFile == *.json ]] || useJson=false
   fi
-  [[ -e $scheduleFile ]] || die "schedule file '$scheduleFile' does not exits"
-  [[ -s $scheduleFile ]] || die "nothing to schedule"
+  [[ -e $scheduleFile ]] || die -s=$silent "schedule file '$scheduleFile' does not exits"
+  [[ -s $scheduleFile ]] || die -s=$silent "nothing to schedule"
   declare -a dates=()
   for ((i = 0; i <= daysInAdvance; ++i)); do dates+=( "$(date +"%Y-%m-%d %w" -d "+$i day")" ); done
   if $useJson; then
@@ -427,7 +435,7 @@ load) # {{{
           if [[ $cond =~ script(:(.*))? ]]; then
             scriptFile=${BASH_REMATCH[2]}
             [[ -z $scriptFile || $scriptFile == "-" ]] && scriptFile="reminder-checker.sh"
-            is-installed $scriptFile || eval $(die -b2 "* script file not found: $scriptFile")
+            is-installed $scriptFile || eval $(die -s=$silent -b2 "* script file not found: $scriptFile")
             (
               $dbgCond && set -xv
               $scriptFile -t $time -d-for "$daysFor" -i "$info" --date $aDate
@@ -444,9 +452,9 @@ load) # {{{
   $0 $verboseAddParam clean;; # }}}
 monitor) # {{{
   handleKeys=true
-  [[ -z $1 ]] && set -- --tmux
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    --n-days) daysInAdvance="$2"; shift;;
     -) # {{{
       monitorLogFile="/dev/stderr"
       monitorLogLevel="D";; # }}}
@@ -471,11 +479,24 @@ monitor) # {{{
   tooFarTS=0 tooFarInterval=$((5 * 60))
   minuteBefore=60
   updateWorker=true
-  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
+  autoLoadNext=0
+  (( daysInAdvance > 0 )) || autoLoadInMonitor=false
   INF - "monitor thread, pid: $$"
-  INF "sleeps: $(declare -p Sleeps), heartbeat: ${heartbeatInterval}s"
+  INF "sleeps: $(declare -p Sleeps), heartbeat: ${heartbeatInterval}s, autoload: $autoLoadInMonitor"
+  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
   declare -A infoMsg=()
   while true; do # {{{
+    now=$EPOCHSECONDS
+    if $autoLoadInMonitor && (( now >= autoLoadNext )); then
+      INF "autoloading schedule"
+      $0 load -s --n-days $daysInAdvance
+      if [[ -s $reminderFile ]] && (( daysInAdvance > 2 )); then
+        autoLoadNext=$(( now + (daysInAdvance - 2) * 24*60*60 ))
+      else
+        autoLoadNext=$(( now + 12*60*60 ))
+      fi
+      INF "the next autoload scheduled at $(date +$DATE_FMT -d@$autoLoadNext)"
+    fi
     sleep-precise -s
     now=$EPOCHSECONDS timeout=1
     (( now - heartbeatTS < heartbeatInterval )) || { DBG - "heartbeat after $((now - heartbeatTS))s"; heartbeatTS=$now; }
@@ -531,5 +552,9 @@ monitor) # {{{
 next) # {{{
   getNext
   exit $?;; # }}}
+schedule) # {{{
+  scheduleFile="$REMINDER_PATH/schedule.json"
+  [[ ! -e $scheduleFile && -e $REMINDER_PATH/schedule.txt ]] && scheduleFile="$REMINDER_PATH/schedule.txt"
+  vim $scheduleFile </dev/tty;; # }}}
 esac
 
