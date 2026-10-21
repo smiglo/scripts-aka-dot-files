@@ -31,4 +31,3 @@ class concat(gdb.Function):
     def invoke(self, *args):
         return ''.join([ self._unwrap_string(x) for x in args])
 concat()
-

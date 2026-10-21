@@ -50,15 +50,21 @@ if [[ -z $OS_KIND ]]; then
   fi # }}}
 fi # }}}
 [[ -z $TMUX_POPUP ]] && export TMUX_POPUP=false
-export ENV_SNAPSHOT_PRE=$MEM_KEEP/snapshot
-[[ $UID != 0 ]] || ENV_SNAPSHOT_PRE+="-root"
+export ENV_SNAPSHOT_PRE="$MEM_KEEP/snapshot"
+(( UID )) || ENV_SNAPSHOT_PRE+="-root"
 if [[ -z $ENV_SNAPSHOT || $ENV_SNAPSHOT == *.main ]]; then # {{{
   if $IS_VSCODE; then
-    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.vscode
+    export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.vscode"
   elif [[ -n $TMUX ]]; then
-    export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
+    if ! ${TMUX_POPUP:-false}; then
+      export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
+    elif [[ -n $ENV_SNAPSHOT_SRC ]]; then
+      export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$ENV_SNAPSHOT_SRC"
+    else
+      export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.$(tmux display-message -p -t $TMUX_PANE -F '#{pid}.#{window_id}.popup')"
+    fi
   else
-    export ENV_SNAPSHOT=$ENV_SNAPSHOT_PRE.main
+    export ENV_SNAPSHOT="$ENV_SNAPSHOT_PRE.main"
     if $BASHRC_FULL_START && [[ -e $ENV_SNAPSHOT && -e /usr/bin/stat ]]; then # {{{
       bootTime="$(date +%s -d "$(who -b | awk '{print $3, $4}')")"
       envTime=
@@ -100,6 +106,7 @@ export WAYLAND_DISPLAY=$WAYLAND_DISPLAY
 declare -A ENV_EXT=()
 declare -A ENV_FUNC_GETTER=()
 declare -a ENV_POST_INVOKE=()
+export EXTRACT_EXT_MAP=
 export FZF_INSERTER_FILES=
 export GIT_LOG_ALL_PARAMS=
 export GIT_LOG_PARAMS=
@@ -205,12 +212,12 @@ export WIFI_BBSIDS=
 # }}}
 # Editor # {{{
 if [[ -z $EDITOR ]] || $RCSTUFF_FORCE; then
-  if which vim-editor >/dev/null 2>&1; then
-    export EDITOR="vim-editor"
-  elif [[ $(which vim 2>/dev/null) == "$HOME/"* ]]; then
-    export EDITOR="vim --editor"
+  if [[ -e $BIN_PATH/vims/vim-editor ]]; then
+    export EDITOR="$BIN_PATH/vims/vim-editor"
+  elif [[ -e $BIN_PATH/vims/vim ]]; then
+    export EDITOR="$BIN_PATH/vims/vim --editor"
   else
-    export EDITOR="vim -c 'set cursorline'"
+    export EDITOR="vim"
   fi
   export VISUAL=$EDITOR
   export SUDO_EDITOR="vim"

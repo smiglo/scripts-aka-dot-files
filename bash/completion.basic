@@ -278,9 +278,13 @@ compl-canonicalize() { # {{{
     *) argsOrig="$@"; break;;
     esac; shift
   done # }}}
-  is-installed --which getopt || { (( verbose >= 1 )) && echoe -f -c "err: not getopt"; echo "$argsOrig"; return 0; }
+  is-installed --which getopt || { echo "$argsOrig"; eval "$(die -s=!$(( verbose >= 1 )) 0 "err: not getopt")"; }
+  if $IS_MAC && [[ $(which getopt) == /usr/bin/getopt ]]; then
+    echo "$argsOrig"
+    eval "$(die -s=!$(( verbose >= 1 )) 0 "err: not gnu-getopt")"
+  fi
   args="$( (( verbose >= 2 )) && set -xv; getopt -s bash -q -l "$long" -o "$short" -- $argsOrig)"
-  (( $? == 0 )) || { (( verbose >= 1 )) && echoe -f -c "err: args:[$argsOrig]"; echo "$argsOrig"; return 0; }
+  (( $? == 0 )) || { echo "$argsOrig"; eval "$(die -s=!$(( verbose >= 1 )) 0 "err: args:[$argsOrig]")"; }
   [[ $argsOrig == *' -- '* ]] && keepDoubleDash=true
   $keepDoubleDash || { args=${args// -- / }; args=${args%--}; }
   (( verbose >= 1 )) && echoe -f -c "parsed: [$args]"

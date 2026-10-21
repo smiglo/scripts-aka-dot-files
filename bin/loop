@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+import-module time-tools
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  --dev-out | --dev-err) echo "/dev/null";;
+  -c | --cnt) echo "1 5 10 100";;
+  -m | --msg) echo "MSG";;
+  --retry)    echo "1 5 30s 1m 0.5";;
+  --progress-params) echo "PROGRESS-PARAMS";;
+  --on-change) echo "@@-f"; get-file-list --pwd $TMP_MEM_PATH 'change-monitor.*';;
+  *)
+    compl-get-args <$0
+    echo --until{,={1,5,30s,1m}}
+    ;;
+  esac
+  exit 0
+fi # }}}
+getMsg() { # {{{
+  local m=
+  if (( ! err )); then
+    m="$(cl ok $err)|"
+  else
+    m="$(cl err $err)|"
+  fi
+  $addTime && m+="$(cl info $(date +$TIME_FMT))|"
+  $addTS && m+="$(cl ts $ts)|"
+  [[ -n $msg ]] && m+=" $msg"
+  echo "$m"
+} # }}}
+cnt=-1 msg= stopOnErr=false stopOnOk=false silent=0 waitMode="run-first" monitoredFile= addTime=false addTS=false clearOnStart=false retry=0
+devOut=/dev/stdout devErr=/dev/stderr
+cmd=() progressParams=()
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -c | --cnt) cnt="$2"; shift;;
+  -m | --msg) msg="$2"; shift;;
+  --retry)    retry="$2"; shift;;
+  --progress-params) progressParams+=( "$2" ); shift;;
+  --on-change)   monitoredFile="$2"; shift;;
+  --run-first)   waitMode="run-first";;
+  --wait)        waitMode="wait-before";;
+  --no-wait)     waitMode="no-wait";;
+  --clear)       clearOnStart=true;;
+  --dev-out)     devOut="$2"; shift;;
+  --dev-err)     devErr="$2"; shift;;
+  +time)         addTime=true;;
+  +ts)           addTS=true;;
+  --stop-on-err) stopOnErr=true;;
+  --stop-on-ok)  stopOnOk=true;;
+  +s)            stopOnOk=true;;
+  +f)            stopOnErr=true;;
+  --until=*)     retry=${1#--until=};&
+  --until)       stopOnOk=true; stopOnErr=false; addTime=true; (( retry )) || retry=5;;
+  -s)            (( silent += 1 ));;
+  -ss)           silent=2;;
+  *)             cmd=( "$@" ); shift $#;;
+  esac; shift
+done # }}}
+[[ -n $cmd ]] || die "command missing"
+if [[ ! -z $monitoredFile ]]; then
+  [[ $monitoredFile == 'change-monitor.'* && ! -e $monitoredFile && -e $TMP_MEM_PATH/$monitoredFile ]] && monitoredFile="$TMP_MEM_PATH/$monitoredFile"
+  [[ $monitoredFile == '-' ]] && monitoredFile="${cmd[@]%% *}"
+  progressParams+=( --file-mod "$monitoredFile" )
+fi
+err=0
+progr_colors=($CYellow $CPurple $CBlue $CGreen) progr_i=0
+(( silent >= 1 )) && devOut=/dev/null
+(( silent >= 2 )) && devErr=/dev/null
+if [[ -z $msg ]]; then # {{{
+  msg="${cmd[@]%% *}"
+  [[ $msg == */* ]] && msg="$(basename "$msg")"
+elif [[ $msg == '-' ]]; then
+  msg=
+fi # }}}
+ts="0.000"
+while true; do # {{{
+  doClear=$clearOnStart
+  case $waitMode in
+  no-wait) getMsg >/dev/stderr;;
+  run-first) waitMode="wait-before";;
+  wait-before)
+    key="$(progress --wait $retry --key --keys "cC" --no-err --color "${progr_colors[progr_i]}" --msg "$(getMsg)" "${progressParams[@]}")" || break
+    (( progr_i = (progr_i + 1) % ${#progr_colors[*]} ))
+    case $key in
+    c) doClear=true;;
+    C) clear; continue;;
+    esac;;
+  esac
+  $doClear && clear
+  ts="$(get-ts)"
+  eval "${cmd[@]}" >$devOut 2>$devErr
+  err=$?
+  ts="$(get-ts -o s.ms $ts)"
+  if (( err == 0 )); then
+    $stopOnOk && break
+  else
+    $stopOnErr && break
+  fi
+  if (( cnt > 0 )); then
+    (( cnt =- 1 ))
+    (( cnt )) || break
+  fi
+done # }}}
+getMsg >&2
+exit $err
