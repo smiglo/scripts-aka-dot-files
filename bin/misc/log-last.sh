@@ -202,6 +202,8 @@ add_entry() { # {{{
           tEnd=$(printf "%02d:%02d" "$((10#${tEnd%%:*}))" "$((10#${tEnd#*:}))")
           tWork=
         fi; shift
+        [[ $tStart =~ ^[0-9]+$ ]] && tStart="$tStart:00"
+        [[ $tEnd   =~ ^[0-9]+$ ]] && tEnd="$tEnd:00"
         case $1 in
         '') ;;
         w*) tWork=${1#w};;
@@ -240,7 +242,7 @@ add_entry() { # {{{
         fi
       fi
     fi # }}}
-    [[ -z $tPause ]] && tPause=${LOGLAST_ADD_DEFAULT_PAUSE:-30}
+    [[ -z $tPause ]] && tPause=${LOGLAST_ADD_DEFAULT_PAUSE:-0}
     if [[ -z $date ]]; then # {{{
       local nextDay=true
       date="${entryDate:-$today}"
@@ -371,10 +373,9 @@ loglast() { # {{{
     shift
   done # }}}
   to_do=" $to_do "
-  source $RUNTIME_PATH/runtime.bash
   if ! $colors; then
     export colorsOn=false
-    unset $($BASH_PATH/colors --list)
+    unset $(color-list)
     CMsg=""
   fi
   [[ -e $TMP_PATH/.log-last.today ]] && source $TMP_PATH/.log-last.today

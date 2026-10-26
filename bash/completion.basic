@@ -83,9 +83,10 @@ _completer() { # {{{
   export cur
   echoe $dbgOn -m compl-$mode "c=[$cmd @@$param], cur[$cur], prev[$prev], cnt[$COMP_CWORD]"
   COMPREPLY=()
+  declare -a opts=()
+  declare -a extra=()
   case $mode in
   old | new) # {{{
-    declare -a opts=()
     case $mode in
     old) opts=( $($cmd @@$param $COMP_CWORD "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) );;
     new) opts=( $($cmd @@$param             "$prev" ${COMP_WORDS[@]:1:$((${#COMP_WORDS[@]}-2))}) );;
@@ -96,7 +97,6 @@ _completer() { # {{{
     '---') # {{{
       COMPREPLY=( "" );; # }}}
     *) # {{{
-      declare -a extra=()
       local noCompletion=false
       for i in ${!opts[*]}; do
         local v=${opts[$i]}
@@ -117,12 +117,7 @@ _completer() { # {{{
           opts[$i]="${v// /\\ }";; # }}}
         esac
       done
-      if $noCompletion && [[ -z ${opts[@]} && -z ${extra[@]} ]]; then
-        COMPREPLY=( "" )
-      else
-        readarray -t COMPREPLY < <(compgen -W "${opts[*]@Q}" -- $cur)
-        COMPREPLY+=( "${extra[@]}" )
-      fi;; # }}}
+      $noCompletion && [[ -z ${opts[@]} && -z ${extra[@]} ]] && COMPREPLY=( "" );; # }}}
     esac;; # }}}
   smart) # {{{
     local body= params=
@@ -140,20 +135,9 @@ _completer() { # {{{
         params="$(sed -n '/# COMPL-SMART:/s/.*# COMPL-SMART:\s*//' $cmdLoc)"
       fi
     fi
-    if [[ -n $body ]]; then
-      declare -a opts=( $(echo "$body" | compl-get-args $params) )
-      opts=( $(printf "%s\n" "${opts[@]}" | sort -u) )
-      echoe $dbgOn -m compl-$mode "$(declare -p opts)"
-      local cg=
-      for i in ${!opts[*]}; do
-        cg="$(compgen -W "'${opts[i]//@_@/\\ }'" -- "$cur")"
-        [[ ! -z $cg ]] || continue
-        COMPREPLY+=( "$cg" )
-      done
-    fi;; # }}}
+    [[ -n $body ]] && declare -a opts=( $(compl-get-args $params <<<"$body") );; # }}}
   static) # {{{
     local all="$(echo "${COMP_WORDS[@]}" | xargs)" k= key=
-    (( ${#opts[@]} > 0 )) || declare -a opts
     all="${all// /:}"
     for k in ${!COMPLETION_STATIC[*]}; do
       [[ $k == $cmd:* ]] || continue
@@ -165,12 +149,14 @@ _completer() { # {{{
       opts+=( ${COMPLETION_STATIC[$key]} )
     elif [[ " ${COMPLETION_STATIC[$cmd]} " != *" $previous "* ]] then
       opts+=( ${COMPLETION_STATIC[$cmd]} )
-    fi
-    COMPREPLY=( "" )
-    if (( ${#opts[@]} )); then
-      readarray -t COMPREPLY < <(compgen -W "${opts[*]@Q}" -- $cur)
     fi;; # }}}
   esac
+  if (( ! ${#COMPREPLY[@]} )); then
+    echoe $dbgOn -m compl-$mode "$(declare -p opts)"
+    readarray -t COMPREPLY < <(compgen -W "${opts[*]@Q}" -- $cur)
+    COMPREPLY+=( "${extra[@]}" )
+  fi
+  # (( ${#COMPREPLY[@]} )) || COMPREPLY=( "" )
   if $space_hasNoSpace && $space_addOnNonDir; then
     for i in "${!COMPREPLY[@]}"; do
       if [[ "${COMPREPLY[$i]}" != */ ]]; then
@@ -278,9 +264,13 @@ compl-canonicalize() { # {{{
     *) argsOrig="$@"; break;;
     esac; shift
   done # }}}
-  is-installed --which getopt || { (( verbose >= 1 )) && echoe -f -c "err: not getopt"; echo "$argsOrig"; return 0; }
+  is-installed --which getopt || { echo "$argsOrig"; eval "$(die -s=!$(( verbose >= 1 )) 0 "err: not getopt")"; }
+  if $IS_MAC && [[ $(which getopt) == /usr/bin/getopt ]]; then
+    echo "$argsOrig"
+    eval "$(die -s=!$(( verbose >= 1 )) 0 "err: not gnu-getopt")"
+  fi
   args="$( (( verbose >= 2 )) && set -xv; getopt -s bash -q -l "$long" -o "$short" -- $argsOrig)"
-  (( $? == 0 )) || { (( verbose >= 1 )) && echoe -f -c "err: args:[$argsOrig]"; echo "$argsOrig"; return 0; }
+  (( $? == 0 )) || { echo "$argsOrig"; eval "$(die -s=!$(( verbose >= 1 )) 0 "err: args:[$argsOrig]")"; }
   [[ $argsOrig == *' -- '* ]] && keepDoubleDash=true
   $keepDoubleDash || { args=${args// -- / }; args=${args%--}; }
   (( verbose >= 1 )) && echoe -f -c "parsed: [$args]"

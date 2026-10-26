@@ -24,7 +24,7 @@ __ps1_load_defaults() { # {{{
   PS1_COLOR_JOBS_S="${PS1_COLOR_JOBS_S:-$(echo "\[$CGold\]")}"
   PS1_COLOR_NL="${PS1_COLOR_NL:-$(echo "\[$CGray\]")}"
   PS1_CURSOR= PS1_CURSOR_ROOT=
-  if ${PS1_CURSORS_CUSTOM:-true}; then
+  if ${PS1_CURSORS_CUSTOM:-true}; then # {{{
     if [[ $PS1_CURSOR_COLOR != 'false' ]]; then
       PS1_CURSOR+="$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")" # Set color to blue (#005e5d)
     fi
@@ -37,7 +37,21 @@ __ps1_load_defaults() { # {{{
     if [[ $PS1_CURSOR_ROOT_TYPE != 'false' ]]; then
       PS1_CURSOR_ROOT+="$(echo "\[\e[${PS1_CURSOR_ROOT_TYPE:-1} q\]")" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
     fi
-  fi
+  fi # }}}
+  case $PS1_USE_FANCY_SIGN in # {{{
+  true | both)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-${UNICODE_EXTRA_CHARS[icon-ok]}}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-${UNICODE_EXTRA_CHARS[icon-err]}}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  on-err)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-$}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-${UNICODE_EXTRA_CHARS[icon-err]}}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  *)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-$}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-$}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  esac # }}}
 } # }}}
 PS1_getColor() { # {{{
   case $1 in
@@ -61,7 +75,7 @@ PS1_getColor() { # {{{
   j-r)      echo -en "$PS1_COLOR_JOBS_R";;
   j-s)      echo -en "$PS1_COLOR_JOBS_S";;
   new-line) echo -en "$PS1_COLOR_NL";;
-  cursor)   if [[ $UID != 0 ]]; then
+  cursor)   if (( UID )); then
               echo -en "$PS1_CURSOR"
             else
               echo -en "$PS1_CURSOR_ROOT"
@@ -174,7 +188,7 @@ PS1_setter() { # {{{
     [[ -n "$SSH_CLIENT" && ! -n $TMUX ]] && export PS1_STATUS="short_git_ssh:default_ssh"
   fi
   local pwdMode="$(PS1_getPwdMode "${PS1_STATUS/:*}")"
-  ! $spaceForTime && [[ $pwdMode == 'pwd-short' && $COLUMNS -gt 90 ]] && spaceForTime=true
+  ! $spaceForTime && [[ $pwdMode == 'pwd-short' ]] &&  (( COLUMNS > 90 )) && spaceForTime=true
   local modes="time env env-switches user host pwd git jobs split-line hist prompt cursor"
   local modesCurrent="$(PS1_covertMode "${PS1_STATUS/:*}")"
   for v in $modes; do
@@ -346,7 +360,7 @@ PS1_setter() { # {{{
       fi;; # }}}
     split-line) # {{{
       [[ ${#ps1_dummy} -ge 4 ]] || break
-      if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || [[ ${#ps1_dummy} -gt $PS1_CFG_WIDTH || ${#ps1_dummy} -gt $((COLUMNS - PS1_COLUMNS_MARGIN)) ]] ); then
+      if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || (( ${#ps1_dummy} > PS1_CFG_WIDTH || ${#ps1_dummy} > (COLUMNS - PS1_COLUMNS_MARGIN) )) ); then
         PS1_CONVERTER_NEW_LINE=
         if ${PS1_CFG_ADD_NEW_LINE_CHAR:-false} && [[ -z $PS1_CONVERTER_NEW_LINE ]]; then
           PS1_colorFormat PS1_CONVERTER_NEW_LINE - 'new-line' "${PS1_CFG_NEW_LINE:-${UNICODE_EXTRA_CHARS[new-line]} }"
@@ -360,16 +374,21 @@ PS1_setter() { # {{{
         PS1_colorFormat PS1 - 'hist' "$PS1_CFG_HIST" " "
       fi;; # }}}
     prompt) # {{{
-      local sign='\$'
+      local sign="${PS1_SIGN_OK:-$}"
+      if (( UID )); then
+        (( __save_BASH_LAST_ERR && __save_BASH_LAST_ERR != 141 )) && sign="${PS1_SIGN_ERR:-$sign}" # hide sigpipe, e.g. git log
+      else
+        sign="${PS1_SIGN_OK_ROOT:-#}"
+      fi
       # ${PS1_DEBUG:-false} && set -xv
-      if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then
+      if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then # {{{
         PS1_PSTREE_INSTALLED=true
         which pstree >/dev/null 2>&1 || PS1_PSTREE_INSTALLED=false
-      fi
-      if [[ ( ! -n $TMUX && $SHLVL -gt ${PS1_PROMPT_SHLVL_BASE:-1} ) || $SHLVL -gt 3 ]]; then
+      fi # }}}
+      if ( [[ ! -n $TMUX ]] && (( SHLVL > ${PS1_PROMPT_SHLVL_BASE:-1} )) ) || (( SHLVL > 3 )); then # {{{
         local -n vSign="PS1_SIGN_$$"
         if [[ -z $vSign ]]; then
-          vSign="$"
+          vSign="$sign"
           local bashCnt=0
           if $PS1_PSTREE_INSTALLED; then
             local param="-a -s"
@@ -397,21 +416,21 @@ PS1_setter() { # {{{
               [[ $p == 1 || $p == 0 ]] && break
             done
           fi
-          bashCnt=$((bashCnt - forDocker - ${PS1_EXTRA_BASH:-0}))
-          if [[ $bashCnt -gt 1 ]]; then
+          bashCnt=$((bashCnt - ${PS1_EXTRA_BASH:-0}))
+          if (( bashCnt > 1 )); then
             vSign='@'
             if ${BASH_USE_UNICODE_FOR_NESTED_BASH:-true}; then
               vSign="${UNICODE_EXTRA_CHARS[nested-bash]}" a=$((bashCnt - 1))
-              [[ $a -gt 20 ]] && a=20
+              (( a > 20 )) && a=20
               vSign="$(printf "%d" "'$vSign")"
               vSign="$(printf "\U$(printf '%08x' "$((vSign+a-1))") ")"
             else
-              [[ $((bashCnt - 1)) -gt 1 ]] && vSign+=$((bashCnt - 1))
+              (( (bashCnt - 1) > 1 )) && vSign+=$((bashCnt - 1))
             fi
           fi
         fi
         sign="$vSign"
-      fi
+      fi # }}}
       # ${PS1_DEBUG:-false} && set +xv
       PS1_colorFormat PS1 - "err-$__save_BASH_LAST_ERR" "$sign" " ";; # }}}
     cursor) # {{{
@@ -428,11 +447,13 @@ PS1_env() { # {{{
   case $1 in
   --save)
     __save_BASH_LAST_ERR=$lastErr
-    __save_BASH_REMATCH=( "${BASH_REMATCH[@]}" );;
+    __save_BASH_REMATCH=( "${BASH_REMATCH[@]}" )
+    __save_PIPESTATUS=( "${PIPESTATUS[@]}" );;
   --restore)
     lastErr=$__save_BASH_LAST_ERR
     BASH_REMATCH=( "${__save_BASH_REMATCH[@]}" )
-    unset __save_BASH_REMATCH __save_BASH_LAST_ERR
+    PIPESTATUS=( "${__save_PIPESTATUS[@]}" )
+    unset __save_BASH_REMATCH __save_BASH_LAST_ERR __save_PIPESTATUS
     return $lastErr;;
   esac
 } # }}}

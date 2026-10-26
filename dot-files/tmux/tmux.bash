@@ -15,6 +15,9 @@ defaults() { # {{{
   # }}}
   [[ -z $TMUX_TERM ]] || tmux set -qg default-terminal "$TMUX_TERM"
   [[ -z $TMUX_SHELL ]] || tmux set -qg default-shell "$TMUX_SHELL"
+  if (( $TMUX_VERSION >= 38 )); then
+    tmux set -qg theme terminal
+  fi
 } # }}}
 progress_drawer() { # {{{
   [[ -z $1 ]] && return
@@ -619,11 +622,11 @@ select_marked_pane() { # @@ # {{{
     markedPaneId=
   fi
   if [[ -z $markedPaneId ]]; then
-    tmux select-pane -t $paneId -m
+    tmux select-pane -t ${paneId##*.} -m
     tmux last-pane -Z
   else
-    tmux select-pane -t $paneId -m
-    tmux switch-client -t $markedPaneId
+    tmux select-pane -t ${paneId##*.} -m
+    tmux switch-client -t ${markedPaneId##*.}
   fi
 } # }}}
 get_marked_pane() { # @@ # {{{
@@ -879,20 +882,26 @@ preserve_zoom() { # @@ # {{{
   eval tmux $param $zoomCmd
 } # }}}
 new_window() { # {{{
-  local currPaneId=$1 path="$2" doSplit=${3:-false} env_src= title=
+  local currPaneId=$1 path="$2" doSplit=${3:-false} env_src= title= name=
   read env_src title < <(tmux display-message -p -t $currPaneId -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id} #W')
-  local name="${4:-$title}"
+  if [[ -n $4 ]]; then
+    name="$4"
+  elif [[ $title =~ (.*)\.([0-9]+)$ ]]; then
+    name="${BASH_REMATCH[1]}.$((${BASH_REMATCH[2]}+1))"
+  else
+    name="$title.1"
+  fi
   declare -a tmuxP=(
     -a
     -n "$name"
-    -e ENV_SNAPSHOT_SRC=$ENV_SNAPSHOT_PRE.$env_src
+    -e ENV_SNAPSHOT_SRC=$env_src
     -c "$path"
   )
   if $doSplit; then
     tmux new-window "${tmuxP[@]}" \; \
       split-window -v -l 20% -d -c "$path"
   else
-    tmux new-window "${tmuxP[@]}" -n "$name"
+    tmux new-window "${tmuxP[@]}"
   fi
 } # }}}
 
