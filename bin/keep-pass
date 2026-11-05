@@ -317,6 +317,7 @@ setMasterKey() { # {{{
     echo "export KEEP_PASS_MASTER_KEY=\"$mkey\""
     return 0
   fi # }}}
+  [[ ! -e $KEEP_PASS_MASTER_KEY ]] || chmod +w $KEEP_PASS_MASTER_KEY
   echo "$mkey" >"$KEEP_PASS_MASTER_KEY"
   chmod 400 $KEEP_PASS_MASTER_KEY
   mkey="$(echo "$mkey" | sha1sum)"

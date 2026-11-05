@@ -65,6 +65,7 @@ if [[ ! -z $PS1 ]]; then
     bind    '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
     bind    '"\C-l":      "'${pre}'\C-g clr\C-m"'
     bind -x '"\C-k\C-l":  "clr --hist"'
+    bind    '"\C-x\C-x":  "\C-g fg 2>/dev/null || true\C-m"'
   done
   unset i pre
   bind 'set editing-mode vi'

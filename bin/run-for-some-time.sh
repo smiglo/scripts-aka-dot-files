@@ -24,13 +24,12 @@ run-for-some-time() { # @@ # {{{
     --dbg=*)         dbgL=${1#--dbg=};;
     --wait) # {{{
       shift
-      local s=0
-      s=$(time2s ${1%:*} -o s)
+      local s=$(time2s ${1%%:*} -o s)
       cnt="${1#*:}"
-      [[ -z $cnd || $cnt == 0 ]] && cnt="1"
-      sleep_for="$(bc -l <<< "scale=3; $1/$2")"
-      cnt="$((${s:-0}*$cnt))"
-      [[ -z $cnt || cnt == 0 ]] && cnt=30
+      (( cnt )) || cnt=1
+      sleep_for="$(bc -l <<< "scale=3; 1/$cnt")"
+      cnt="$((${s:-1}*$cnt))"
+      (( cnt )) || cnt=30
       ;; # }}}
     esac
     shift

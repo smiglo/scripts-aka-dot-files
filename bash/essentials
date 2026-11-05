@@ -205,8 +205,8 @@ env-snapshot() { # @@:new # {{{
     local shopts=$(shopt -p dotglob extglob) opt=
     shopt -u dotglob
     shopt -s extglob
-    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
-      cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_PRE.$ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
+      cp -r $ENV_SNAPSHOT_PRE.$ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
       unset ENV_SNAPSHOT_SRC
     fi
     [[ -e $ENV_SNAPSHOT/set ]] || return 1
@@ -297,7 +297,7 @@ load-colors() { # {{{
     color-cache-init
   fi
 } # }}}
-if is-installed --no-cache compl-add; then # {{{
+if [[ -n $PS1 ]] && is-installed --no-cache compl-add; then # {{{
   compl-add --new is-installed env-snapshot
 fi # }}}
 alias SBF="source ~/.bashrc --force"

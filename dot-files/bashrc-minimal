@@ -25,15 +25,15 @@ __mgF() { # {{{
 } # }}}
 __ps1-prompt() { # {{{
   local lastErr=$?
+  set +xv
   PS1='\w'
   case $lastErr in
-  0) PS1+="\[$CYellow\]";;
+  0 | 141) PS1+="\[$CYellow\]";;
   *) PS1+="\[$CRed\]";;
   esac
   PS1+="$\[$COff\] "
   return $lastErr
-}
-# }}}
+}; export -f __ps1-prompt # }}}
 # # }}}
 # env # {{{
 # hist # {{{
@@ -54,7 +54,8 @@ export CBlue='[0;34m'
 export CPurple='[0;35m'
 export CCyan='[0;36m'
 export CWhite='[0;37m' # }}}
-export PROMPT_COMMAND="__ps1-prompt"
+export PROMPT_COMMAND="__ps1-prompt; history -a"
+export PATH="$HOME/.bin:$PATH"
 # }}}
 # bash-opts # {{{
 shopt -s autocd
@@ -71,22 +72,51 @@ shopt -s progcomp
 shopt -s progcomp_alias
 set +f
 # }}}
-
+# inputrc # {{{
 [[ -e ${BASH_SOURCE[0]%/*}/.inputrc ]] && bind -f ${BASH_SOURCE[0]%/*}/.inputrc
+bind '"\C-g": kill-whole-line'
 bind '"\C-l": "\C-g clear -x\C-m"'
+bind 'set bell-style none'
+bind 'set blink-matching-paren on'
+bind 'set colored-completion-prefix on'
+bind 'set colored-stats on'
+bind 'set completion-ignore-case on'
+bind 'set completion-map-case on'
+bind 'set completion-prefix-display-length 10'
+bind 'set enable-bracketed-paste on'
+bind 'set expand-tilde off'
+bind 'set keyseq-timeout 200'
+bind 'set mark-directories on'
+bind 'set mark-symlinked-directories off'
+bind 'set match-hidden-files off'
+bind 'set menu-complete-display-prefix on'
+bind 'set show-all-if-ambiguous on'
+bind 'set show-all-if-unmodified on'
+bind 'set skip-completed-text on'
+# }}}
 
 which stty >/dev/null 2>&1 && stty -ixon 2>/dev/null
 which dircolors >/dev/null 2>&1 && eval "$(dircolors -b)"
+which fzf >/dev/null 2>&1 && eval "$(fzf --bash)"
 if [[ "$(tty)" =~ ^/dev/tty[0-9]+$ ]]; then
   dumpkeys 2>/dev/null | sed 's/58 = Caps_Lock/58 = Control/' | loadkeys -q 2>/dev/null
 elif which setxkbmap >/dev/null 2>&1; then
   setxkbmap -option 'caps:ctrl_modifier'
 fi
-which fzf >/dev/null 2>&1 && eval "$(fzf --bash)"
 
 # aliases # {{{
 alias G="grep --color=auto -iE"
-alias ls='ls --color=auto -B'
+alias g="git"
+alias ls='command ls --color=auto -B'
 alias ll='ls -Alhv'
 alias mg="__mgF"
 # }}}
+
+if [[ -e $HOME/.bashrc-extra ]]; then # {{{
+  source $HOME/.bashrc-extra
+fi # }}}
+
+# completion # {{{
+for i in $(declare -F | sed -n 's/^declare -[fF] __\(.*\)_compl/\1/p'); do
+  complete -o bashdefault -o default -o nospace -F __${i}_compl $i
+done; unset i # }}}

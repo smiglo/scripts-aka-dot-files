@@ -192,7 +192,15 @@ elif $BASHRC_USE_FAST_ENV; then # {{{
     if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1) && ! $IS_VSCODE; then
       if ! ip addr | grep -qF "inet ${SSH_CONNECTION%% *}/"; then
         eval $(__bashrc_exit --for-attach)
-        tmux attach $TMUX_LAST_SESSION
+        doAttach=true
+        read -sn1 -t3 -p "Attach to tmux? " >/dev/stderr </dev/tty key && case ${key,,} in n) doAttach=false;; esac; echo >/dev/stderr
+        if $doAttach; then
+          unset doAttach key
+          tmux attach $TMUX_LAST_SESSION
+        else
+          export PS1_STATUS="short_git_ssh:default"
+        fi
+        unset doAttach key
         return 0
       fi
     fi
@@ -318,7 +326,15 @@ if [[ ! "$(tty)" =~ ^/dev/tty[0-9]+$ ]]; then
             if ${BASHRC_ATTACH_ON_SSH:-true} && [[ -n $SSH_CONNECTION ]] && ( [[ ! -n $TMUX ]] && tmux has-session >/dev/null 2>&1); then
               if ! ip addr | grep -qF "inet ${SSH_CONNECTION%% *}/"; then
                 eval $(__bashrc_exit --for-attach)
-                tmux attach $TMUX_LAST_SESSION
+                doAttach=true
+                read -sn1 -t3 -p "Attach to tmux? " >/dev/stderr </dev/tty key && case ${key,,} in n) doAttach=false;; esac; echo >/dev/stderr
+                if $doAttach; then
+                  unset doAttach key
+                  tmux attach $TMUX_LAST_SESSION
+                else
+                  export PS1_STATUS="short_git_ssh:default"
+                fi
+                unset doAttach key
                 return 0
               fi
             elif ! $BASHRC_PLAIN_INSTALL; then

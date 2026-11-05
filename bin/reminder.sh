@@ -13,6 +13,7 @@ getMode() { # {{{
   load)                           mode="load";;
   monitor)                        mode="monitor";;
   n  | next      | -n | --next)   mode="next";;
+  schedule)                       mode="schedule";;
   esac
   echo "$mode"
 } # }}}
@@ -53,17 +54,21 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
       case $2 in
       -f | --file) echo "@@-f";;
       --n-days) echo "7 14 30";;
-      *) echo "-f --file --n-days -v -vv -vvv --v-add --json";;
+      *) echo "-f --file --n-days -s -v -vv -vvv --v-add --json";;
       esac;; # }}}
     next) # {{{
       echo "---";; # }}}
     monitor) # {{{
-      echo "--tmux --kill -";; # }}}
+      case $2 in
+      --n-days) echo "7 14 30";;
+      *) echo "--n-days --tmux --kill -";;
+      esac;; # }}}
     esac # }}}
   else # {{{
     echo "add clean edit list load next"
     echo "countdown CountDown"
     echo "monitor"
+    echo "schedule"
     echo "-s -v"
   fi # }}}
   exit 0
@@ -136,15 +141,18 @@ schedule() { # {{{
 } # }}}
 
 scheduleFile="$REMINDER_SCHEDULE_FILE"
-verbose=${REMINDER_DEFAULT_VERBOSE:-false}
+verbose=${REMINDER_VERBOSE:-false}
 defaultMode="${REMINDER_DEFAULT_MODE:-countdown}"
 monitorLogLevel=${REMINDER_MONITOR_LOG_LEVEL:-I}
 monitorLogFile="${REMINDER_MONITOR_LOG_FILE:-$BASHRC_RUNTIME_PATH/reminder-monitor.log}"
 reminderLauncher="$REMINDER_LAUNCHER"
 narrowToMinutes=${REMINDER_NARROW_TO_MINUTES:-true}
+daysInAdvance=${REMINDER_DAYS_TO_LOAD:-7}
+autoLoadInMonitor=${REMINDER_AUTO_LOAD:-true}
+$IS_DOCKER && [[ -z $REMINDER_AUTO_LOAD ]] && autoLoadInMonitor=false
 mode=
 now=$EPOCHSECONDS
-tzOrig=$TZ
+tsOrig=$TZ
 [[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(< $RUNTIME_PATH/date.tz)
 
 case $1 in # {{{
@@ -172,7 +180,7 @@ if [[ -z $mode ]]; then # {{{
   fi
 fi # }}}
 
-export REMINDER_DEFAULT_VERBOSE=$verbose
+export REMINDER_VERBOSE=$verbose
 
 case $mode in
 add) # {{{
@@ -185,8 +193,8 @@ add) # {{{
     schedule "$tsOrig" "$info" >$tmpFile
   elif [[ ! -t 0 ]]; then
     while read -r tsOrig info; do
-        [[ ! -z $tsOrig ]] || eval $(die -c -s=!$verbose  "missing entry: [date.]time [info]")
-        schedule "$tsOrig" "$info"
+      [[ ! -z $tsOrig ]] || eval $(die -c -s=!$verbose  "missing entry: [date.]time [info]")
+      schedule "$tsOrig" "$info"
     done </dev/stdin >$tmpFile
   fi
   if [[ -e $tmpFile ]]; then
@@ -306,20 +314,36 @@ CountDown) # {{{
   $0 clean;; # }}}
 edit) # {{{
   rm -f $tmpFile
-  while IFS=$'\t' read -r ts_s ts info; do
-    (( ts_s > now )) || echo -n "# "
-    echo -e "$(date +"%Y.%m.%d %H:%M" -d @$(time2s $ts -o abs-s))\t\t$info"
-  done <$reminderFile >$tmpFile
-  vim $tmpFile || exit 0
-  sed -e '/^#/d' -e '/^\s*$/d' $tmpFile \
-  | while IFS=$'\t' read -r ts info; do
-    ts="${ts//[.:]}00"
-    ts="${ts/ /-}"
-    entry="$(buildEntry "$(convertTime "$ts")" "$info")"
-    echoe $verbose -c "updating: '$entry'"
-    echo "$entry"
-  done \
-  | sort -k1,1n >$reminderFile;; # }}}
+  sumSchedule=0 sumTmpFile=0
+  if [[ -s $reminderFile ]]; then
+    while IFS=$'\t' read -r ts_s ts info; do
+      (( ts_s > now )) || echo -n "# "
+      echo -e "$(date +"%Y.%m.%d %H:%M" -d @$(time2s $ts -o abs-s))\t\t$info"
+    done <$reminderFile >$tmpFile
+    sumTmpFile=$(sha1sum $tmpFile)
+  fi
+  if [[ -z $scheduleFile ]]; then
+    scheduleFile="$REMINDER_PATH/schedule.json"
+    [[ ! -e $scheduleFile && -e $REMINDER_PATH/schedule.txt ]] && scheduleFile="$REMINDER_PATH/schedule.txt"
+  fi
+  [[ -e $scheduleFile ]] && sumSchedule=$(sha1sum $scheduleFile)
+  vim -p $tmpFile $scheduleFile </dev/tty || exit 0
+  if [[ -s $tmpFile && $(sha1sum $tmpFile) != $sumTmpFile ]]; then
+    sed -e '/^#/d' -e '/^\s*$/d' $tmpFile \
+    | while IFS=$'\t' read -r ts info; do
+      [[ -n $ts ]] || continue
+      ts="${ts//[.:]}00"
+      ts="${ts/ /-}"
+      entry="$(buildEntry "$(convertTime "$ts")" "$info")"
+      echoe $verbose -c "updating: '$entry'"
+      echo "$entry"
+    done \
+    | sort -k1,1n >$reminderFile
+  fi
+  if [[ -e $scheduleFile && $(sha1sum $scheduleFile) != $sumSchedule ]]; then
+    $0 load -s --file -
+  fi
+  ;; # }}}
 list) # {{{
   [[ -e $reminderFile ]] || exit 0
   today="$(time2s "today 0:0" -o abs-s)" tomorrow="$(time2s "tomorrow 0:0" -o abs-s)"
@@ -361,11 +385,12 @@ list) # {{{
   done <$reminderFile;; # }}}
 load) # {{{
   declare -A Days=([sun]=0 [mon]=1 [tue]=2 [wed]=3 [thu]=4 [fri]=5 [sat]=6)
-  daysInAdvance=7 verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0
-  eval set -- "$(compl-canonicalize -l "v-add,json,file:,n-days:" -s "vf:" -- "$@")"
+  verbose=false verboseAddParam="-s" dbgCond=false useJson= vLevel=0 silent=false
+  eval set -- "$(compl-canonicalize -l "v-add,json,file:,n-days:" -s "vsf:" -- "$@")"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     -v) (( ++vLevel ));;
+    -s) silent=true;;
     --v-add) verboseAddParam="-v";;
     --json) useJson=true;;
     -f | --file) scheduleFile="$2"; shift;;
@@ -375,8 +400,8 @@ load) # {{{
   (( vLevel >= 1 )) && { verbose=true; }
   (( vLevel >= 2 )) && { verboseAddParam="-v"; }
   (( vLevel >= 3 )) && { dbgCond=true; }
-  if [[ -z $scheduleFile ]]; then
-    if [[ -t 0 ]]; then
+  if [[ -z $scheduleFile || $scheduleFile == '-' ]]; then
+    if [[ -t 0 || $scheduleFile == '-' ]]; then
       scheduleFile="$REMINDER_PATH/schedule.json"; useJson=true
       [[ -e $scheduleFile ]] || { scheduleFile="$REMINDER_PATH/schedule.txt"; useJson=false; }
     else
@@ -387,8 +412,8 @@ load) # {{{
     useJson=true
     [[ $scheduleFile == *.json ]] || useJson=false
   fi
-  [[ -e $scheduleFile ]] || die "schedule file '$scheduleFile' does not exits"
-  [[ -s $scheduleFile ]] || die "nothing to schedule"
+  [[ -e $scheduleFile ]] || die -s=$silent "schedule file '$scheduleFile' does not exits"
+  [[ -s $scheduleFile ]] || die -s=$silent "nothing to schedule"
   declare -a dates=()
   for ((i = 0; i <= daysInAdvance; ++i)); do dates+=( "$(date +"%Y-%m-%d %w" -d "+$i day")" ); done
   if $useJson; then
@@ -427,7 +452,7 @@ load) # {{{
           if [[ $cond =~ script(:(.*))? ]]; then
             scriptFile=${BASH_REMATCH[2]}
             [[ -z $scriptFile || $scriptFile == "-" ]] && scriptFile="reminder-checker.sh"
-            is-installed $scriptFile || eval $(die -b2 "* script file not found: $scriptFile")
+            is-installed $scriptFile || eval $(die -s=$silent -b2 "* script file not found: $scriptFile")
             (
               $dbgCond && set -xv
               $scriptFile -t $time -d-for "$daysFor" -i "$info" --date $aDate
@@ -444,9 +469,9 @@ load) # {{{
   $0 $verboseAddParam clean;; # }}}
 monitor) # {{{
   handleKeys=true
-  [[ -z $1 ]] && set -- --tmux
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    --n-days) daysInAdvance="$2"; shift;;
     -) # {{{
       monitorLogFile="/dev/stderr"
       monitorLogLevel="D";; # }}}
@@ -471,15 +496,28 @@ monitor) # {{{
   tooFarTS=0 tooFarInterval=$((5 * 60))
   minuteBefore=60
   updateWorker=true
-  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
+  autoLoadNext=0
+  (( daysInAdvance > 0 )) || autoLoadInMonitor=false
   INF - "monitor thread, pid: $$"
-  INF "sleeps: $(declare -p Sleeps), heartbeat: ${heartbeatInterval}s"
+  INF "sleeps: $(declare -p Sleeps), heartbeat: ${heartbeatInterval}s, autoload: $autoLoadInMonitor"
+  [[ -z $TMUX_SB_WORKER || ! -x $TMUX_SB_WORKER ]] && updateWorker=false
   declare -A infoMsg=()
   while true; do # {{{
+    now=$EPOCHSECONDS
+    if $autoLoadInMonitor && (( now >= autoLoadNext )); then
+      INF "autoloading schedule"
+      $0 load -s --n-days $daysInAdvance --file -
+      if [[ -s $reminderFile ]] && (( daysInAdvance > 2 )); then
+        autoLoadNext=$(( now + (daysInAdvance - 2) * 24*60*60 ))
+      else
+        autoLoadNext=$(( now + 12*60*60 ))
+      fi
+      INF "the next autoload scheduled at $(date +$DATE_FMT -d@$autoLoadNext)"
+    fi
     sleep-precise -s
     now=$EPOCHSECONDS timeout=1
     (( now - heartbeatTS < heartbeatInterval )) || { DBG - "heartbeat after $((now - heartbeatTS))s"; heartbeatTS=$now; }
-    TZ=$tzOrig
+    TZ=$tsOrig
     [[ -e $RUNTIME_PATH/date.tz ]] && export TZ=$(< $RUNTIME_PATH/date.tz)
     while true; do # {{{
       [[ -e $reminderFile ]] || { DBG "no-file"; timeout=${Sleeps[no-file]}; break; }

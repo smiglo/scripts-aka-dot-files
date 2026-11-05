@@ -52,9 +52,7 @@ fi # }}}
 
 echor "Building $cName // $iName..."
 
-dockerCmd="docker"
-
-$dockerCmd build \
+docker build \
   $platform \
   --build-arg UID=$(id -u) \
   --build-arg GID=$(id -g) \
@@ -66,13 +64,13 @@ $ENV_SCRIPTS/docker-tools/docker.sh run $platform --no-start $($doStatic && echo
 
 if $doCommit; then # {{{
   echor "Committing $iName..."
-  $dockerCmd commit $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: commit"
+  docker commit $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: commit"
   if $doAdvance; then # {{{
     if $doRemove; then
       $ENV_SCRIPTS/docker-tools/docker.sh rm $cName
     else
       $ENV_SCRIPTS/docker-tools/docker.sh rm $cName-prev || true
-      $dockerCmd container rename $cName $cName-prev || die docker "Fail: cannot rename"
+      docker container rename $cName $cName-prev || die docker "Fail: cannot rename"
     fi
     $ENV_SCRIPTS/docker-tools/docker.sh run --no-start $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: run(2)"
   fi # }}}

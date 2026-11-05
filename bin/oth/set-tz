@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == "@@" ]]; then # @@:new # {{{
+  case $2 in
+  -z | --zone)
+    awk '/^[^#]/ {print $3}' /usr/share/zoneinfo/zone.tab;;
+  *)
+    echo "-z --zone"
+    awk '/^[^#]/ {print $3}' /usr/share/zoneinfo/zone.tab | grep "Europe/";;
+  esac
+  exit 0
+fi # }}}
+
+f="$RUNTIME_PATH/date.tz"
+zone="Europe/Warsaw"
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -z | --zone) zone="$2"; shift;;
+  *) zone="$1";;
+  esac; shift
+done # }}}
+echo "$zone" >"$f"

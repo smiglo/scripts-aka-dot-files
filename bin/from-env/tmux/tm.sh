@@ -45,7 +45,7 @@ tm() { # @@ # {{{
       -a|--attach) ret="$sessions";;
       -p|--path)   ret="@@-d";;
       --b-restore) ret="$(cd $buffers_path; ls -Ad *)";;
-      --pids)      ret="-a -s -f";;
+      --pids)      ret="-a -s -f +fzf";;
       --env | -e) # {{{
         ret=" -w -v"
         ret+="$(tmux show-environment -g | awk -F'=' '/^[A-Z].*=/ && !/=\(\)/{print $1}')";; # }}}
@@ -850,13 +850,14 @@ tm() { # @@ # {{{
     [[ ! -z $dstId ]] && tmux switch-client -t "$dstId"
     return 0;; # }}}
   pids) # {{{
-    local pane= tmuxParams= paneId="#P" pidParam="pid=,cmd=" full=false sortParams="-k2,2n"
-    $IS_MAC && pidParam="pid=,command="
+    local pane= tmuxParams= paneId="#P" full=false sortParams="-k2,2n" isStdout=true
+    [[ -t 1 ]] || isStdout=false
     while [[ ! -z $1 ]]; do
       case $1 in
       -f) full=true;;
       -a) tmuxParams="-a"; sortParams="-k2,2"; paneId="#S:#I.#P";;
       -s) tmuxParams="-s"; sortParams="-k2,2"; paneId="#I.#P";;
+      +fzf) isStdout=true;;
       esac; shift
     done
     fzf_prev() {
@@ -874,7 +875,13 @@ tm() { # @@ # {{{
       tmux list-panes $tmuxParams -F 'pPid="#{pane_pid}"; pId="'"$paneId"'"; pTitle="#{=15:pane_title}"; pTty="#{s|/dev/||:pane_tty}"; pPath="#{pane_current_path}"' \
       | while read i; do
           eval $i
-          read lPid pidInfo < <(ps -g $pPid -o $pidParam | sed -n 2p)
+          pidInfo=
+          if $IS_MAC; then
+            lPid=$(pgrep -P $pPid | tr '\n' ',')
+            [[ -n $lPid ]] && read lPid pidInfo < <(ps -p $lPid -o "pid=,command=" 2>/dev/null | sed -n 1p)
+          else
+            read lPid pidInfo < <(ps -g $pPid -o "pid=,cmd=" | sed -n 2p)
+          fi
           if [[ ! -z $pidInfo ]]; then
             if ! $full; then
               pidInfo="${pidInfo#bash }"
@@ -884,6 +891,7 @@ tm() { # @@ # {{{
               pidInfo="$pidInfo@$lPid"
             fi
           fi
+          [[ -n $pidInfo ]] || pidInfo="-"
           if ! $full; then
             printf "%d; %s; %s; %s\n" "$pPid" "$pId" "$pidInfo" "$pPath"
           else
@@ -893,9 +901,14 @@ tm() { # @@ # {{{
       | sort $sortParams \
       | sed -e 's|'"$HOME"'|~|g' \
       | column -t -s ";" \
-      | if is-installed -w grcat; then grcat conf.ps; else cat -; fi \
-      | fzf --ansi --prompt "> " --preview 'fzf_prev {1}' --preview-window=hidden \
+      | if $isStdout; then
+          if is-installed -w grcat; then grcat conf.ps; else cat -; fi \
+          | fzf --ansi --prompt "> " --preview 'fzf_prev {1}' --preview-window=hidden;
+        else
+          cat -;
+        fi
     )
+    $isStdout || { echo "$pane"; return; }
     [[ $? != 0 || -z $pane ]] && return 0
     if ! $full; then
       echo "$pane" | awk '{print $1}' | tr '\n' ' '

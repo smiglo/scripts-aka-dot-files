@@ -34,7 +34,7 @@ if [[ $1 == '@@' ]]; then
     if [[ " $@ " == *" -- "* ]]; then
       echo "@@-f"
     else
-      echo "-b -r --dbg -- "
+      echo "-b -r -R --dbg -- "
       git remote
     fi;; # }}}
   esac
@@ -45,6 +45,7 @@ branch=${remote#*/}
 remote=${remote%%/*}
 params=
 showCmd=false
+paramRev=1
 while [[ ! -z $1 ]]; do
   case $1 in
   --dbg) # {{{
@@ -59,6 +60,8 @@ while [[ ! -z $1 ]]; do
     fi;; # }}}
   -r) # {{{
     remote="$2"; shift;; # }}}
+  -R) # {{{
+    paramRev=$((!paramRev));; # }}}
   --) # {{{
     break;; # }}}
   -*) # {{{
@@ -78,6 +81,13 @@ while [[ ! -z $1 ]]; do
     break;; # }}}
   esac; shift
 done
+lastChangeRemote="$(git log -1 --format="%cd" --date=unix $remote/$branch)"
+lastChangeHead="$(git log -1 --format="%cd" --date=unix  HEAD)"
+if (( lastChangeRemote < lastChangeHead )); then
+  (( paramRev )) && paramRev="" || paramRev="-R"
+else
+  (( paramRev )) && paramRev="-R" || paramRev=
+fi
 ( $showCmd && set -xv
-  git diff $remote/$branch..@ "$@"
+  git diff $paramRev $remote/$branch..HEAD "$@"
 )
