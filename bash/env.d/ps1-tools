@@ -11,6 +11,7 @@ __ps1_load_defaults() { # {{{
   PS1_COLUMNS_MARGIN=${PS1_COLUMNS_MARGIN:-40}
   PS1_COLOR_OFF="${PS1_COLOR_OFF:-$(echo "\[$COff\]")}"
   PS1_COLOR_ERR_0="${PS1_COLOR_ERR_0:-$(echo "\[$CIYellow\]")}"
+  PS1_COLOR_ERR_0_NEST="${PS1_COLOR_ERR_0_NEST:-$(echo "\[$CIGreen\]")}"
   PS1_COLOR_ERR_ERR="${PS1_COLOR_ERR_ERR:-$(echo "\[$CIRed\]")}"
   PS1_COLOR_HIST_LOCAL="${PS1_COLOR_HIST_LOCAL:-$(echo "\[$CIBlue\]")}"
   PS1_COLOR_HIST_NO="${PS1_COLOR_HIST_NO:-$(echo "\[$CIPurple\]")}"
@@ -24,7 +25,7 @@ __ps1_load_defaults() { # {{{
   PS1_COLOR_JOBS_S="${PS1_COLOR_JOBS_S:-$(echo "\[$CGold\]")}"
   PS1_COLOR_NL="${PS1_COLOR_NL:-$(echo "\[$CGray\]")}"
   PS1_CURSOR= PS1_CURSOR_ROOT=
-  if ${PS1_CURSORS_CUSTOM:-true}; then
+  if ${PS1_CURSORS_CUSTOM:-true}; then # {{{
     if [[ $PS1_CURSOR_COLOR != 'false' ]]; then
       PS1_CURSOR+="$(echo "\[\e]12;${PS1_CURSOR_COLOR:-#00afaf}\a\]")" # Set color to blue (#005e5d)
     fi
@@ -37,13 +38,28 @@ __ps1_load_defaults() { # {{{
     if [[ $PS1_CURSOR_ROOT_TYPE != 'false' ]]; then
       PS1_CURSOR_ROOT+="$(echo "\[\e[${PS1_CURSOR_ROOT_TYPE:-1} q\]")" # Type(steady,blinking): block(1,2), underline(3,4), bar(5,6)
     fi
-  fi
+  fi # }}}
+  case $PS1_USE_FANCY_SIGN in # {{{
+  true | both)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-${UNICODE_EXTRA_CHARS[icon-ok]}}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-${UNICODE_EXTRA_CHARS[icon-err]}}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  on-err)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-$}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-${UNICODE_EXTRA_CHARS[icon-err]}}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  *)
+    PS1_SIGN_OK="${PS1_SIGN_OK:-$}"
+    PS1_SIGN_ERR="${PS1_SIGN_ERR:-$}"
+    PS1_SIGN_OK_ROOT=${PS1_SIGN_OK_ROOT:-#};;
+  esac # }}}
 } # }}}
 PS1_getColor() { # {{{
   case $1 in
   err-*)    case ${1#err-} in
-            0 | 141) echo -en "$PS1_COLOR_ERR_0";; # hide sigpipe, e.g. git log
-            *)       echo -en "$PS1_COLOR_ERR_ERR";;
+            false:0 | false:141 | 0 | 141) echo -en "$PS1_COLOR_ERR_0";; # hide sigpipe, e.g. git log
+            true:0  | true:141) echo -en "$PS1_COLOR_ERR_0_NEST";; # hide sigpipe, e.g. git log
+            *) echo -en "$PS1_COLOR_ERR_ERR";;
             esac;;
   hist)     if [[ ! -z $BASH_PHISTORY_FILE && ! -z $HISTFILE && ( $HISTFILE == $HISTFILE_ORIG || $HISTFILE =~ .*/\.history(\.ign)?$ ) ]]; then
               :
@@ -61,7 +77,7 @@ PS1_getColor() { # {{{
   j-r)      echo -en "$PS1_COLOR_JOBS_R";;
   j-s)      echo -en "$PS1_COLOR_JOBS_S";;
   new-line) echo -en "$PS1_COLOR_NL";;
-  cursor)   if [[ $UID != 0 ]]; then
+  cursor)   if (( UID )); then
               echo -en "$PS1_CURSOR"
             else
               echo -en "$PS1_CURSOR_ROOT"
@@ -148,16 +164,36 @@ PS1_setter() { # {{{
   else
     unset PS1_LAST_PWD PS1_LAST_PWD_INO
   fi # }}}
-  PS1=""
-  local spaceForTime=false
-  if [[ $LINES -ge $PS1_CFG_LINES ]]; then # {{{
-    ${PS1_CONVERTER_ADD_SEPARATOR:-false} && [[ $PS0_time != 0 ]] && PS1="\n"
-    spaceForTime=true
+  [[ -z $PS1_COLOR_OFF ]] && __ps1_load_defaults
+  local shLvlMin=3 bashCntExtra=0
+  [[ -n $TMUX ]] || shLvlMin=${PS1_PROMPT_SHLVL_BASE:-1}
+  local -n ps1Nested="PS1_NESTED_$$"
+  if (( SHLVL > shLvlMin )); then # {{{
+    ps1Nested=${PS1_NESTED:-$ps1Nested}
+    if [[ -z $ps1Nested ]]; then
+      local parentProc=
+      if $IS_MAC; then
+        parentProc="$(ps -p $PPID -o command=)"
+      else
+        parentProc="$(ps -p $PPID -o cmd=)"
+      fi
+      case ${parentProc,,} in
+      */vim*) export PS1_NESTED=true;;
+      esac
+      ps1Nested=${PS1_NESTED:-false}
+    fi
+  else
+    ps1Nested=false
   fi # }}}
+  if $ps1Nested; then # {{{
+    bashCntExtra=1
+  fi # }}}
+  PS1=""
+  local spaceForTime=false cleared=false
   if [[ $PS0_time == 0 ]]; then # {{{
     PS1_LAST_EMPTY_STRIKE=$((PS1_LAST_EMPTY_STRIKE + 1))
     if [[ ! -z $PS1_LAST_EMPTY && $PS1_CFG_CLR_TIMEOUT != 0 ]]; then
-      [[ $((cTime - PS1_LAST_EMPTY)) -lt ${PS1_CFG_CLR_TIMEOUT:-750000} ]] && clr
+      [[ $((cTime - PS1_LAST_EMPTY)) -lt ${PS1_CFG_CLR_TIMEOUT:-750000} ]] && clr && cleared=true
     fi
     [[ $__save_BASH_LAST_ERR == 0 || $PS1_LAST_EMPTY_STRIKE -ge 1 ]] && PS1_LAST_EMPTY=${EPOCHREALTIME/[,.]}
     __save_BASH_LAST_ERR=0
@@ -165,8 +201,16 @@ PS1_setter() { # {{{
   else
     PS1_LAST_EMPTY_STRIKE=0
   fi # }}}
-  [[ -z $PS1_COLOR_OFF ]] && __ps1_load_defaults
-  [[ -z $PS1_CONVERTER_ADD_SEPARATOR ]] && PS1_CONVERTER_ADD_SEPARATOR=${PS1_CFG_ADD_SEPARATOR:-true}
+  if [[ $LINES -ge $PS1_CFG_LINES ]]; then # {{{
+    if ! $ps1Nested && ! $cleared && ${PS1_CONVERTER_ADD_SEPARATOR:-false} && (( PS0_time )); then
+      local pos=0
+      read -sdR -p $'\E[6n' pos </dev/null # ]
+      pos="${pos#*\[}" && pos="${pos%%;*}" # ]
+      (( pos > 3 )) && PS1="\n"
+    fi
+    spaceForTime=true
+  fi # }}}
+  [[ -z $PS1_CONVERTER_ADD_SEPARATOR ]] && PS1_CONVERTER_ADD_SEPARATOR=${PS1_CFG_ADD_SEPARATOR:-true} # clr commands unsets it
   local cOff="$(PS1_getColor 'off')"
   local v= ps1_dummy=
   if [[ -z $PS1_STATUS ]]; then
@@ -174,7 +218,7 @@ PS1_setter() { # {{{
     [[ -n "$SSH_CLIENT" && ! -n $TMUX ]] && export PS1_STATUS="short_git_ssh:default_ssh"
   fi
   local pwdMode="$(PS1_getPwdMode "${PS1_STATUS/:*}")"
-  ! $spaceForTime && [[ $pwdMode == 'pwd-short' && $COLUMNS -gt 90 ]] && spaceForTime=true
+  ! $spaceForTime && [[ $pwdMode == 'pwd-short' ]] &&  (( COLUMNS > 90 )) && spaceForTime=true
   local modes="time env env-switches user host pwd git jobs split-line hist prompt cursor"
   local modesCurrent="$(PS1_covertMode "${PS1_STATUS/:*}")"
   for v in $modes; do
@@ -182,6 +226,7 @@ PS1_setter() { # {{{
     ${PS1_PROFILER:-false} && local tt=${EPOCHREALTIME/[,.]}
     while true; do case $v in
     time) # {{{
+      $ps1Nested && break
       local timeV=
       if ${PS1_CFG_ADD_TIME_START:-false} && [[ ! -z $PS0_time ]]; then # {{{
         timeV+="$(command date +"$TIME_FMT" -d @${PS0_time%??????})"
@@ -308,7 +353,11 @@ PS1_setter() { # {{{
     git) # {{{
       [[ -e $PWD ]] || break
       if [[ -z $PS1_CFG_ADD_GIT ]]; then
-        ${TMUX_STATUS_RIGHT_GIT_STATUS:-true} && [[ -n $TMUX ]] && break
+        if ! $ps1Nested; then
+          ${TMUX_STATUS_RIGHT_GIT_STATUS:-true} && [[ -n $TMUX ]] && break
+        elif ! ${PS1_CFG_NEST_ADD_GIT:-true}; then
+          break
+        fi
       else
         $PS1_CFG_ADD_GIT || break
       fi
@@ -345,8 +394,9 @@ PS1_setter() { # {{{
         fi
       fi;; # }}}
     split-line) # {{{
+      $ps1Nested && break
       [[ ${#ps1_dummy} -ge 4 ]] || break
-      if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || [[ ${#ps1_dummy} -gt $PS1_CFG_WIDTH || ${#ps1_dummy} -gt $((COLUMNS - PS1_COLUMNS_MARGIN)) ]] ); then
+      if ( ( ${PS1_CFG_ADD_SPLIT:-true} && [[ $LINES -ge $PS1_CFG_LINES_FOR_SPLIT ]] ) || (( ${#ps1_dummy} > PS1_CFG_WIDTH || ${#ps1_dummy} > (COLUMNS - PS1_COLUMNS_MARGIN) )) ); then
         PS1_CONVERTER_NEW_LINE=
         if ${PS1_CFG_ADD_NEW_LINE_CHAR:-false} && [[ -z $PS1_CONVERTER_NEW_LINE ]]; then
           PS1_colorFormat PS1_CONVERTER_NEW_LINE - 'new-line' "${PS1_CFG_NEW_LINE:-${UNICODE_EXTRA_CHARS[new-line]} }"
@@ -360,60 +410,39 @@ PS1_setter() { # {{{
         PS1_colorFormat PS1 - 'hist' "$PS1_CFG_HIST" " "
       fi;; # }}}
     prompt) # {{{
-      local sign='\$'
+      local sign="${PS1_SIGN_OK:-$}"
+      if (( UID )); then
+        (( __save_BASH_LAST_ERR && __save_BASH_LAST_ERR != 141 )) && sign="${PS1_SIGN_ERR:-$sign}" # hide sigpipe, e.g. git log
+      else
+        sign="${PS1_SIGN_OK_ROOT:-#}"
+      fi
       # ${PS1_DEBUG:-false} && set -xv
-      if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then
+      if [[ ! -n $PS1_PSTREE_INSTALLED ]]; then # {{{
         PS1_PSTREE_INSTALLED=true
         which pstree >/dev/null 2>&1 || PS1_PSTREE_INSTALLED=false
-      fi
-      if [[ ( ! -n $TMUX && $SHLVL -gt ${PS1_PROMPT_SHLVL_BASE:-1} ) || $SHLVL -gt 3 ]]; then
+      fi # }}}
+      if (( SHLVL > shLvlMin + bashCntExtra )); then # {{{
         local -n vSign="PS1_SIGN_$$"
-        if [[ -z $vSign ]]; then
-          vSign="$"
-          local bashCnt=0
-          if $PS1_PSTREE_INSTALLED; then
-            local param="-a -s"
-            $IS_MAC && param=
-            local cmd="pstree $param -p $$ | sed -n --silent '1,/'$$'$/p'"
-            if $IS_MAC; then
-              cmd+=" | sed -n '/= \([0-9]\+\) .*bash$/s/.*= \([0-9]\+\) .*bash/\1/p'"
-            else
-              cmd+=" | sed -n -e ' /bash,1$/d' -e '/bash,[0-9]\+$/s/.*,//p'"
-            fi
-            cmd+=" | xargs -r ps -f -p | command grep -c -e 'bash'"
-            if ${PS1_DEBUG:-false} || ${PS1_DEBUG2:-false}; then
-              echoe "$cmd"
-            fi
-            bashCnt="$(eval $cmd)"
-          else
-            local p=$$ c=
-            while true; do
-              case "$(command ps -o cmd= $p)" in
-              tmux\ *) break;;
-              /bin/bash\ *) ;;
-              *bash*)  bashCnt=$((bashCnt + 1));;
-              esac
-              p=$(echo $(command ps -o ppid= $p)) || break
-              [[ $p == 1 || $p == 0 ]] && break
-            done
-          fi
-          bashCnt=$((bashCnt - forDocker - ${PS1_EXTRA_BASH:-0}))
-          if [[ $bashCnt -gt 1 ]]; then
+        if [[ -z $vSign ]]; then # {{{
+          vSign="$sign"
+          local bashCnt=$((SHLVL - shLvlMin + 1 - ${PS1_EXTRA_BASH:-0} - bashCntExtra))
+          if (( bashCnt > 1 )); then # {{{
             vSign='@'
             if ${BASH_USE_UNICODE_FOR_NESTED_BASH:-true}; then
               vSign="${UNICODE_EXTRA_CHARS[nested-bash]}" a=$((bashCnt - 1))
-              [[ $a -gt 20 ]] && a=20
-              vSign="$(printf "%d" "'$vSign")"
-              vSign="$(printf "\U$(printf '%08x' "$((vSign+a-1))") ")"
+              (( a > 20 )) && a=20
+              printf -v vSign "%d" "'$vSign"
+              printf -v vSign '%08x' "$((vSign+a-1))"
+              printf -v vSign "\U$vSign"
             else
-              [[ $((bashCnt - 1)) -gt 1 ]] && vSign+=$((bashCnt - 1))
+              (( (bashCnt - 1) > 1 )) && vSign+=$((bashCnt - 1))
             fi
-          fi
-        fi
+          fi # }}}
+        fi # }}}
         sign="$vSign"
-      fi
+      fi # }}}
       # ${PS1_DEBUG:-false} && set +xv
-      PS1_colorFormat PS1 - "err-$__save_BASH_LAST_ERR" "$sign" " ";; # }}}
+      PS1_colorFormat PS1 - "err-$ps1Nested:$__save_BASH_LAST_ERR" "$sign" " ";; # }}}
     cursor) # {{{
       PS1+="$(PS1_getColor 'cursor')";; # }}}
     esac; break; done
@@ -428,11 +457,13 @@ PS1_env() { # {{{
   case $1 in
   --save)
     __save_BASH_LAST_ERR=$lastErr
-    __save_BASH_REMATCH=( "${BASH_REMATCH[@]}" );;
+    __save_BASH_REMATCH=( "${BASH_REMATCH[@]}" )
+    __save_PIPESTATUS=( "${PIPESTATUS[@]}" );;
   --restore)
     lastErr=$__save_BASH_LAST_ERR
     BASH_REMATCH=( "${__save_BASH_REMATCH[@]}" )
-    unset __save_BASH_REMATCH __save_BASH_LAST_ERR
+    PIPESTATUS=( "${__save_PIPESTATUS[@]}" )
+    unset __save_BASH_REMATCH __save_BASH_LAST_ERR __save_PIPESTATUS
     return $lastErr;;
   esac
 } # }}}
@@ -530,7 +561,14 @@ ps1_toggle() { # @@ # {{{
     return 0;; # }}}
   gt) # {{{
     if [[ -z $PS1_CFG_ADD_GIT ]]; then
-      if ${TMUX_STATUS_RIGHT_GIT_STATUS:-true} && [[ -n $TMUX ]]; then
+      local -n ps1Nested="PS1_NESTED_$$"
+      if $ps1Nested; then
+        if ${PS1_CFG_NEST_ADD_GIT:-true}; then
+          PS1_CFG_ADD_GIT=false
+        else
+          PS1_CFG_ADD_GIT=true
+        fi
+      elif ${TMUX_STATUS_RIGHT_GIT_STATUS:-true} && [[ -n $TMUX ]]; then
         PS1_CFG_ADD_GIT=true
       else
         PS1_CFG_ADD_GIT=false
@@ -610,8 +648,7 @@ ps1_toggle() { # @@ # {{{
       fi
     done
     (
-      import-module echor
-      echormf -C 0 "Changing PS1 to %yellow:{$next}"
+      echoe -f -C "changing PS1 to %yellow:{$next}"
     )
   fi # }}}
   unset ${!PS1_CACHE_*}

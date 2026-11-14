@@ -24,9 +24,28 @@ cmd="vim --fast -p" cmdEnc="vim-enc.sh --from-note" cmdDelim="--"
 fromTmux=false showNoteFilename=false doCat=false encrypted=false
 buffer="$TMP_MEM_PATH/notes-for-$$.txt"
 noteFile=
-noteFileGlobal="${NOTE_FILE_GLOBAL:-$APPS_CFG_PATH/notes.txt}"
-noteFileSharable="${NOTE_FILE_SHARABLE:-$SHARABLE_PATH/notes.txt}"
-noteFileTmux="$TMUX_SESSION_PATH/notes.txt"
+noteFileGlobal="$NOTE_FILE_GLOBAL" # {{{
+if [[ -z $noteFileGlobal ]]; then
+  noteFileGlobal="$APPS_CFG_PATH/notes.md"
+  if [[ ! -e $noteFileGlobal && -e ${noteFileGlobal%.md}.txt ]]; then
+    noteFileGlobal="${noteFileGlobal%.md}.txt"
+  fi
+fi # }}}
+noteFileSharable="$NOTE_FILE_SHARABLE" # {{{
+if [[ -z $noteFileSharable ]]; then
+  noteFileSharable="$SHARABLE_PATH/notes.md"
+  if [[ ! -e $noteFileSharable && -e ${noteFileSharable%.md}.txt ]]; then
+    noteFileSharable="${noteFileSharable%.md}.txt"
+  fi
+fi # }}}
+noteFileTmux="$NOTE_FILE_TMUX" # {{{
+if [[ -z $noteFileTmux ]]; then
+  noteFileTmux="$SHARABLE_PATH/notes.md"
+  if [[ ! -e $noteFileTmux && -e ${noteFileTmux%.md}.txt ]]; then
+    noteFileTmux="${noteFileTmux%.md}.txt"
+  fi
+fi # }}}
+
 if [[ -z $1 ]]; then
   if [[ -t 1 ]]; then
     set -- $NOTE_PARAMS_DEFAULT

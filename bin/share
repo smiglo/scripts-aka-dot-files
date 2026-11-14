@@ -16,7 +16,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
   esac
   exit 0
 fi # }}}
-path="${SHARE_PATH:-$HOME/share}" name="notes.txt" mode= addHeader=false section= addNl=false new=false addSep=false
+path="${SHARABLE_PATH:-$HOME/share}" name="share.txt" mode= addHeader=false section= addNl=false new=false addSep=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   g | get) mode="get";;
@@ -79,4 +79,3 @@ copy) # {{{
   [[ -e $fn ]] || die "no file '$fn'"
   < $fn xclip --put;; # }}}
 esac
-

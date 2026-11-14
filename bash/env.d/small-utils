@@ -252,8 +252,8 @@ fr() { # @@:new # {{{
     echo "${from:-$PWD}"
   fi # }}}
 } # }}}
-getCurPos() { # {{{
-  local p=
+get-cur-pos() { # {{{
+  local pos=
   read -sdR -p $'\E[6n' pos # ]
   echo "${pos#*\[}" # ]
 } # }}}

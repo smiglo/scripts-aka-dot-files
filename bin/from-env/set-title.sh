@@ -12,7 +12,7 @@ _set-title() { # {{{
   set-title_getter_default() { # {{{
     local ret=
     case $PWD in # {{{
-    $SHARABLE_PATH/* | $HOME/*/Dropbox*) ret='sharable';;
+    $SHARABLE_PATH/*)    ret='sharable';;
     $RUNTIME_PATH/*)     ret='runtime';;
     $HOME/Desktop*)      ret='desktop';;
     $HOME/Documents*)    ret='docs';;

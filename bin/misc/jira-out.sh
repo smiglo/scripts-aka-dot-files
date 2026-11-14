@@ -17,18 +17,21 @@ if [[ $1 == '@@' ]]; then # {{{
     sed -n -e '/^#.* }\{3\}/d' -e 's/^#\+ \+\([^ ]\+\) # {\{3\}/\1/p' -e 's/^#\+ \+\([^ ]\+\)$/\1/p' "$f" | grep -vE "^(NF|TABLE|CODE)$" # vim: }
     ;; # }}}
   *) # {{{
-    echo "-r -f - --dbg --slack --jira"
+    echo "-r -f - --slack --jira"
+    echo "-v -vv -vvv"
+    echo "-v"{1..5}
     get-file-list '*.txt';; # }}}
   esac
   exit 0
 fi # }}}
-import-module echor
-region= f= dbg=false forSlack=
+region= f= forSlack= vLvl=0
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
-  --dbg) dbg=true;;
   --slack) forSlack=true;;
   --jira)  forSlack=false;;
+  -v) ((++vLvl));;
+  -v[0-9]) vLvl=${1#-v};;
+  -vv*) vLvl=${1#-}; vLvl="${#vLvl}";;
   -r) region="$2"; shift;;
   -f) f="$2"; shift;;
   *)  f="$1 ";;
@@ -42,20 +45,18 @@ elif [[ -e $NOTE_FILE && $NOTE_FILE == $PWD/* ]]; then
 fi # }}}
 regionS= regionE=
 declare -A colorMap=([module]='yellow')
-$dbg && echorm -M +
-eval $(echorm -f?var)
 if [[ ! -z $region ]]; then # {{{
   regionS="^# \(.* \)\?$region\( .*\)\? # {\{3\}" foldet=true # vim: }
   if ! grep -q "$regionS" "$f"; then
     regionS="^# \(.* \)\?$region\( .*\)\?$"
-    ! grep -q "$regionS" "$f" && echorm 0 "Start region [$region] not found" && exit 1
+    ! grep -q "$regionS" "$f" && die "Start region [$region] not found"
     foldet=false
   fi
   if $foldet; then # vim: {
     regionE="^# \(.* \)\?$region\(.* \)\? # }\{3\}"
     if ! grep -q "$regionE" "$f"; then
       region="$($ENV_SCRIPTS/file-tools/matching-section.sh -f $f -p "^# (.* )?$region")"
-      [[ -z $region ]] && echorm 0 "End region [$region] not found" && exit 1
+      [[ -z $region ]] && die "End region [$region] not found"
       echo -n "$region" | jira-out.sh
       exit
     fi
@@ -63,7 +64,7 @@ if [[ ! -z $region ]]; then # {{{
     regionE="^$"
   fi
 fi # }}}
-[[ ! -z $region ]] && $dbg && echorm -m $module -C "%module:{region}: [$regionS|$regionE]"
+[[ ! -z $region ]] && echoe $((vLvl >= 1)) -m $module -C "%module:{region}: [$regionS|$regionE]"
 s=plain until= untilReplace= tableInfo=
 if [[ -z $forSlack ]]; then
   grep -q "https://.*/browse/.*" $f && forSlack=false
@@ -71,7 +72,7 @@ if [[ -z $forSlack ]]; then
 fi
 { if [[ -z $region ]]; then cat "$f"; else sed -n '/'"$regionS"'/,/'"$regionE"'/p' "$f" | sed -e '1 d' -e '$ d'; fi; } | \
 while IFS= read -r l; do
-  $dbg && echorm -m $module 5 "$l"
+  echoe $((vLvl>=5)) -m $module "$l"
   l="${l%# IGN}"
   l="$(echo "$l" | sed 's/\s\+$//')"
   case $l in
@@ -81,7 +82,7 @@ while IFS= read -r l; do
   plain) # {{{
     case $l in
     '# TABLE'*) # {{{
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{table}'"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{table}'"
       s="table" tableInfo="header"
       [[ $l == *'# {{{' ]] && until="# }}}" || until="^$"
       continue
@@ -89,10 +90,10 @@ while IFS= read -r l; do
     [^#]*' # NF'*) # {{{
       echo -e "${l% # NF*}"
       l="# NF${l#* # NF}"
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}' (combined line)"
+      echoe $((vLvl>=1)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}' (combined line)"
       ;& # }}}
     '# NF '* | '# NF' | '``` '* | '```') # {{{
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}'"
+      echoe $((vLvl>=1)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{noformat}'"
       s="noformat" untilReplace="{noformat}"
       if [[ $l =~ ( *# \{\{\{)$ ]]; then
         l=${l%${BASH_REMATCH[1]}}
@@ -106,7 +107,7 @@ while IFS= read -r l; do
       esac
       if ! $forSlack; then
         if [[ ! -z $l && $l != '```' ]]; then
-          $dbg && echorm -m $module -C 2 "%module:{$s}: noformat %green:{title}=[$l]"
+          echoe $((vLvl>=2)) -m $module -C "%module:{$s}: noformat %green:{title}=[$l]"
           l="{noformat:title=$l}"
         else
           l="{noformat}"
@@ -114,10 +115,10 @@ while IFS= read -r l; do
       else
         l='```'
       fi
-      $dbg && echorm -m $module -C 2 "%module:{$s}: noformat entry: [$l], %green:{until}=[$until]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: noformat entry: [$l], %green:{until}=[$until]"
       ;; # }}}
     '# CODE:'* | '# CODE '*) # {{{
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{code}'"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{code}'"
       lang= cEntry="code" cEntryD=":"
       [[ $l =~ CODE:([^ ]*) ]] && lang=${BASH_REMATCH[1]} && cEntry+=":$lang" && cEntryD="|"
       l="${l#\# CODE }"
@@ -130,46 +131,46 @@ while IFS= read -r l; do
         until="# CODE"
       fi
       if [[ ! -z $l ]]; then
-        $dbg && echorm -m $module -C 2 "%module:{$s}: code %green:{title}=[$l]"
+        echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: code %green:{title}=[$l]"
         l="{${cEntry}${cEntryD}title=$l}"
       else
         l="{$cEntry}"
       fi
-      $dbg && echorm -m $module -C 2 "%module:{$s}: code entry: [$l], %green:{until}=[$until]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: code entry: [$l], %green:{until}=[$until]"
       ;; # }}}
     '{noformat'*'}') # {{{
-      $dbg && echorm -m $module -C "%module:{$s}:  %imp:switching into '%i2:{noformat}'"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}:  %imp:switching into '%i2:{noformat}'"
       s="noformat" until="{noformat}"
-      $dbg && echorm -m $module -C 2 "%module:{$s}: noformat entry: l=[$l], u=[$until]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: noformat entry: l=[$l], u=[$until]"
       ;; # }}}
     '{code'*'}') # {{{
-      $dbg && echorm -m $module -C "%module:{$s}:  %imp:switching into '%i2:{code}'"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}:  %imp:switching into '%i2:{code}'"
       s="noformat" until="{code}"
-      $dbg && echorm -m $module -C 2 "%module:{$s}: code entry: l=[$l], u=[$until]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: code entry: l=[$l], u=[$until]"
       ;; # }}}
     '#'[0-9]?*) # {{{
       [[ $l =~ ^\#([0-9]+)\ (.*)('# {{{')? ]] # }}}
       l="h${BASH_REMATCH[1]}. ${l#* }"
-      $dbg && echorm -m $module -C "%module:{$s}: %green:{header-v1}: l=[$l]"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}: %green:{header-v1}: l=[$l]"
       ;; # }}}
     '##'*) # {{{
       [[ $l =~ ^(\#+).* ]]
       len=$((${#BASH_REMATCH[1]}-1))
       l="h$len. ${l#* }"
-      $dbg && echorm -m $module -C "%module:{$s}: %green:{header-v2}: l=[$l]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: %green:{header-v2}: l=[$l]"
       ;; # }}}
     *) # {{{
       ;; # }}}
     esac;; # }}}
   table) # {{{
     if [[ "$l" =~ $until ]]; then
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{plain}' l=[$l], u=[$until]"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{plain}' l=[$l], u=[$until]"
       s="plain" until=
       continue
     fi;; # }}}
   noformat) # {{{
     if [[ "$l" =~ $until ]]; then
-      $dbg && echorm -m $module -C "%module:{$s}: %imp:switching into '%i2:{plain}' l=[$l], u=[$until]"
+      echoe $((vLvl >= 1)) -m $module -C "%module:{$s}: %imp:switching into '%i2:{plain}' l=[$l], u=[$until]"
       addNL=false
       [[ -z $l ]] && addNL=true
       if ! $forSlack; then
@@ -186,7 +187,7 @@ while IFS= read -r l; do
   case $s in
   plain) # {{{
     if [[ $l == '# '* ]]; then
-      $dbg && echorm -m $module -C 2 "%module:{$s}: %gray:%s l=[$l]" "skipping comment line"
+      echoe $((vLvl >= 2)) -m $module -C "%module:{$s}: %gray:%s l=[$l]" "skipping comment line"
       continue
     fi
     case $l in
@@ -230,7 +231,7 @@ while IFS= read -r l; do
     fi
     ;; # }}}
   noformat) # {{{
-    $dbg && echorm -m $module -C 4 "%module:{$s}: %gray:%s [$l]" "parsing header"
+    echoe $((vLvl >= 4)) -m $module -C "%module:{$s}: %gray:%s [$l]" "parsing header"
     [[ $l =~ ^([a-zA-Z][a-zA-Z0-9_%/-]{3,}:[0-9]+: *) ]] && l="${l#${BASH_REMATCH[1]}}"
     [[ $l =~ ^([0-9a-fA-F]+~: ) ]] && l="${l#${BASH_REMATCH[1]}}"
     echo "$l";; # }}}

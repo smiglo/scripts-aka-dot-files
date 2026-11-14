@@ -40,8 +40,6 @@ if ! $IS_MAC; then
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    # import-module echor
-    # echormf -M -?
     case $f in
     '') # {{{
       cmd="nautilus .";; # }}}
@@ -63,7 +61,6 @@ if ! $IS_MAC; then
       fi;; # }}}
     esac
     (
-      # echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     )
@@ -87,8 +84,6 @@ else
       *)           f="$1";   shift $#;;
       esac; shift
     done # }}}
-    # import-module echor
-    # echormf -M -?
     case $f in
     '') # {{{
       f=$PWD;; # }}}
@@ -103,10 +98,8 @@ else
       fi;; # }}}
     esac
     if [[ -z $cmd ]]; then
-      # echormf "/usr/bin/open '$f'"
       /usr/bin/open "$f"
     else
-      # echormf "eval $cmd $cmdParams$($doDisown && echo " : ; disown")"
       eval "$cmd $cmdParams"
       $doDisown && disown
     fi

@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+declare -A confFiles=(
+  [shared]="$SHARABLE_PATH/.gd-sync.conf"
+  [global]="$APPS_CFG_PATH/gd-sync.conf"
+  [local]="./.gd-sync.conf"
+)
+confFile="${confFiles[global]}"
+[[ -e ${confFiles[local]} ]] && confFile="${confFiles[local]}"
+file=
+remotePath=
+verbose=true
+
+conf-load() { # {{{
+  declare -Ag gdFile=()
+  declare -A sourced=()
+  local k= confF= confOrder="shared global local FILE-DIR"
+  for k in $confOrder; do
+    case $k in
+    FILE-DIR)
+      [[ -n $file ]] || continue
+      confF="$(realpath "$(dirname "$file")/${confFiles[local]}")";;
+    *)
+      confF="$(realpath "${confFiles[$k]}")";;
+    esac
+    [[ -e $confF ]] || continue
+    [[ -v sourced[$confF] ]] && continue
+    sourced[$confF]=
+    source $confF
+  done
+} # }}}
+get-remote-location() { # {{{
+  local key="${1##*/}"
+  [[ -n $key ]] || return 1
+  local remotePath="${gdFile[$key]}"
+  if [[ -z $remotePath && -n $GDSYNC_DEFAULT_REMOTE ]]; then
+    remotePath="${GDSYNC_DEFAULT_REMOTE%/}/"
+  fi
+  [[ -n $remotePath ]] || return 1
+  [[ $remotePath == */ ]] && remotePath+="$key"
+  echo "$remotePath"
+} # }}}
+
+conf-load
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  --add)
+    echo "@@-f";;
+  -f | --file)
+    echo "@@-f";;
+  get | -g | --get | \
+  refresh | --refresh | \
+  --get-remote-for)
+    echo "${!gdFile[@]}";;
+  -p | --put)
+    ret="$(for i in ${!gdFile[@]}; do [[ -e $i ]] && echo "$i"; done)"
+    echo "${ret:----}";;
+  -r | --remote)
+    rclone listremotes;;
+  *)
+    prev="${@: -2}"
+    case ${prev%% *} in
+    --add)
+      rclone listremotes;;
+    *)
+      compl-get-args <$0;;
+    esac
+  esac
+  exit 0
+fi # }}}
+
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -s) verbose=false;;
+  --shared) confFile="${confFiles[shared]}";;
+  --global) confFile="${confFiles[global]}";;
+  --local)  confFile="${confFiles[local]}";;
+  --get-remote-for) # {{{
+    get-remote-location ${file:-$2} || exit 1
+    exit 0;; # }}}
+  --add) # {{{
+    [[ -z $file ]] && file="$2" && shift
+    [[ -z $remotePath ]] && remotePath="$2" && shift
+    [[ -n $file && -n $remotePath ]] || die -s=!$verbose "wrong arguments: [$file] / [$remotePath]"
+    key="${file##*/}"
+    [[ $remotePath == */ ]] && remotePath+="$key"
+    [[ -e $confFile ]] && sed -i '/^gdFile\['"$key"'\]=/d' $confFile
+    echo "gdFile[$key]=\"$remotePath\"">>$confFile;; # }}}
+  -f | --file) # {{{
+    file="$2"; shift;; # }}}
+  -r | --remote) # {{{
+    remotePath="$2"; shift;; # }}}
+  *) # {{{
+    if [[ -z $file ]]; then # {{{
+      file="$2"; shift
+      [[ -z $file ]] && file="$(for i in ${!gdFile[@]}; do [[ -e $i ]] && echo "$i"; done | fzf -1 -0)"
+      [[ -n $file ]] || die -s=!$verbose "file is missing"
+    fi # }}}
+    conf-load
+    if [[ -z $remotePath ]]; then # {{{
+      remotePath=$(get-remote-location "$file")
+      [[ -n $remotePath ]] || die -s=!$verbose "cannot find entry for $file"
+    fi # }}}
+    ;;& # }}}
+  refresh) # {{{
+    if [[ ! -e $file ]]; then
+      rclone copyto $remotePath $file
+      echoe $verbose "retrieved"
+    else
+      fRemote="$file.tmp"
+      [[ -e $fRemote ]] && rm -f "$fRemote"
+      rclone copyto $remotePath $fRemote
+      [[ -e $fRemote ]] || die -s=!$verbose "cannot retrieve $file from $remotePath"
+      if ! diff -q $file $fRemote; then
+        sum="$(sha1sum $fRemote)"
+        if vimdiff $file $fRemote && [[ "$(sha1sum $fRemote)" != "$sum" ]]; then
+          rclone copyto $fRemote $remotePath
+        fi
+      else
+        echoe $verbose "the same"
+      fi
+      rm -f $fRemote
+    fi
+    file= remotePath=;; # }}}
+  get) # {{{
+    rclone copyto $remotePath $file
+    file= remotePath=;; # }}}
+  put) # {{{
+    rclone copyto $file $remotePath
+    file= remotePath=;; # }}}
+  *) # {{{
+    die -s=!$verbose "unknown mode: $1";; # }}}
+  esac; shift || true
+done # }}}

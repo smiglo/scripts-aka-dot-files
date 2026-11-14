@@ -293,13 +293,12 @@ sleep-precise() { # @@ # {{{
     return 0
   fi # }}}
   sleep-precise-test() { # {{{
-    import-module echor
-    eval export ECHOR_NAME_$$="sleep-test"
+    local NAME="sleep-test"
     sleep-test() { # {{{
       export SLEEP_PRECISE_MARGIN=$1
       local msg="${2:-Evaluation}"
       local t1= t2= tSum=0 cnt=10 diff=
-      echor "$msg (SLEEP_PRECISE_MARGIN=$SLEEP_PRECISE_MARGIN)"
+      echoe -m $NAME "$msg (SLEEP_PRECISE_MARGIN=$SLEEP_PRECISE_MARGIN)"
       for i in $(seq 1 $cnt); do # {{{
         t1=${EPOCHREALTIME/[,.]}
         sleep-precise -s
@@ -308,7 +307,7 @@ sleep-precise() { # @@ # {{{
         t2=${EPOCHREALTIME/[,.]}
         diff=$(( (t2 - t1) - 1000000 ))
         tSum=$((tSum + diff))
-        echor "[$i] $diff"
+        echoe  -m $NAME "[$i] $diff"
       done # }}}
       local margin=$((SLEEP_PRECISE_MARGIN + tSum / cnt))
       echo "$margin"
@@ -320,11 +319,11 @@ sleep-precise() { # @@ # {{{
     *)  margin=$1;;
     esac # }}}
     for (( i=1; i<=narrowN; ++i )); do # {{{
-      echor "narrowing $i/$narrowN with $margin"
+      echoe -m $NAME "narrowing $i/$narrowN with $margin"
       margin=$(sleep-test $margin)
     done # }}}
     margin=$(sleep-test $margin "Verification")
-    echor "export SLEEP_PRECISE_MARGIN=$margin"
+    echoe -m $NAME "export SLEEP_PRECISE_MARGIN=$margin"
   } # }}}
   local stepsInRound=60
   while [[ ! -z $1 ]]; do # {{{
@@ -434,7 +433,7 @@ get-ts() { # @@ # {{{
   ms | ms.*) div=1000000;;
   us | us.*) div=1000;;
   ns)        div=1;;
-  *)         echorm 0 "Unsupported output format: '$out'"; return 1;;
+  *)         eval $(die "Unsupported output format: '$out'");;
   esac # }}}
   case $out in # {{{
   s.3  | s.ms)  fraction=1000000; digs=3;;
@@ -443,7 +442,7 @@ get-ts() { # @@ # {{{
   ms.3 | ms.us) fraction=1000     digs=3;;
   ms.6 | ms.ns) fraction=1;       digs=6;;
   us.3 | us.ms) fraction=1;       digs=3;;
-  *.*)          echorm 0 "Unsupported output format: '$out'"; return 1;;
+  *.*)          eval $(die "Unsupported output format: '$out'");;
   esac # }}}
   $addUnit && unitS="${out%%.*}"
   if [[ -z $fraction ]]; then # {{{

@@ -4,6 +4,8 @@ if [[ $1 == '@@' ]]; then # {{{
   echo "-d"
   br=$(git rev-parse --abbrev-ref HEAD)
   git branch --all | sed -n -e '/\/'"$br"'/s/remotes\///p'
+  git branch | cut -c3-
+  echo "- 1 2 3"
   exit 0
 fi # }}}
 source $BASH_PATH/essentials
@@ -11,10 +13,12 @@ ups="" showDiff=false shaHead= shaUps=
 [[ $1 == '-d' ]] && showDiff=true && shift
 if [[ -z $1 ]]; then
   ups="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
-elif [[ $1 == */* ]]; then
-  ups="$1"
+elif [[ $1 == - ]]; then
+  ups="HEAD~1"
+elif [[ $1 =~ ^[0-9]+$ ]]; then
+  ups="HEAD~$1"
 else
-  ups="$1/$(git rev-parse --abbrev-ref HEAD)"
+  ups="$1"
 fi
 [[ -z $ups ]] && exit 1
 shaUps=$(git log -1 --format='%H' $ups)

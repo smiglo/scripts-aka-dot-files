@@ -99,4 +99,3 @@ end
 define logoff
   set logging enabled off
 end
-

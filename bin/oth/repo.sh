@@ -77,7 +77,7 @@ for i in $repos; do
 done
 repos="$repos_tmp"
 cRepo= cBr= cDirty= cSha= cOff=
-git_log_params="--pretty=tb --graph"
+git_log_params="--pretty=default --graph"
 defaultParams="--dump-rev"
 # }}}
 [[ $@ = '-b' ]] && set -- $@ --repos -
@@ -227,7 +227,7 @@ for repo in $repos; do # {{{
           [[ -z $dumpRevTags || ! $br =~ $dumpRevTags ]] && break;;
         [0-9]*.[0-9]*.[0-9]*) break;;
         v[0-9]*.[0-9]*)       break;;
-        master)                         $isClean && break;;
+        master | main | trunk)          $isClean && break;;
         b/*)                            $isClean && break;;
         devel | next | origin/* | HEAD) $isClean && break;;
         tb/mods)                        $isClean && break;;
@@ -236,7 +236,7 @@ for repo in $repos; do # {{{
             [[ "$br" =~ [a-z]{2,}/[a-z]+-[0-9]+/ ]] && break
             $isClean && $dumpRevSkipClean && break 2
             [[ "$br" =~ m/[0-9a-z]{20,} ]] && $isClean && break 2
-            $dumpRevSkipMasters && [[ "$br" =~ master(~[0-9]*)? ]] && break 2
+            $dumpRevSkipMasters && [[ "$br" =~ (master|main|trunk)(~[0-9]*)? ]] && break 2
             $dumpRevSkipMasters && [[ ! -z $REPO_BROWSE_MASTER_BRANCH &&   "$br" =~ $REPO_BROWSE_MASTER_BRANCH ]] && break 2
             [[ ! -z $REPO_BROWSE_TAGS          &&   "$br" =~ $REPO_BROWSE_TAGS          ]] && break 2
             [[ ! -z $dumpRevTags               && ! "$br" =~ $dumpRevTags               ]] && break 2
@@ -262,7 +262,7 @@ for repo in $repos; do # {{{
             cat -
           fi
           i=
-          branchesMaster="master $REPO_BRANCHES_MASTER"
+          branchesMaster="master main trunk $REPO_BRANCHES_MASTER"
           branchesMasterOth= # $({ git branch; git tag; } | sed 's/^[ *]*//' | grep "^b/master/" | sort -r | head -n5)
           branchesSprint=$(git branch -a | sed -n -e 's|^ *remotes/||' -e '/[0-9]\{2\}Q[0-9]_sprint/p' | head -n10)
           tags=$(git tag | grep "tmp/b-*")
@@ -345,4 +345,3 @@ done | \
 if $exitOnFail; then # {{{
   exit $err
 fi # }}}
-

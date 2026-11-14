@@ -65,6 +65,7 @@ if [[ ! -z $PS1 ]]; then
     bind    '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
     bind    '"\C-l":      "'${pre}'\C-g clr\C-m"'
     bind -x '"\C-k\C-l":  "clr --hist"'
+    bind    '"\C-x\C-x":  "\C-g fg 2>/dev/null || true\C-m"'
   done
   unset i pre
   bind 'set editing-mode vi'
@@ -140,7 +141,6 @@ fi # }}}
 for profi in $BASH_PROFILES_FULL; do
   [[ -e $profi/cfg ]] && source $profi/cfg
 done
-export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
 # }}}
 # Setup PROMPT_COMMAND # {{{
 export PROMPT_COMMAND="PS1_env --save; PS1_setter; $PROMPT_COMMAND; PS1_env --restore"

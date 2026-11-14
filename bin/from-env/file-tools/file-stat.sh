@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor time-tools
+import-module time-tools
 
 _file-stat() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
@@ -40,7 +40,7 @@ _file-stat() { # @@ # {{{
   for f in $files; do
     fOrig="$f"
     [[ -h "$f" ]] && f="$(readlink -f "$f")"
-    [[ ! -e "$f" ]] && echor -c $verbose "File [$f] not exists" && err=1 && continue
+    [[ ! -e "$f" ]] && echoe $verbose "File [$f] not exists" && err=1 && continue
     case $mode in # {{{
     a | access)  value=$(command stat -c %X "$f");;
     c | create)  value=$(command stat -c %W "$f");;
@@ -48,7 +48,7 @@ _file-stat() { # @@ # {{{
     size)        value=$(command stat -c %s "$f");    [[ -z $format ]] && format="raw";;
     %*)          value=$(command stat -c $mode "$f"); [[ -z $format ]] && format="raw";;
     esac # }}}
-    [[ -z $value ]] && echor -c $verbose "No value for [$f]" && err=1 && continue
+    [[ -z $value ]] && echoe $verbose "No value for [$f]" && err=1 && continue
     $pretty && echo -n "$(cl file "$fOrig" - " : ")"
     case $format in # {{{
     relative | '') # {{{
@@ -63,4 +63,3 @@ _file-stat() { # @@ # {{{
   return $err
 } # }}}
 _file-stat "$@"
-

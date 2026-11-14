@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor time-tools
+import-module time-tools
 
 exec-verbose() { # {{{
   declare -a hide=()
@@ -50,6 +50,7 @@ exec-verbose() { # {{{
   else # {{{
     cmdDisp=( "${cmd[@]}" )
   fi # }}}
+  [[ ${cmdDisp[0]} != "eval" ]] || unset cmdDisp[0]
   $dry && verbose=true
   echoe $verbose "${cmdDisp[@]}"
   $dry && return
@@ -67,6 +68,7 @@ exec-verbose() { # {{{
     exec-verbose --put-return $err $tStart $dumpLastLine
     return $err
   )
+  echoe $verbose "BBB ${cmdDisp[@]}"
   return
 }
 export -f exec-verbose # }}}
@@ -96,7 +98,7 @@ brun-brun() { # @@:new # {{{
   fi # }}}
   $isOk || eval $(die "no brun support")
   local f= p= o= clangCmd="clang++ $CLANGPP_PARAMS $CLANG_PARAMS_COMMON $CLANG_PARAMS_W" run=true compile=true new_params= args= s= loop=false loop_delay=${BRUN_LOOP_DELAY:-2} key= modTime= sum= err= autoClear=true
-  local valgrind=false gdb=false
+  local valgrind=false gdb=false verbose=true
   local filesToCheck="$BRUN_CHECK_FILES"
   case $@ in # {{{
   --\ *) set -- --run ${BRUN_PARAMS%% -- *} $@;;
@@ -109,8 +111,8 @@ brun-brun() { # @@:new # {{{
   while [[ ! -z $1 ]]; do # {{{
     case $1 in # {{{
     # Internal switches # {{{
-    -q) echormf -M -;;&
-    -v) echormf -M +;;&
+    -q) verbose=false;;&
+    -v) verbose=true;;&
     -V) valgrind=true;;&
     -G) gdb=true;;&
     -R) BRUN_PARAMS=""; [[ -z $2 ]] && return 0;;&
@@ -126,7 +128,7 @@ brun-brun() { # @@:new # {{{
       shift; continue;; # }}}
     --conf) # {{{
       local conf="$(eval echo "\$BRUN_CONF_${2^^}")"
-      [[ -z "$conf" ]] && echor "Configuration not found" && return 1
+      [[ -z "$conf" ]] && eval $(die "Configuration not found")
       shift 2
       [[ ! -z "$1" ]] && conf="${conf%% -- *} --no-run"
       brun $s $conf $p
@@ -166,22 +168,13 @@ brun-brun() { # @@:new # {{{
     if [[ ! -z $fC ]]; then
       [[ -z $f || $(file-stat $fC) -gt $(file-stat $f) ]] && f=$fC
     fi
-    [[ -z $f ]] && echor "No file was found" && return 1
+    [[ -z $f ]] && eval $(die "No file was found")
     progress --msg "Auto chosen file [$f] proceed?" --key --dots --cnt 40 || return 0
     new_params+=" $f"
   fi # }}}
-  [[ ! -e $f ]] && echor "File [$f] does not exist" && return 1
+  [[ ! -e $f ]] && eval $(die "File [$f] does not exist")
   [[ ! -z $new_params ]] && export BRUN_PARAMS="$new_params"
   [[ -z $filesToCheck ]] && filesToCheck="$f"
-  local pushed=false
-  case $(echormf -f?; echo $?) in
-  10)
-    pushed=true
-    echormf --push
-    $loop && echormf -M - || echormf -M +
-    ;;
-  esac
-  $loop && compile=true && run=true && modTime="$(stat -c %Y $filesToCheck 2>/dev/null)" && sum="$(sha1sum $filesToCheck 2>/dev/null)"
   [[ -z "$COff" ]] && source $BASH_PATH/colors
   if [[ "$f" == *".sh" ]]; then
     o="${f/.\/}"
@@ -208,8 +201,9 @@ brun-brun() { # @@:new # {{{
     fi # }}}
     [[ $f == *.c && $clangCmd == *clang++* ]] && clangCmd+=" -Wno-deprecated"
   fi
+  $loop && compile=true && run=true && modTime="$(stat -c %Y $filesToCheck 2>/dev/null)" && sum="$(sha1sum $filesToCheck 2>/dev/null)"
   set-title "$(echo "${clangCmd/command }" | sed -e 's/-W[^ ]*//g' -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
-  local progr_colors=($CYellow $CPurple $CBlue   $CGreen ) progr_i=0 doClear=false first=true
+  local progr_colors=($CYellow $CPurple $CBlue   $CGreen ) progr_i=0 doClear=false
   local   msg_colors=($CBlue   $CGreen  $CYellow $CPurple)
   while true; do # {{{
     err=0 err_run=0
@@ -217,15 +211,15 @@ brun-brun() { # @@:new # {{{
     if $loop; then
       ( $doClear || $autoClear ) && clear
       doClear=false
-      echor -e -nh "${c}---------------${COff}\n${msg_colors[progr_i]}$(date +"$TIME_FMT"): Start${COff}\n${c}---------------${COff}"
+      echoe -m - "${c}---------------${COff}\n${msg_colors[progr_i]}$(date +"$TIME_FMT"): Start${COff}\n${c}---------------${COff}"
     fi
     ! $run && ! ${compile:-false} && compile=true
     $run && [[ ! -e $o ]] && compile=true
     if ${compile:-false} && [[ "$f" != *".sh" ]]; then # {{{
-      echormf "# Compiling as"
-      echormf "\$ $(echo "${clangCmd/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
+      echoe $verbose -m brun "# Compiling as"
+      echoe $verbose -m brun "\$ $(echo "${clangCmd/command }" | sed -e 's/  \+/ /g' -e 's/ $//') ${f# } ${p# }"
       rm -f $o
-      exec-verbose $clangCmd $f $p
+      exec-verbose false $clangCmd $f $p
       err=$?
     fi # }}}
     if $run && [[ $err == 0 ]]; then # {{{
@@ -237,17 +231,16 @@ brun-brun() { # @@:new # {{{
         confFileM="gdb.conf"
         cmd="gdb$([[ -e $confFileF ]] && echo " -x $confFileF")$([[ -e $confFileM ]] && echo " -x $confFileM") --args $cmd"
       fi
-      echormf "# Running as"
-      echormf "\$ $cmd ${args:-\b}"
-      exec-verbose $cmd $args
+      echoe $verbose -m brun "# Running as"
+      echoe $verbose -m brun  "\$ $cmd ${args:-\b}"
+      exec-verbose false $cmd $args
       err_run=$?
       err=$err_run
     fi # }}}
     ! $loop && break
-    $first && first=false && echormf --push && echormf -M -
     compile=
     [[ $err != 0 ]] && c="$CRed"
-    echor -n -nh "${c}---------------$([[ $err_run != 0 ]] && echor -nh " [$err_run]")${COff} "
+    echoe -n -m - "${c}---------------$( ((err_run)) && echo " [$err_run]")${COff} "
     progress --mark --color "${progr_colors[progr_i]}" --dots --delay 0.5
     progr_i="$(((progr_i+1)%${#progr_colors[*]}))"
     while true; do # {{{
@@ -270,8 +263,6 @@ brun-brun() { # @@:new # {{{
     done # }}}
     progress --unmark
   done # }}}
-  $loop && ! $first && echormf --pop
-  $pushed && echormf --pop
   [[ ! -z $state ]] && eval $(echo export $state)
   return $err
 } # }}}
@@ -635,14 +626,6 @@ getCommands() { # {{{
     fi
   done | sort -u
 } # }}}
-if [[ -z $BRUN_DEFAULT_COMMAND ]]; then # {{{
-  if [[ -n $BRUN_CMD_DEFAULT ]]; then
-    BRUN_DEFAULT_COMMAND="${commands[$BRUN_CMD_DEFAULT]:-$BRUN_CMD_DEFAULT}"
-  else
-    BRUN_DEFAULT_COMMAND="brun-brun"
-    [[ -e ./CMakeLists.txt ]] && BRUN_DEFAULT_COMMAND="brun-cmake"
-  fi
-fi # }}}
 # }}}
 
 declare -p BRUN_ENV >$BRUN_ENV_FILE
@@ -650,22 +633,36 @@ err=0
 trap "rm -f $BRUN_ENV_FILE; exit \$err;" INT TERM EXIT
 if [[ $1 == '@@' ]]; then # @@:new # {{{
   shift; cmd=
+  if [[ -z $BRUN_DEFAULT_COMMAND ]]; then # {{{
+    if [[ -n $BRUN_CMD_DEFAULT ]]; then
+      BRUN_DEFAULT_COMMAND="${commands[$BRUN_CMD_DEFAULT]:-$BRUN_CMD_DEFAULT}"
+    else
+      BRUN_DEFAULT_COMMAND="brun-brun"
+      [[ -e ./CMakeLists.txt ]] && BRUN_DEFAULT_COMMAND="brun-cmake"
+    fi
+  fi # }}}
   onlySwitches=true
   for i in ${@: 2}; do
     case $i in
+    --) onlySwitches=false; cmd=$i; break;;
     --* | '');;
     *) onlySwitches=false; cmd=$i; break;;
     esac
   done
-  if [[ $cmd == '-' ]]; then # {{{
+  case $cmd in
+  - | --) # {{{
+    case $cmd in
+    --) BRUN_DEFAULT_COMMAND="brun-brun";;
+    esac
     if is-installed $BRUN_DEFAULT_COMMAND; then
       $BRUN_DEFAULT_COMMAND @@ "$@"
     else
       echo "---"
     fi
     rm -f $BRUN_ENV_FILE
-    exit # }}}
-  elif [[ -n $cmd && $cmd != '--'* && -n ${commands[$cmd]} ]]; then # {{{
+    exit;; # }}}
+  esac
+  if [[ -n $cmd && $cmd != '--'* && -n ${commands[$cmd]} ]]; then # {{{
     ${commands[$cmd]} @@ "$@"
     exit
   fi # }}}
@@ -675,7 +672,7 @@ if [[ $1 == '@@' ]]; then # @@:new # {{{
     done
     getCommands --external
     [[ $cur == -* ]] && echo "--dry --verbose -v --dump --shell --log-file"
-    echo "-"
+    echo "- --"
   fi # }}}
   if is-installed $BRUN_DEFAULT_COMMAND; then
     $BRUN_DEFAULT_COMMAND @@ "$@"
@@ -705,6 +702,7 @@ while [[ -n $1 ]]; do # {{{
       echo "$input" >>$BRUN_SHELL_HIST_FILE
     done
     exit 0;; # }}}
+  *.c | *.cpp | *.sh) BRUN_DEFAULT_COMMAND="brun-brun"; break;;
   *) break;;
   esac; shift
 done # }}}
@@ -712,7 +710,20 @@ if [[ -n $1 && -n ${commands[$1]} ]]; then
   cmd="$1"; shift
   ${commands[$cmd]} "$@"
 else
-  [[ $1 == '-' ]] && shift
+  case $1 in
+  -) shift;;
+  --) # {{{
+    shift
+    BRUN_DEFAULT_COMMAND="brun-brun";; # }}}
+  esac
+  if [[ -z $BRUN_DEFAULT_COMMAND ]]; then # {{{
+    if [[ -n $BRUN_CMD_DEFAULT ]]; then
+      BRUN_DEFAULT_COMMAND="${commands[$BRUN_CMD_DEFAULT]:-$BRUN_CMD_DEFAULT}"
+    else
+      BRUN_DEFAULT_COMMAND="brun-brun"
+      [[ -e ./CMakeLists.txt ]] && BRUN_DEFAULT_COMMAND="brun-cmake"
+    fi
+  fi # }}}
   is-installed $BRUN_DEFAULT_COMMAND || die "command '$BRUN_DEFAULT_COMMAND' not found"
   $BRUN_DEFAULT_COMMAND "$@"
 fi

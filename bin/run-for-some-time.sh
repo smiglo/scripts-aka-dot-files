@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor time-tools
+import-module time-tools
 
 run-for-some-time() { # @@ # {{{
   if [[ $1 == @@ ]]; then
@@ -24,13 +24,12 @@ run-for-some-time() { # @@ # {{{
     --dbg=*)         dbgL=${1#--dbg=};;
     --wait) # {{{
       shift
-      local s=0
-      s=$(time2s ${1%:*} -o s)
+      local s=$(time2s ${1%%:*} -o s)
       cnt="${1#*:}"
-      [[ -z $cnd || $cnt == 0 ]] && cnt="1"
-      sleep_for="$(bc -l <<< "scale=3; $1/$2")"
-      cnt="$((${s:-0}*$cnt))"
-      [[ -z $cnt || cnt == 0 ]] && cnt=30
+      (( cnt )) || cnt=1
+      sleep_for="$(bc -l <<< "scale=3; 1/$cnt")"
+      cnt="$((${s:-1}*$cnt))"
+      (( cnt )) || cnt=30
       ;; # }}}
     esac
     shift
@@ -60,10 +59,10 @@ run-for-some-time() { # @@ # {{{
     done
     local err=0
     if command ps | command grep -q "$process_pid" 2>/dev/null; then
-      [[ $dbgL == 1 ]] && echor "killing main pid ($process_pid)"
+      echoe $(( dbgL >= 1 )) "killing main pid ($process_pid)"
       kill $process_pid >/dev/null 2>&1
     else
-      [[ $dbgL == 1 ]] && echor "nothing to kill"
+      echoe $((dbgL >= 1)) "nothing to kill"
       err=2
     fi
     return $err
@@ -71,18 +70,18 @@ run-for-some-time() { # @@ # {{{
   [[ -z $watchdog_cmd ]] && watchdog_cmd=$(echo "$cmd" | sed -e 's/^\(command\|eval\) \+//' -e 's/ .*//')
   case $dbgL in
   0) exec 3>&2; exec 2> /dev/null;;
-  1) echor "cmd=[$(eval echo "$cmd")], pid=[$$]"; echorv cnt sleep_for;;
+  1) echoe "cmd=[$(eval echo "$cmd")], pid=[$$]"; echoe "cnt=$cnt sleep_for=$sleep_for";;
   2) set -xv;;
   esac
   watchdog &
   watchdog_pid=$!
-  [[ $dbgL == 1 ]] && echorv watchdog_pid
+  echoe $(( dbgL >= 1 )) "watchdog_pid=$watchdog_pid"
   eval $cmd; cmd_return=$?
   wait $watchdog_pid
   local interrupted_by_watchdog=$(test $? == 0 && echo true || echo false)
-  [[ $dbgL == 1 ]] && echorv -nl cmd_return interrupted_by_watchdog
+  echoe $((dbgL >= 1)) "cmd_return=$cmd_return interrupted_by_watchdog=$interrupted_by_watchdog"
   if command ps | command grep -q $watchdog_pid; then
-    [[ $dbgL == 1 ]] && echor "killing watchdog [$watchdog_pid]"
+    echoe $((dbgL >= 1)) "killing watchdog [$watchdog_pid]"
     kill $watchdog_pid
   fi
   unset watchdog

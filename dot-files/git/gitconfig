@@ -3,19 +3,18 @@
 [user] # {{{
   useConfigOnly = true # }}}
 [core] # {{{
-  fsmonitor = false
-  editor = vim --fast-save
-  # pager = less -RXx4
-  pager = delta
-  excludesfile = ~/.gitignore
   autocrlf = input
+  editor = vim --fast-save
+  excludesfile = ~/.gitignore
+  fsmonitor = false
+  hooksPath = ~/.git_template/hooks
+  pager = delta
+  # pager = less -RXx4
   safecrlf = warn
   whitespace = space-before-tab, -indent-with-nontab, tab-in-indent, blank-at-eof,tailing-space, tabwidth=2 # }}}
 [init] # {{{
   templatedir = ~/.git_template
   defaultBranch = main # }}}
-[include] # {{{
-  path = ~/.runtime/gitconfig # }}}
 [interactive] # {{{
   singleKey = true
   diffFilter = delta --color-only # }}}
@@ -146,7 +145,7 @@
 [diff "bin"] # {{{
   textconv = hexdump -v -C # }}}
 [difftool "vimdiff"] # {{{
-  cmd = vimdiffgit $LOCAL $REMOTE
+  cmd = _vimdiffgit $LOCAL $REMOTE
   trustExitCode = true # }}}
 [difftool "kdiff3"] # {{{
   path = kdiff3
@@ -168,7 +167,7 @@
 # }}}
 # external # {{{
 [delta] # {{{
-  hyperlinks = true
+  hyperlinks = false
   line-numbers = true
   decorations = true
   navigate = true
@@ -206,3 +205,5 @@
   required = true # }}}
 # }}}
 # }}}
+[include] # {{{
+  path = ~/.runtime/gitconfig # }}}

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-
 doClean=false
 doCleanImage=false
 doCommit=false
@@ -42,7 +40,7 @@ if $doStatic; then
 fi
 
 if $doClean; then # {{{
-  echor "Cleaning $cName..."
+  echoe "Cleaning $cName..."
   if ! $doCleanImage; then
     $ENV_SCRIPTS/docker-tools/docker.sh rm $cName
   else
@@ -50,35 +48,33 @@ if $doClean; then # {{{
   fi
 fi # }}}
 
-echor "Building $cName // $iName..."
+echoe "Building $cName // $iName..."
 
-dockerCmd="docker"
-
-$dockerCmd build \
+docker build \
   $platform \
   --build-arg UID=$(id -u) \
   --build-arg GID=$(id -g) \
   --build-arg SCRIPT_PATH=${SCRIPT_PATH#$HOME\/} \
   -t $iName . || die docker "Fail: build"
 
-echor "Running $cName..."
+echoe "Running $cName..."
 $ENV_SCRIPTS/docker-tools/docker.sh run $platform --no-start $($doStatic && echo "--static") $cName $iName || die docker "Fail: run"
 
 if $doCommit; then # {{{
-  echor "Committing $iName..."
-  $dockerCmd commit $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: commit"
+  echoe "Committing $iName..."
+  docker commit $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: commit"
   if $doAdvance; then # {{{
     if $doRemove; then
       $ENV_SCRIPTS/docker-tools/docker.sh rm $cName
     else
       $ENV_SCRIPTS/docker-tools/docker.sh rm $cName-prev || true
-      $dockerCmd container rename $cName $cName-prev || die docker "Fail: cannot rename"
+      docker container rename $cName $cName-prev || die docker "Fail: cannot rename"
     fi
     $ENV_SCRIPTS/docker-tools/docker.sh run --no-start $cName $iName$($doStatic && echo ":static" || echo ":latest") || die docker "Fail: run(2)"
   fi # }}}
 fi # }}}
 
 if $doStart; then # {{{
-  echor "Starting $iName..."
+  echoe "Starting $iName..."
   $ENV_SCRIPTS/docker-tools/docker.sh start $cName || die docker "Fail: start"
 fi # }}}

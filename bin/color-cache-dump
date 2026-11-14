@@ -1,7 +1,5 @@
 # vim: filetype=sh fdl=0
 
-import-module echor
-
 color-cache-dump() { # {{{
   if [[ $1 == @@ ]]; then # {{{
     echo "-f --full"
@@ -14,7 +12,7 @@ color-cache-dump() { # {{{
     -f | --full) full=true;;
     esac; shift
   done
-  echor -C "%yellow:{colorCache}:"
+  echoe -C "%yellow:{colorCache}:"
   for i in $(echo "${!colorCache[*]}" | tr ' ' '\n' | sort); do
     if ! $full; then
       [[ $i =~ ^C[A-Z].+ && ! -z ${!i} ]] && continue
@@ -31,43 +29,42 @@ color-cache-dump() { # {{{
       continue
     fi
     if [[ $i =~ ^C[A-Z] ]]; then
-      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+      echoe "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
     else
       if [[ ! -z $colors_cb ]]; then
         local ii=
         for ii in $colors_cb; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+          echoe "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
         done
         colors_cb=
       fi
       if [[ ! -z $colors_cbi ]]; then
         local ii=
         for ii in $colors_cbi; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+          echoe "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
         done
         colors_cbi=
       fi
       if [[ ! -z $colors_ci ]]; then
         local ii=
         for ii in $colors_ci; do
-          echor "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
+          echoe "  $(printf "%${w1}s" "$ii") : -- $(printf "$(get-color $ii)%${w2}s$cOff" "$ii") --"
         done
         colors_ci=
       fi
-      echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+      echoe "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
     fi
   done
-  echor -C "%yellow:{COLORS}:"
+  echoe -C "%yellow:{COLORS}:"
   for i in $(echo "${!COLORS[*]}" | tr ' ' '\n' | sort); do
-    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+    echoe "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
   done
-  echor -C "%yellow:{colorMap} (user):"
+  echoe -C "%yellow:{colorMap} (user):"
   for i in $(echo "${!colorMap[*]}" | tr ' ' '\n' | sort); do
-    echor "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
+    echoe "  $(printf "%${w1}s" "$i") : -- $(printf "$(get-color $i)%${w2}s$cOff" "$i") --"
   done
 } # }}}
 
 if ! is-sourced; then
   color-cache-dump "$@"
 fi
-

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-
 if [[ $1 == '@@' ]]; then # @@:new # {{{
   case $2 in
   -f | --from) echo "@@-d";;
@@ -85,7 +83,7 @@ fi # }}}
 [[ -e $from ]] || die -s=!$verbose "from [$from] not exists"
 [[ ! -z $what ]] || die -s=!$verbose "no entries"
 
-[[ -z $FROM ]] && echor -c $verbose "export FROM=\"$from\""
+[[ -z $FROM ]] && echoe $verbose "export FROM=\"$from\""
 
 cwd="."
 $fullPath && from="$(realpath "$from")" && cwd="$(realpath "$cwd")"

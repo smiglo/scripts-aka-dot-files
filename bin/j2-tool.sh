@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
 j2-tool() { # {{{
   __j2_getSections() { # {{{
     [[ -z "$fileContent" ]] && return
@@ -84,7 +83,7 @@ j2-tool() { # {{{
   fi # }}}
   [[ -e "$ticketFile" ]] && fileContent="$(< "$ticketFile")"
   sections="$(__j2_getSections)"
-  ${J2_DBG:-false} && echormf +
+  local verbose=${J2_DBG:-false}
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
     --use-full-j) # {{{
@@ -104,7 +103,7 @@ j2-tool() { # {{{
 				EOF
       return 0;; # }}}
     --dbg) # {{{
-      echormf +;; # }}}
+      verbose=true;; # }}}
     -e | --edit) # {{{
       [[ -e "$ticketFile" ]] || j --create
       vim "$ticketFile" </dev/tty
@@ -123,20 +122,20 @@ j2-tool() { # {{{
   [[ -e "$ticketFile" ]] || eval $(die "no ticket file")
   [[ -z $section ]] && section="$J2_SECTION_DEFAULT"
   [[ " $sections "  == *" $section "* ]] || eval $(die "section [$section] not found")
-  echormf "section: [$section], sections: [$sections]"
+  echoe $verbose "section: [$section], sections: [$sections]"
   section_bash="$(__j2_getSection "$section")"
-  echormf "cmd=$cmd, args=$@"
-  echormf "$section_bash"
+  echoe $verbose "cmd=$cmd, args=$@"
+  echoe $verbose "$section_bash"
   local tPwd="$(realpath "$(dirname "$ticketFile")")"
   if [[ $cmd != *'+'* ]]; then
-    bash -c "cmd='$cmd'; tPwd='$tPwd'; echorm --name 'j:$section' +; $section_bash" - "$@"
+    bash -c "cmd='$cmd'; tPwd='$tPwd'; $section_bash" - "$@"
     err=$?
   else
     cmds="$cmd"
     while true; do
       cmd="${cmds%%+*}" && cmds=${cmds#$cmd+}
-      echormf "cmd=$cmd, cmd-rest=$cmds"
-      bash -c "cmd='$cmd'; tPwd='$tPwd'; echorm --name 'j:$section' +; $section_bash" - ""
+      echoe $verbose "cmd=$cmd, cmd-rest=$cmds"
+      bash -c "cmd='$cmd'; tPwd='$tPwd'; $section_bash" - ""
       err=$?
       [[ $err == 0 ]] || break
       [[ $cmd == $cmds ]] && break

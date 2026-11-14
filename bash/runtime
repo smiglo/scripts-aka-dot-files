@@ -243,6 +243,7 @@ if [[ -z $PRJ_PATH ]]; then
     mkdir -p "$PRJ_PATH"
   fi
 fi
+[[ -z $W_PATH ]] && export W_PATH="$PRJ_PATH"
 [[ -z $WORKSPACE ]] && export WORKSPACE="$PRJ_PATH"
 export W=$WORKSPACE
 # vim - ycm # {{{
@@ -262,85 +263,20 @@ fi # }}}
 # }}}
 # Sharable setup # {{{
 if [[ -z $SHARABLE_PATH ]]; then # {{{
-  sPaths="$HOME/Documents/misc $HOME/Documents/priv/misc $TMP_MEM_PATH/share"
+  sPaths="$HOME/share $TMP_MEM_PATH/share"
+  $IS_DOCKER && sPaths="$HOME/share $HOST/share $TMP_MEM_PATH/share"
   for SHARABLE_PATH in $sPaths; do
     [[ -e $SHARABLE_PATH ]] && break
   done
   unset sPaths
 elif [[ $SHARABLE_PATH == '-' ]]; then
   SHARABLE_PATH=
-  SHARED_BASH_PATH=
 fi # }}}
-if [[ ! -z $SHARABLE_PATH ]] && ! $IS_DOCKER; then # {{{
-  export SHARABLE_REAL=${SHARABLE_REAL:-true}
-  connectivity=false
-  if $SHARABLE_REAL; then
-    if [[ -e $BASHRC_RUNTIME_PATH/net.status ]]; then # {{{
-      source $BASHRC_RUNTIME_PATH/net.status
-    fi # }}}
-  fi
-  ${SHARABLE_PRINT_MOUNTED_MSG:-false} && import-module echor
-  if $connectivity || ! $SHARABLE_REAL; then # {{{
-    if $SHARABLE_REAL && ( $BASHRC_FULL_START || [[ $1 == '--mnt-sharable' ]] ); then # {{{
-      [[ $1 == '--mnt-sharable' ]] && shift && rm -f $BASHRC_RUNTIME_PATH/sharable.conf $BASHRC_RUNTIME_PATH/sharable-runtime.bash
-      [[ -e $BASHRC_RUNTIME_PATH/sharable.conf ]] && source $BASHRC_RUNTIME_PATH/sharable.conf
-      [[ ! -n $TMUX ]] && export CD_LAST_DIRS_STORED+=":shr@$SHARABLE_PATH"
-      if ${SHARABLE_USE_FUSE:-true} && ! $IS_MAC && [[ ! -e $BASHRC_RUNTIME_PATH/sharable.conf ]]; then # {{{
-        if ${SHARABLE_USE_FUSE_DIRECTLY:-false}; then
-          [[ -e $SHARABLE_PATH/.mounted ]] || { echoe -m runtime "Starting ocamlfuse: $USE_FUSE_LABEL"; google-drive-ocamlfuse -label $USE_FUSE_LABEL $SHARABLE_PATH; }
-        else
-          if [[ -e $HOME/.config/systemd/user/sharable-gd.service ]]; then
-            [[ -e $SHARABLE_PATH/.mounted ]] || { echoe -m runtime "Starting sharable-gd"; command systemctl --user start sharable-gd; }
-          fi
-          if [[ -e $HOME/.config/systemd/user/sharable-gd-tb.service ]] && ${SHARABLE_MOUNT_TB:-false}; then
-            mntDir="$(awk '/ExecStart=google-drive-ocamlfuse/{print $4}' "$HOME/.config/systemd/user/sharable-gd-tb.service")"
-            if [[ -d $mntDir ]]; then
-              [[ -e $mntDir/.mounted ]] || { echoe -m runtime "Starting sharable-gd-tb"; command systemctl --user start sharable-gd-tb; }
-            fi
-          fi
-        fi
-        ${SHARABLE_PRINT_MOUNTED_MSG:-false} && echoe -m runtime "Checking if mounted..."
-        if [[ -e $SHARABLE_PATH/.mounted ]]; then
-          touch $BASHRC_RUNTIME_PATH/sharable.conf
-        else
-          ${SHARABLE_PRINT_MOUNTED_MSG:-false} && echoe -m runtime "Sharable [$SHARABLE_PATH] not mounted"
-        fi
-      fi # }}}
-      if [[ ! -e $BASHRC_RUNTIME_PATH/sharable-runtime.bash ]]; then # {{{
-        touch $BASHRC_RUNTIME_PATH/sharable-runtime.bash
-        touch $BASHRC_RUNTIME_PATH/sharable.conf
-        if [[ -d $SHARABLE_PATH/sharable/bash-utils ]]; then
-          export SHARED_BASH_PATH=$SHARABLE_PATH/sharable/bash-utils
-          echo "SHARED_BASH_PATH=$SHARED_BASH_PATH" >>$BASHRC_RUNTIME_PATH/sharable.conf
-        fi
-        if [[ ! -z $SHARED_BASH_PATH ]]; then
-          if [[ -e $SHARED_BASH_PATH/runtime.bash ]]; then
-            cp $SHARED_BASH_PATH/runtime.bash $BASHRC_RUNTIME_PATH/sharable-runtime.bash
-            source $BASHRC_RUNTIME_PATH/sharable-runtime.bash
-          fi
-        fi
-      fi # }}}
-      source $BASHRC_RUNTIME_PATH/sharable-runtime.bash # }}}
-    elif $SHARABLE_REAL; then # {{{
-      [[ -e $BASHRC_RUNTIME_PATH/sharable.conf ]] && source $BASHRC_RUNTIME_PATH/sharable.conf
-      [[ -e $BASHRC_RUNTIME_PATH/sharable-runtime.bash ]] && source $BASHRC_RUNTIME_PATH/sharable-runtime.bash # }}}
-    else # {{{
-      if [[ -d $SHARABLE_PATH/sharable/bash-utils ]]; then
-        export SHARED_BASH_PATH=$SHARABLE_PATH/sharable/bash-utils
-      fi
-      [[ -e $SHARED_BASH_PATH/runtime.bash ]] && source $SHARED_BASH_PATH/runtime.bash
-    fi # }}}
-  else
-    ${SHARABLE_PRINT_MOUNTED_MSG:-false} && echoe -m runtime "Sharable skipped due to lack of connectivity"
-  fi # }}}
-  unset connectivity
-fi # }}}
-export SHARABLE_PATH SHARED_BASH_PATH
-# }}}
+if [[ -n $SHARABLE_PATH ]]; then
+  [[ -e $SHARABLE_PATH ]] || command mkdir -p "$SHARABLE_PATH"
+fi
+export SHARABLE_PATH # }}}
 # Tmp/Mem/Tmux setup # {{{
-export CD_LAST_DIRS_STORED+=":T@$TMP_PATH"
-export CD_LAST_DIRS_STORED+=":Tm@$TMP_MEM_PATH"
-[[ -e $HOME/Desktop/mem ]] && export CD_LAST_DIRS_STORED+=":m@$HOME/Desktop/mem"
 # UTILS # {{{
 set-utils() { # {{{
   local hidden=

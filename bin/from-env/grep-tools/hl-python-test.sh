@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-
 mode="1"
 showCmd=false
 while [[ ! -z $1 ]]; do # {{{
@@ -14,7 +12,7 @@ while [[ ! -z $1 ]]; do # {{{
   all) # {{{
     shift
     for i in 1 2 3; do
-      echor "$ $0 $i $@"
+      echoe "$ $0 $i $@"
       $0 $i --show-cmd "$@" || exit 1
       echo
     done
@@ -31,8 +29,8 @@ case $mode in
   params="-D"
   [[ $pCli == *"+D"* ]] && params="${params/-D}" && pCli=${pCli/+D}
   case $mode in # {{{
-  1) echor -c $showCmd "$ hl.py $params -p green \"al.*a\" -p blue \"al\.\" -p yellow \"ma\" -p red \"bog.*m\" --no-embed -p green \"dan\" $pCli\n";;
-  2) echor -c $showCmd "$ hl.py $params \"al.*a\" \"al\.\" \"ma\" \"bog.*m\" --no-embed \"dan\" $pCli\n";;
+  1) echoe $showCmd "$ hl.py $params -p green \"al.*a\" -p blue \"al\.\" -p yellow \"ma\" -p red \"bog.*m\" --no-embed -p green \"dan\" $pCli\n";;
+  2) echoe $showCmd "$ hl.py $params \"al.*a\" \"al\.\" \"ma\" \"bog.*m\" --no-embed \"dan\" $pCli\n";;
   esac # }}}
   cat <<-EOF |
 		ala ma kota
@@ -50,7 +48,7 @@ case $mode in
   esac;; # }}}
 3) # {{{
   [[ $pCli == *"+D"* ]] && pCli=${pCli/+D}
-  echor -c $showCmd "$ hl.py $pCli\n"
+  echoe $showCmd "$ hl.py $pCli\n"
   cat <<-EOF |
 		message TB] II normal # {{{ here and here # }}}
 		message TB] IMP important # {{{ here and here # }}}
@@ -67,4 +65,3 @@ case $mode in
 	EOF
   python hl.py $pCli;; # }}}
 esac
-

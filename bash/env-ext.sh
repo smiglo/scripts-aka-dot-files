@@ -19,7 +19,7 @@ get-plugins) # {{{
   done
   ret+=" $inProfiles"
   [[ -e $APPS_CFG_PATH/$file ]] && ret+=" $APPS_CFG_PATH/$file"
-  echo "$ret"
+  echo "$ret" | xargs
   exit 0;; # }}}
 call) # {{{
   all=false

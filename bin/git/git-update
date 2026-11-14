@@ -5,8 +5,20 @@ topDir="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 if [[ $1 == "@@" ]]; then # @@:new # {{{
   [[ -n $topDir ]] || { echo "---"; exit; }
-  echo "- -f"
-  git remote
+  branches=$(git for-each-ref --format="%(refname:short)" refs/heads/ 2>/dev/null)
+  remotes=$(git remote 2>/dev/null)
+  case $2 in
+  -b) echo "$branches";;
+  -r) echo "$remotes";;
+  *)
+    last=${@: -1}
+    if [[ $@ == *' -r '* ]] || echo "$remotes" | grep -q "^$last$"; then
+      git for-each-ref --format="%(refname:short)" refs/heads/
+    else
+      echo "- -f -s --subm --no-subm -r -b"
+      echo "$remotes"
+    fi
+  esac
   exit
 fi # }}}
 
@@ -15,14 +27,31 @@ fi # }}}
 declare -A branches=()
 remote=
 force=false
+forceAsk=true
+subm=
+args=( "$@" )
+ts=$EPOCHSECONDS
 
 while [[ -n $1 ]]; do # {{{
   case $1 in
+  -b) branches+=( "$2" ); shift;;
+  -r) remote="$2"; shift;;
   -f) force=true;;
+  --no-subm) subm=false;;
+  -s | --subm) subm=true;;
   -) branches="-";;
+  ---in-submodule)
+    ts="$2"; shift
+    source $BASH_PATH/essentials
+    echoe "updating $CGreen${PWD##*/}$COff";;
   *) [[ -z $remote ]] && remote="$1" || branches+=( "$1" );;
   esac; shift
 done # }}}
+
+[[ -n $subm ]] || case $PWD in
+$SCRIPT_PATH) subm=${GIT_UPDATE_SUBM_SCRIPTS:-false};;
+*) subm=false;;
+esac
 
 if [[ $branches == "-" ]]; then # {{{
   [[ -n $remote ]] || remote="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)"
@@ -44,10 +73,10 @@ if [[ -z $branches ]]; then # {{{
   done < <(git for-each-ref --format='%(refname:short)	%(upstream:short)' refs/heads/)
 fi # }}}
 
-[[ -n $branches ]] || die "no branches tracked to $remote"
-
-echoe "fetching $remote"
+echoe "$CYellow$remote$COff: fetching"
 git fetch $remote >/dev/null 2>&1 || die "cannot fetch"
+
+[[ -n $branches ]] || die "no branches tracked to $remote"
 
 for branch in $branches; do # {{{
   branchRemote="$(git rev-parse --abbrev-ref --symbolic-full-name $branch@{u} 2>/dev/null)"
@@ -56,11 +85,33 @@ for branch in $branches; do # {{{
   shaR="$(git log -1 --format='%H' $src 2>/dev/null)"
   [[ -n $shaR ]] || continue
   [[ $shaB != $shaR ]] || continue
-  git merge-base --is-ancestor $shaB $shaR || $force || echoe "skipping (notFF) $branch"
-  echoe "updating $branch"
+  ! git merge-base --is-ancestor $shaR $shaB || { echoe "skipping (newer) $CBlue$branch$COff"; continue; }
+  msgSha="$CGray(${shaB:0:7} -> ${shaR:0:7})$COff"
+  msgBranch="$CBlue$branch$COff"
+  if git merge-base --is-ancestor $shaB $shaR; then
+    echoe "$msgBranch: updating $msgSha"
+  else
+    if ! $force && $forceAsk; then
+      progress --wait 5s --msg "do force update" --err-on-timeout && force=true
+      forceAsk=false
+    fi
+    if $force; then
+      git tag-sync -r $shaB +last $ts
+      echoe "$msgBranch: updating (hard) $msgSha"
+    else
+      echoe "$msgBranch: ${CRed}skipping${COff} (notFF)"
+      continue
+    fi
+  fi
   if [[ "$branch" == "$currentBranch" ]]; then
+    stashed=$(git stash-toggle push)
     git reset --hard $src >/dev/null
+    git stash-toggle pop $stashed
   else
     git branch -f $branch $src >/dev/null
   fi
 done # }}}
+
+if $subm; then # {{{
+  git submodule --quiet foreach "git update ---in-submodule $ts ${args[@]}"
+fi # }}}

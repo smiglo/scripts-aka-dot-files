@@ -13,18 +13,46 @@ if [[ $1 == '@@' ]]; then # {{{
   --pane) echo "PANE";;
   --pid) echo "PID";;
   *)
-    echo "--check-cmd -n -every"
-    echo "--background-cmd -C"
-    echo "--init-p --no-info --no-err --step -f --file-marker"
-    echo "--pane --pid"
-    echo "-w --wait 1m 5m 30m";;
+    compl-get-args <$0
+    echo "1m 5m 30m";;
   esac
   exit 0
 fi # }}}
 
+get-pid-from-pane() { # {{{
+  local pane=$1
+  local pidPane="$(tmux display-message -t "$pane" -pF '#{pane_pid}')" pid=
+  [[ -n $pidPane ]] || eval $(die -r "cannot get pid for '$pane'")
+  if $IS_MAC; then
+    pid="$(pgrep -P $pidPane | head -n1)"
+  else
+    pid="$(ps -g $pidPane -o "pid=" | sed -n 2p)"
+  fi
+  [[ -n $pid ]] || eval $(die -r "cannot get child process of $pidPane in '$pane'")
+  echo "$pid"
+} # }}}
+clean-up() { # {{{
+  if [[ ! -z $workerCmdPid ]]; then # {{{
+    kill-rec $workerCmdPid 2>/dev/null
+    wait $workerCmdPid
+  fi # }}}
+  if [[ -n $fileMarker ]]; then
+    rm -f $fileMarker
+  fi
+  $reportError || exit 0
+  exit $exitVal
+} # }}}
+do-dot() { # {{{
+  ! $silent || return 0
+  progress-dot "$@"
+} # }}}
+print-remaing() { # {{{
+  echo "$((t_end - EPOCHSECONDS))"
+}; export -f print-remaing # }}}
+
 import-module progress time-tools
 
-delay="5m"
+delay=
 checkCmd=
 workerCmd=
 workerCmdPid=
@@ -37,6 +65,7 @@ step=1.0
 pid=
 pidCmd=
 exitVal=0
+silent=false
 
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
@@ -48,34 +77,40 @@ while [[ ! -z $1 ]]; do # {{{
   --init-p) params+=" $2"; shift;;
   --no-err) reportError=false;;
   --no-info) showInfo=false;;
+  -s) silent=true;;
+  -ss) silent=true; showInfo=false;;
   --step) step="$2"; shift;;
+  -w | --wait) delay="$2"; shift;;
   --pane) # {{{
-    pidPane="$(tmux display-message -t "$2" -pF '#{pane_pid}')"
-    [[ -n $pidPane ]] || die "cannot get pid for '$2'"
-    if $IS_MAC; then
-      pid="$(pid-tree $pidPane | sed -n 2p)"
-    else
-      pid="$(ps -g $pidPane -o "pid=" | sed -n 2p)"
-    fi
-    [[ -n $pid ]] || die "cannot get child process of $pidPane in '$2'"
-    delay="3h"
+    pid=$(get-pid-from-pane $2) || exit 1
+    [[ -z $delay ]] && delay="3h"
     shift;; # }}}
   --pid) # {{{
     pid="$2"
-    delay="3h"
+    [[ -z $delay ]] && delay="3h"
     shift;; # }}}
-  -w | --wait) delay="$2"; shift;;
-  *) delay=$1;;
+  *) # {{{
+    if [[ $1 =~ .*\.[0-9]+$ ]]; then
+      pid=$(get-pid-from-pane $1) || exit 1
+      [[ -z $delay ]] && delay="3h"
+    elif [[ $1 =~ ^[0-9]+$ ]] || time2s --is-hms $1; then
+      delay="$1"; shift $#
+    else
+      pid=$($ENV_SCRIPTS/tmux/tm.sh --pids -a | awk '$3 ~ /^'"$1"'/ {print $1}' | head -n1)
+      [[ -n $pid ]] || die "cannot find running command '^$1'"
+      [[ -z $delay ]] && delay="3h"
+    fi;; # }}}
   esac; shift
 done # }}}
+[[ -z $delay ]] && delay="15m"
 
-if [[ -n $pid ]]; then
+if [[ -n $pid ]]; then # {{{
   if $IS_MAC; then
     pidCmd="ps xa -o pid= | grep -q '^\s*${pid}$'"
   else
     pidCmd="pgrep --quiet -p $pid"
   fi
-fi
+fi # }}}
 [[ -z $fileMarker ]] || rm -f $fileMarker
 
 if [[ ! -z $workerCmd ]]; then # {{{
@@ -83,64 +118,54 @@ if [[ ! -z $workerCmd ]]; then # {{{
   workerCmdPid=$!
 fi # }}}
 
-clean-up() { # {{{
-  if [[ ! -z $workerCmdPid ]]; then # {{{
-    kill-rec $workerCmdPid 2>/dev/null
-    wait $workerCmdPid
-  fi # }}}
-  if [[ -n $fileMarker ]]; then
-    rm -f $fileMarker
-  fi
-  $reportError || exit 0
-  exit $exitVal
-} # }}}
 trap "clean-up" INT EXIT
+trap "print-remaing" USR1
 
 delay=$(time2s $delay -o s)
 t_end=$((EPOCHSECONDS + $delay))
 $showInfo && printfc "%ts:%s: end at %info:%s$([[ -n $pid ]] && printfc "/pid:%info:%s" $pid), pid: %purple:%s" "$(date +$TIME_FMT -d @$EPOCHSECONDS)" "$(date +$TIME_FMT -d @$t_end)" "$$"
 
 endReason="timeout"
-progress-dot --init $params --end $t_end
+do-dot --init $params --end $t_end
 for ((i=1; EPOCHSECONDS < t_end; i++)); do # {{{
   sleep-precise -s
   if [[ ! -z $pidCmd || ! -z $fileMarker || ! -z $checkCmd ]] && (($i % $cmd_n == 0)); then
     if [[ -n $pidCmd ]] && ! eval "$pidCmd" >/dev/null 2>&1; then
-      progress-dot --dot=err
+      do-dot --dot=err
       endReason="pidCmd"; break
     fi
     if [[ ! -z $fileMarker && -e $fileMarker ]]; then
-      progress-dot --dot=err
+      do-dot --dot=err
       endReason="fileMarker"; break
     fi
     if [[ -n $checkCmd ]] && ! eval "$checkCmd" >/dev/null 2>&1; then
-      progress-dot --dot=err
+      do-dot --dot=err
       endReason="checkCmd"; break
     fi
     if (( cmd_n == 1 )); then
-      progress-dot --dot
+      do-dot --dot
     else
-      progress-dot --dot=ok
+      do-dot --dot=ok
     fi
   else
-    progress-dot --dot
+    do-dot --dot
   fi
   read -t $(sleep-precise -i 1) -s -n1 key </dev/tty && case ${key,,} in
-  q) progress-dot --dot=cyan:sep-x@UC; endReason="break"; break;;
+  q) do-dot --dot=cyan:sep-x@UC; endReason="break"; break;;
   esac
 done # }}}
 
 case $endReason in # {{{
 checkCmd | pidCmd | fileMarker)
-  progress-dot --end
+  do-dot --end
   exitVal=0;;
 break)
-  progress-dot --end=Q
+  do-dot --end=Q
   exitVal=1;;
 timeout)
-  progress-dot --end=T
+  do-dot --end=T
   exitVal=10;;
 *)
-  progress-dot --end=?
+  do-dot --end=?
   exitVal=2;;
 esac # }}}

@@ -103,7 +103,7 @@ reschedule() { # {{{
       cond="[[ $today -gt $((10#${w#* after })) ]]"
       w="${w% after *}";; # }}}
     esac
-    $dbg && echorv -nl t w cond
+    echoe $dbg "t=[$t] w=[$w] cond=[$cond]"
     if [[ $w == *' @:'* ]]; then # {{{
       extraLLCmd="${w##* @:}" && extraLLCmd="${extraLLCmd# }"
       w="${w% @:*}" # }}}
@@ -124,9 +124,9 @@ reschedule() { # {{{
     P\ *)   w="${w#P }" ; action="pause.sh '$w'";;
     *)      action="pause.sh '$w'";;
     esac
-    $dbg && echorv -nl w action extraLLCmd
+    echoe $dbg "w=[$w] action=[$action] extraLLCmd=[$extraLLCmd]"
     if ! eval "$cond"; then # {{{
-      $dbg && echor "cond-NOK"
+      echoe $dbg "cond-NOK"
       if [[ ! -z $checkForRemval && $today -gt $checkForRemval ]]; then
         local name="Fix-schedule-${days[dow]}-$t"
         do-action "$reminder_cmd -s '$name' '$(time2s 10m)'" if-not-found "$name\$" 'in' "$reminder_cmd --list"
@@ -202,6 +202,8 @@ add_entry() { # {{{
           tEnd=$(printf "%02d:%02d" "$((10#${tEnd%%:*}))" "$((10#${tEnd#*:}))")
           tWork=
         fi; shift
+        [[ $tStart =~ ^[0-9]+$ ]] && tStart="$tStart:00"
+        [[ $tEnd   =~ ^[0-9]+$ ]] && tEnd="$tEnd:00"
         case $1 in
         '') ;;
         w*) tWork=${1#w};;
@@ -240,7 +242,7 @@ add_entry() { # {{{
         fi
       fi
     fi # }}}
-    [[ -z $tPause ]] && tPause=${LOGLAST_ADD_DEFAULT_PAUSE:-30}
+    [[ -z $tPause ]] && tPause=${LOGLAST_ADD_DEFAULT_PAUSE:-0}
     if [[ -z $date ]]; then # {{{
       local nextDay=true
       date="${entryDate:-$today}"
@@ -317,7 +319,7 @@ loglast() { # {{{
   local inactivity_delta=$((15*60)) pause_lock_delta=$((15*60)) pause_msg_delta=$((10*60)) paused_suspend_delta=$((30*60)) overtime_delta=$((20*60))
   local inactivity_f=$MEM_KEEP/locks/ssh-lock
   local pause_char="$(get-unicode-char 'pause')" normal_char="$(get-unicode-char 'play')"
-  local iconOk="$(get-unicode-char 'icon-ok')" iconNok="$(get-unicode-char 'icon-err')"
+  local iconOk="$(get-unicode-char 'icon-ok')" iconNok="$(get-unicode-char 'icon-err')" verbose=false
   local reminder_cmd="$SCRIPT_PATH/bin/oth/reminder-loglast.sh"
   is-installed rlwrap || isRlWrap=false
   # Vars cleared in reset_vars() # {{{
@@ -332,6 +334,7 @@ loglast() { # {{{
   [[ -z $1 ]] && set -- --default
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
+    -v) verbose=true;;
     --add-entry) # {{{
       shift
       add_entry "$@"
@@ -371,10 +374,9 @@ loglast() { # {{{
     shift
   done # }}}
   to_do=" $to_do "
-  source $RUNTIME_PATH/runtime.bash
   if ! $colors; then
     export colorsOn=false
-    unset $($BASH_PATH/colors --list)
+    unset $(color-list)
     CMsg=""
   fi
   [[ -e $TMP_PATH/.log-last.today ]] && source $TMP_PATH/.log-last.today
@@ -482,7 +484,7 @@ loglast() { # {{{
       ;; # }}}
     esac
     margin_s=$(( ( $startup_margin + $end_margin + $user_margin - $pause_margin ) * 60))
-    echorm "today=[$TODAY]" # DBG
+    echoe $verbose "today=[$TODAY]" # DBG
     local cmd=""
     if is_to_be_done 'first' || is_to_be_done 'today'; then # {{{
       cmd+=" | grep '^$TODAY'"
@@ -510,7 +512,7 @@ loglast() { # {{{
       is_to_be_done 'highlight' && cmd+=" | $ENV_SCRIPTS/grep-tools/hl-bash.sh +cY '$TODAY.*'"
     fi # }}}
     is_to_be_done 'clear-screen' && ! $isDbg && clear -x
-    echorm "[$to_do] [$to_do_extra]" # DBG
+    echoe $verbose "[$to_do] [$to_do_extra]" # DBG
     local d_cur=$(date +"%H:%M")
     if $paused; then
       [[ -z $paused_time ]] && paused_time=$d_cur
@@ -570,7 +572,7 @@ loglast() { # {{{
       printf -- "${CMsg}------------${COff}\n"
     fi # }}}
     if is_to_be_done 'logins'; then # {{{
-      echorm "cmd=[$(echo $cmd | tr '\n' ' ')]" # DBG
+      echoe $verbose "cmd=[$(echo $cmd | tr '\n' ' ')]" # DBG
       ! is_to_be_done 'nested' && is_to_be_done 'first' && printf "Start: ${CGold}"
       local str="$(eval $cmd)"
       printf "%s" "$str"
@@ -1323,7 +1325,7 @@ loglast() { # {{{
   mutex-deinit
   unset is_to_be_done
 } # }}}
-import-module actions mutex-locking dbg echor time-tools
+import-module actions mutex-locking dbg time-tools
 export -f loglast
 
 export DBG_ID=loglast

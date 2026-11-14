@@ -71,10 +71,10 @@ if declare -F compl-add >/dev/null 2>&1; then
 fi
 # }}}
 echoe() { # {{{
-  local module= cModule='[0;90m' cOff='[0m' addColor=
+  local module= cModule='[0;90m' cOff='[0m' addColor= convertColors=false echoP=
   case $1 in
-  false | 0) return 0;;
-  true  | 1) shift;;
+  false | 0 | !true)  return 0;;
+  true  | 1 | !false) shift;;
   esac
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -84,29 +84,38 @@ echoe() { # {{{
     -m)               module="$2"; shift;;
     -c)  addColor=true;;
     -nc) addColor=false;;
+    -C)  convertColors=true;;
+    -n)  echoP="-n";;
     --)  shift; break;;
     *) break;;
     esac; shift
   done # }}}
   [[ ! -z $1 ]] || { echo >&2; return 0; }
-  if [[ -z $module ]]; then # {{{
+  [[ -z $module ]] && module="$ECHOE_MODULE"
+  if [[ -z $module || $module == '--' ]]; then # {{{
     case $0 in
     bash | -bash) module=${BASH_SOURCE[1]##*/};;
     *)            module=${0##*/};;
     esac
+  elif [[ $module == '-' ]]; then
+    module=
   fi # }}}
+  if [[ -z $addColor ]]; then
+    [[ -t 1 ]] && addColor=true || addColor=false
+  fi
   if [[ ! -z $module ]]; then # {{{
     case $module in
     *.sh)   module=${module%.sh};;
     *.bash) module=${module%.bash};;
     esac
-    if [[ -z $addColor ]]; then
-      [[ -t 1 ]] && addColor=true || addColor=false
-    fi
     $addColor && module="$cModule$module$cOff"
     module+=": "
   fi # }}}
-  echo -e "$module$@" >&2
+  local str="$@"
+  if $convertColors; then
+    str="$(COLORS_ON=$addColor eval printfc "${@@Q}")"
+  fi
+  echo -e $echoP "$module$str" >&2
 } # }}}
 die() { # {{{
   local mode='exit' retVal=1 n=1 silent=false colorParam="-c" module=
@@ -133,6 +142,7 @@ die() { # {{{
     -s=!false)       silent=true;;
     -s=1 | -s=!0)    silent=true;;
     -s=0 | -s=!1)    silent=false;;
+    -m)              module="$2"; shift;;
     --plain)         colorParam="-nc";;
     *) break;;
     esac; shift
@@ -205,8 +215,8 @@ env-snapshot() { # @@:new # {{{
     local shopts=$(shopt -p dotglob extglob) opt=
     shopt -u dotglob
     shopt -s extglob
-    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
-      cp -r $ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
+    if [[ ! -z $ENV_SNAPSHOT_SRC && -e $ENV_SNAPSHOT_PRE.$ENV_SNAPSHOT_SRC/set && ! -e $ENV_SNAPSHOT/set ]]; then
+      cp -r $ENV_SNAPSHOT_PRE.$ENV_SNAPSHOT_SRC/* $ENV_SNAPSHOT/
       unset ENV_SNAPSHOT_SRC
     fi
     [[ -e $ENV_SNAPSHOT/set ]] || return 1
@@ -248,9 +258,10 @@ env-snapshot() { # @@:new # {{{
           -e '/^declare -[^ ]\? \(BASHRC_PROFILER\|BASHRC_DBG\|ENV_SNAPSHOT\)=/d' \
           -e '/^declare -[^ ]\? \(BASH\|FUNCNAME\|DIRSTACK\|DIRS\|LINENO\|LINES\|COLUMNS\|PIPESTATUS\|RANDOM\|ROWS\|SHELL\|SHLVL\|SRANDOM\)=/d' \
           -e '/^declare -[^ ]\? BASHRC_TRACE[^=]*=/d' \
+          -e '/^declare -[^ ]\? ECHOE_MODULE[^=]*=/d' \
           -e '/^declare -[^ ]\? RCSTUFF_\(BASHRC_INSTALLING\)=/d' \
           -e '/^declare -[^ ]\? READLINE_[^=]*=/d' \
-          -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\)[^=]*=/d' \
+          -e '/^declare -[^ ]\? PS1_\(CACHE\|COLOR\|LAST\|CONVERTER.*\|COLOR_OFF\|COLUMNS_MARGIN\|CURSOR_COLOR\|ENV_PWD\|SIGN_.*\|STATUS_KEEP_IT\|NESTED.*\)[^=]*=/d' \
           -e '/^declare -[^ ]\? BASH_PHISTORY_\(LAST\|TODAY\|TODAY_LINE\)=/d' \
           -e '/^declare -[^ ]\? SSH_\(CLIENT\|CONNECTION\)=/d' \
           -e '/^declare -[^ ]\? TMUX_POPUP[^=]*=/d' \
@@ -297,9 +308,10 @@ load-colors() { # {{{
     color-cache-init
   fi
 } # }}}
-if is-installed --no-cache compl-add; then # {{{
+if [[ -n $PS1 ]] && is-installed --no-cache compl-add; then # {{{
   compl-add --new is-installed env-snapshot
 fi # }}}
 alias SBF="source ~/.bashrc --force"
-export HISTIGNORE+=":is-installed:is-sourced:import-module:echoe"
+export HISTIGNORE+=":is-installed:is-sourced:import-module"
+export PHISTORY_IGNORED_COMMANDS+="echoe:die"
 export -f is-installed is-sourced import-module echoe die remove-dups env-snapshot load-colors
