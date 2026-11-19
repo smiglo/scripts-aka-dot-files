@@ -9,14 +9,14 @@ forced=false
 ask=true
 do_install=false
 currentTime=0
-import-module mutex-locking echor
+import-module mutex-locking
 # }}}
 # Functions # {{{
 do_update() { # {{{
   pwd=$PWD
   local i
   for i in $BASH_UPDATE_REPOS; do
-    [[ ! -e $i ]] && echor "Repository ($i) does not exist" && continue
+    [[ ! -e $i ]] && eval $(die -m "repo-update" -c "repository ($i) does not exist")
     cd $i
     git sync --interactive --skip-backup
   done
@@ -40,7 +40,7 @@ checkTime() { # {{{
     [[ -e $DATE_FILE ]] && lastMod="$(date +%Y%m%d -d @$(stat -c %Y $DATE_FILE))"
     [[ "$(date +%Y%m%d)" == "$lastMod" ]] && return 1
     if $ask; then
-      local msg="$(echor --colors=force -1 "Update repos [Yn]")"
+      local msg="$(echoe -c -m "repo-update" "Update repos [Yn]" 2>&1)"
       progress --wait 5s --key --no-err --msg "$msg" || return 1
     fi
   else
@@ -54,7 +54,7 @@ check() { # {{{
   [[ $BASH_UPDATE_TIME == 0 ]] && return 1
   [[ -z $BASH_UPDATE_REPOS ]] && return 1
   checkTime || return 1
-  echor "Environment auto-update"
+  echoe -m "repo-update" "Environment auto-update"
   net --wait=5s || return 1
   return 0
 } # }}}
@@ -65,7 +65,7 @@ start() { # {{{
   local key=$SETUP_UPDATER_KEY
   if [[ ! -n "$SSH_CLIENT" && ! -z $key ]]; then
     [[ $key == /* ]] || key="$HOME/.ssh/keys/$key"
-    [[ ! -e $key ]] && echor "Updater key not set" && return 1
+    [[ ! -e $key ]] && eval $(die -m "repo-update" "updater key not set")
     if ! ssh-add -l | grep $(ssh-keygen -lf $key | cut -d' ' -f2 ) >/dev/null; then
       ssh-add $key >/dev/null 2>&1
     fi
@@ -81,7 +81,6 @@ start() { # {{{
 } # }}}
 # }}}
 # MAIN # {{{
-echorm --name repo-update -M +
 while [[ ! -z $1 ]]; do
   case $1 in
   --force|-f) forced=true;;

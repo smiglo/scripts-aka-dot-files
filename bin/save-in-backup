@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
 _save-in-backup() { # @@ # {{{
   if [[ $1 == '@@' ]]; then # {{{
     echo "-s -d --dir -v -vv"
@@ -19,14 +18,14 @@ _save-in-backup() { # @@ # {{{
   done # }}}
   [[ -z $dir ]] && return 100
   if $SHARABLE_REAL && [[ ! -z $SHARABLE_PATH && $dir == $SHARABLE_PATH* ]]; then
-    ! ping -c1 -w1 8.8.8.8 >/dev/null 2>&1 && echormf "No connectivity" && return 10
-    [[ ! -e $SHARABLE_PATH/.mounted ]] && echormf "Not connected" && return 11
+    ! ping -c1 -w1 8.8.8.8 >/dev/null 2>&1 && eval $(die 10 "No connectivity")
+    [[ ! -e $SHARABLE_PATH/.mounted ]] && eval $(die 11 "Not connected")
     isRemote=true
   fi
   [[ -t 0 && -t 1 && -z $s && -z $d ]] && return 0
   if [[ -t 1 || $d != '-' ]]; then # {{{
     [[ -z $d && ! -z $s ]] && d="$dir/$(basename "$s")"
-    [[ -z $d ]] && echormf 0 "No dst file" && return 1
+    [[ -z $d ]] && eval $(die 1 "No dst file")
     [[ $d == '/'* || $d = './'* ]] || d="$dir/$d"
     if [[ ! -e "$(dirname "$d")" ]]; then
       mkdir -p "$(dirname "$d")" >/dev/null 2>&1 || return 2
@@ -36,7 +35,7 @@ _save-in-backup() { # @@ # {{{
   fi # }}}
   if [[ -z $s ]]; then # {{{
     [[ ! -t 0 ]] && s="-"
-    [[ -z $s ]] && echormf 0 "No src file" && return 1
+    [[ -z $s ]] && eval $(die 1 "No src file")
   fi # }}}
   local err=0 stderr='/dev/stderr'
   [[ $verbose -lt 2 ]] && stderr='/dev/null'
@@ -50,7 +49,7 @@ _save-in-backup() { # @@ # {{{
   else
     cat "$s"; err=$?
   fi 2>$stderr
-  [[ $err != 0 && $verbose -ge 1 ]] && echormf 0 "Cannot save (e:$err) file '$s' -> '$d'"
+  [[ $err != 0 && $verbose -ge 1 ]] && echoe "Cannot save (e:$err) file '$s' -> '$d'"
   return $err
 } # }}}
 _save-in-backup "$@"

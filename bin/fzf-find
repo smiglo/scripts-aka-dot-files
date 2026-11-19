@@ -14,11 +14,12 @@ correctDepth() { # {{{
   echo "$depth"
 } # }}}
 mode="all"
-checkGit=true
+checkGit=false
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   -d) mode="dirs";;
   --no-git) checkGit=false;;
+  --git) checkGit=true;;
   esac; shift
 done # }}}
 isGit=
@@ -33,16 +34,16 @@ if ${isGit:-false}; then # {{{
 fi # }}}
 
 depth="$(correctDepth "${FZF_MAX_DEPTH:-12}")"
-exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp" exclude="$CD_INTERACTIVE_EXCLUDE"
-if $IS_MAC || $IS_DOCKER; then # {{{
-  exclude_list+=" Applications Library"
-fi # }}}
+exclude_list="$CD_INTERACTIVE_EXCLUDE_LIST node_modules .venv* build tmp .git" exclude="$CD_INTERACTIVE_EXCLUDE"
 if $IS_VIRTUAL_OS; then # {{{
   exclude_list+=" host"
 fi # }}}
 for i in $exclude_list; do
   exclude+=" -E \"$i/*\" -E \"**/$i/*\""
 done
+if $IS_MAC || [[ $IS_DOCKER && -e "$HOST/Applications Library" ]] then # {{{
+  exclude+=" -E \"Applications\ Library/*\""
+fi # }}}
 case $mode in
 all)  eval fd -Ld $depth $($hidden && echo "--hidden") --no-ignore-vcs $exclude;;
 dirs) eval fd -Ld $depth $($hidden && echo "--hidden") --type d --type l --no-ignore-vcs $exclude;;

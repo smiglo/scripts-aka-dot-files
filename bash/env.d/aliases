@@ -303,9 +303,16 @@ if is-installed -w grc >/dev/null 2>&1; then # {{{
   unset grc_prgs grc_prgs_cols grc_cmd grc_i grc_ii grc_sudo grc_def grc_code grc_params
 fi # }}}
 
-is-installed -w rlwrap >/dev/null 2>&1 && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
-is-installed -w mc     >/dev/null 2>&1 && alias mc='mc -u'
-is-installed -w cal ncal >/dev/null 2>&1 && alias cal='ncal -M -b'
+is-installed -w rlwrap && alias rlwrap='rlwrap '"$RLWRAP_OPTS"
+is-installed -w mc     && alias mc='mc -u'
+if ! $IS_MAC; then
+  is-installed -w cal ncal && alias cal='ncal -M -b'
+else
+  if is-installed brew && [[ $(which cal 2>/dev/null) == $(brew --prefix)/* ]]; then
+    alias cal="cal -m"
+  fi
+fi
+
 # suspend / reboot / shutdown # {{{
 r_s_addCompl=false
 if $IS_WSL; then # {{{

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor time-tools
+import-module time-tools
 
 reminder() { # @@ # {{{
   if [[ $1 == @@ ]]; then # {{{
@@ -26,7 +26,7 @@ reminder() { # @@ # {{{
     return 0
   fi # }}}
   $IS_MAC && tool="$BASH_PATH/messages.sh"
-  type $tool >/dev/null 2>&1 || $silent || { echor "Notifier tool [$tool] not found"; return 1; }
+  type $tool >/dev/null 2>&1 || $silent || eval $(die "Notifier tool [$tool] not found")
   local i= j= no= tool='/usr/bin/notify-send' verbose=">/dev/null 2>&1" be_verbose=false silent=false addAtP=true pd= pt=
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -113,7 +113,7 @@ reminder() { # @@ # {{{
             [[ $newTs == *' :' ]] && newTs=${newTs% :}
             newTs="$(echo $newTs)"
           else
-            { $silent || echor "Ignored line: [$line]"; } && continue
+            { $silent || echoe "Ignored line: [$line]"; } && continue
           fi # }}}
           case ${newWhat^^} in # {{{
           P)  newWhat="pause.sh";;
@@ -127,7 +127,7 @@ reminder() { # @@ # {{{
           elif [[ " $newTs " =~ ([0-9][0-9]?:[0-9][0-9]?) ]]; then
             pt=$newTs
           else
-            { $silent || echor "cannot parse TS: [$newTs]"; } && continue
+            echoe !$silent "cannot parse TS: [$newTs]" && continue
           fi
           if [[ ! -z $pd ]]; then
             pd=${pd%.}
@@ -135,7 +135,7 @@ reminder() { # @@ # {{{
             [[ $pd =~ ^([0-9][0-9]?)\.([0-9][0-9]?)$ ]] && pd+=".$(date +%y)"
             [[ $pd =~ ^([0-9][0-9]?)\.([0-9][0-9]?)\.([0-9][0-9])$ ]] && pd=${BASH_REMATCH[3]}-${BASH_REMATCH[2]}-${BASH_REMATCH[1]}
           fi
-          reminder -s $newWhat $([[ ! -z $newMsg ]] && echo "'$newMsg'") "$pt $pd" || $silent || echor "Failed to add [$newWhat] at [$pt $pd]"
+          reminder -s $newWhat $([[ ! -z $newMsg ]] && echo "'$newMsg'") "$pt $pd" || $silent || echoe "Failed to add [$newWhat] at [$pt $pd]"
         done # }}}
         for i in ${!toRemove[*]}; do # {{{
           [[ ! -z ${toRemove[i]} ]] || continue
@@ -192,7 +192,7 @@ reminder() { # @@ # {{{
     ts="${@:$#:$#}"
     params="${@:2:$#-2}"
   fi
-  [[ ! -z $msg && ! -z $ts ]] || $silent || { echor "Argument missing [$@]"; return 1; }
+  [[ ! -z $msg && ! -z $ts ]] || $silent || eval $(die "Argument missing [$@]")
   time2s --is-hms "$ts" && ts="$(time2s $ts)"
   [[ " $ts " =~ .*\ ([0-9][0-9]?:[0-9][0-9]?(:[0-9][0-9]?)?)\ .* ]] && pt=${BASH_REMATCH[1]} && pd="$(echo ${ts/$pt})"
   if [[ ! -z $pd ]]; then
@@ -204,8 +204,7 @@ reminder() { # @@ # {{{
   [[ "$pt" == *:*:* ]] && pt="${pt%:*}"
   local tsAbs="$(time2s "$pd $pt" -o abs-s)"
   if [[ "$tsAbs" -le $((EPOCHSECONDS + 30)) ]]; then
-    $silent || echor "Scheduled time is before near-now, rejecting"
-    return 1
+    eval $(die -s=$silent "Scheduled time is before near-now, rejecting")
   fi
   if [[ ! -z "$REMINDER_PATH" && -e "$REMINDER_PATH/$msg" ]]; then
     msg="$REMINDER_PATH/$msg"
@@ -239,7 +238,7 @@ reminder() { # @@ # {{{
       at -c "$(at -l | sort -k1,1n | tail -n1 | awk '{print $1}')" | sed -n -e '/^\s*$/d' -e '/^\/home/,$ p' | sed 's/^/\t/'
     fi
   else
-    $silent || echor "Failed to schedule the reminder"
+    echoe !$silent "Failed to schedule the reminder"
   fi
   return $err
 } # }}}

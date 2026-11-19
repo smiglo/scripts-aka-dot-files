@@ -13,8 +13,8 @@
 # KEEP_PASS_GET_PARAMS
 # ----------------------------
 
-if ${KEEP_PASS_JOURNAL_USE_SHARED:-false} && [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARED_BASH_PATH && -e "$SHARED_BASH_PATH/keep-pass.journal" ]]; then
-  export KEEP_PASS_JOURNAL_SHARED="$SHARED_BASH_PATH/keep-pass.journal"
+if ${KEEP_PASS_JOURNAL_USE_SHARED:-false} && [[ -z $KEEP_PASS_JOURNAL_SHARED && ! -z $SHARABLE_PATH && -e "$SHARABLE_PATH/keep-pass.journal" ]]; then
+  export KEEP_PASS_JOURNAL_SHARED="$SHARABLE_PATH/keep-pass.journal"
 fi
 if [[ -z $KEEP_PASS_JOURNAL ]] && [[ -e "$APPS_CFG_PATH/keep-pass/keep-pass.journal" || -z $KEEP_PASS_JOURNAL_SHARED ]]; then
   export KEEP_PASS_JOURNAL="$APPS_CFG_PATH/keep-pass/keep-pass.journal"
@@ -109,7 +109,10 @@ if [[ $1 == '@@' ]]; then # {{{
     elif [[ " $@ " =~ \ (--)?(sync|sync-get|sync-put)\  ]]; then # {{{
       echo "---" # }}}
     elif [[ " $@ " =~ \ next-iter\  ]]; then # {{{
-      echo "PHRASE" # }}}
+      case $3 in
+      next-iter) echo "PHRASE";;
+      *) echo "STEPS";;
+      esac # }}}
     else # {{{
       if [[ $3 == *:* ]]; then
         echo "PHRASE"
@@ -317,6 +320,7 @@ setMasterKey() { # {{{
     echo "export KEEP_PASS_MASTER_KEY=\"$mkey\""
     return 0
   fi # }}}
+  [[ ! -e $KEEP_PASS_MASTER_KEY ]] || chmod +w $KEEP_PASS_MASTER_KEY
   echo "$mkey" >"$KEEP_PASS_MASTER_KEY"
   chmod 400 $KEEP_PASS_MASTER_KEY
   mkey="$(echo "$mkey" | sha1sum)"
@@ -458,7 +462,7 @@ getPass() { # {{{
   else # {{{
     words="$seq"
   fi # }}}
-  echo -n "$words"
+  echo "$words"
 } # }}}
 genEnvKey() { # {{{
   local pass= passKey= save_pass=false
@@ -768,47 +772,60 @@ genIOSLikePass() { # {{{
 } # }}}
 # }}}
 next-iter() { # {{{
-  local w="$1" wn=
+  local w="$1" steps=${2:-1}
   [[ -z $w && ! -t 0 ]] && w="$(</dev/stdin)"
   [[ -n $w ]] || eval $(die "no input")
-  local ssum=$(echo "$w" | sha256sum | cut -d' ' -f1) in= ot=
-  local -i len="${#w}" cnt=(len/2)+1 i=0 idx=0 offset=0 value=0 res= slen="${#ssum}"
-  dbg 1 "$w [$len] : $ssum"
-  local special="-=+@#%"
-  while ((cnt--)); do
-    idx=(idx + 16#${ssum:i:2})%len
-    in=${w:$idx:1} ot=
-    printf -v value '%d' "'$in"
-    i=(i+11)%slen
-    offset=16#${ssum:i:2}
-    i=(i+7)%slen
-    case $in in
-    -) ot="=";;
-    =) ot="-";;
-    [0-9]) res=(value - 48 + offset)%10+48;;
-    [a-z]) res=(value - 97 + offset)%26+97;;
-    [A-Z]) res=(value - 65 + offset)%26+65;;
-    *)
-      local -i j=0
-      while ((j<${#special} )) && [[ $in != ${special:$j:1} ]]; do j+=1; done
-      res=(j + offset)%${#special}
-      ot=${special:$res:1};;
-    esac
-    [[ -n $ot ]] || printf -v ot "\\$(printf '%03o' "$res")"
-    dbg 2 "w[$idx]: $in -> $ot ($value +$offset)"
-    wn="${w:0:$((idx))}$ot${w:$((idx+1))}"
-    dbg 3 "$w"
-    dbg 1 "$wn"
-    w="$wn"
+  local -i i=0 retry=3
+  for ((i=1; i<steps; ++i)); do
+    w="$(next-iter "$w")"
+    dbg 1 "w[$i] : $w"
+  done
+  local ssum=$(echo "$w" | sha256sum | cut -d' ' -f1)
+  local -i len="${#w}" i=0 slen="${#ssum}"
+  while true; do
+    local in= ot= wn="$w"
+    local -i idx=0 offset=0 value=0 res= cnt=(len/2)+1
+    dbg 2 "$wn [$len] : $ssum"
+    local special="-=+@#%"
+    while ((cnt--)); do
+      idx=(idx + 16#${ssum:i:2})%len
+      in=${wn:$idx:1} ot=
+      printf -v value '%d' "'$in"
+      i=(i+11)%slen
+      offset=16#${ssum:i:2}
+      i=(i+7)%slen
+      case $in in
+      -) ot="=";;
+      =) ot="-";;
+      [0-9]) res=(value - 48 + offset)%10+48;;
+      [a-z]) res=(value - 97 + offset)%26+97;;
+      [A-Z]) res=(value - 65 + offset)%26+65;;
+      *)
+        local -i j=0
+        while ((j<${#special} )) && [[ $in != ${special:$j:1} ]]; do j+=1; done
+        res=(j + offset)%${#special}
+        ot=${special:$res:1};;
+      esac
+      [[ -n $ot ]] || printf -v ot "\\$(printf '%03o' "$res")"
+      dbg 3 "wn[$idx]: $in -> $ot ($value +$offset)"
+      wn="${wn:0:$((idx))}$ot${wn:$((idx+1))}"
+      dbg 4 "$w"
+      dbg 2 "$wn"
+    done
+    ((retry)) || { dbg 0 "REPEAT"; break; }
+    [[ "$wn" != "$w" ]] && { w="$wn"; break; }
+    ssum=$(echo "$ssum" | sha256sum | cut -d' ' -f1)
+    ((i=(i+19)%slen, retry-=1))
+    dbg 1 "retrying"
   done
   echo "$w"
 } # }}}
 set -- $KEEP_PASS_PARAMS "$@"
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
-  -v)        verbose=1;;
-  -vv)       verbose=2;;
-  -vvv)      verbose=3;;
+  -v)   ((verbose+=1));;
+  -vv)  verbose=2;;
+  -vvv) verbose=3;;
   -j | --journal) journalMainFile="$2"; shift;;
   *)         break;;
   esac

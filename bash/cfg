@@ -65,6 +65,7 @@ if [[ ! -z $PS1 ]]; then
     bind    '"\C-k\C-r":  "'${pre}'\C-g reset\C-m"'
     bind    '"\C-l":      "'${pre}'\C-g clr\C-m"'
     bind -x '"\C-k\C-l":  "clr --hist"'
+    bind    '"\C-x\C-x":  "\C-g fg 2>/dev/null || true\C-m"'
   done
   unset i pre
   bind 'set editing-mode vi'
@@ -104,8 +105,13 @@ ${SET_TITLE_WINDOW_TITLE:-false} && [[ -n $STY || -n $TMUX ]] && export PROMPT_C
 
 export PS1_MODES=(usuper_full:usf super_full:sf default:d default_ssh:dshh short:s short_git:sg short_git_ssh:sgssh very_short:vs)
 
+PS1_CFG_USE_OSC133=${PS1_CFG_USE_OSC133:-true}
+export PS0=
+if $PS1_CFG_USE_OSC133; then
+  PS0+='\[\e]133;C\a\]'
+fi
 if [[ ! -z $EPOCHREALTIME ]]; then
-  export PS0='\[${PWD:$((PS0_time=${EPOCHREALTIME/[,.]}, 0)):0}\]'
+  PS0+='\[${PWD:$((PS0_time=${EPOCHREALTIME/[,.]}, 0)):0}\]'
 fi
 PS1_STATUS=
 if $IS_VSCODE; then # {{{
@@ -140,7 +146,6 @@ fi # }}}
 for profi in $BASH_PROFILES_FULL; do
   [[ -e $profi/cfg ]] && source $profi/cfg
 done
-export CD_LAST_DIRS_STORED="${CD_LAST_DIRS_STORED:1}"
 # }}}
 # Setup PROMPT_COMMAND # {{{
 export PROMPT_COMMAND="PS1_env --save; PS1_setter; $PROMPT_COMMAND; PS1_env --restore"

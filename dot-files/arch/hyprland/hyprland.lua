@@ -47,6 +47,7 @@ local mainMod = "SUPER"
 
 hl.on("hyprland.start", function ()
     hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
+    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
     hl.exec_cmd("/usr/bin/gnome-keyring-daemon --start --components=secrets,pkcs11")
     hl.exec_cmd("/usr/lib/hyprpolkitagent/hyprpolkitagent")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
@@ -261,7 +262,7 @@ hl.window_rule({
 
 hl.window_rule({
     match = { class = ".*" },
-    opacity = 0.92,
+    opacity = 1,
 })
 
 hl.window_rule({
@@ -317,3 +318,6 @@ hl.window_rule({
     pseudo = true,
     size = "800 600",
 })
+
+-- Added by hyprmoncfg: its generated monitor rules load last, so nothing before this can override the applied layout.
+do local path = os.getenv("HOME") .. "/.config/hypr/hyprmoncfg-monitors.lua"; local file = io.open(path, "r"); if file then file:close(); dofile(path) end end

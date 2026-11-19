@@ -82,28 +82,31 @@ check-repo() { # {{{
     local cur_branch="$(git branch | grep "^\*" | cut -c3-)"
     local b=
     for b in $(git branch | cut -c3-); do # {{{
-      if [[ $b == "$cur_branch" || $b == 'master' ]] && ( ! git branch -a | grep -q $r/$b || [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b)" ]] ); then
-        is_change=true
-        if [[ $change_label != *BACKUP* ]]; then
-          [[ ! -z $change_label ]] && change_label+="|"
-          change_label+="BACKUP"
-        fi
-        if ! git branch -a | grep -q $r/$b; then # {{{
-          if $check_new_branches; then
-            if [[ $change_label != *NEW* ]]; then
-              [[ ! -z $change_label ]] && change_label+="|"
-              change_label+="NEW($b)"
+      case $b in
+      $cur_branch | master | main | trunk) # {{{
+        if ( ! git branch -a | grep -q $r/$b || [[ "$(git rev-parse $b)" != "$(git rev-parse $r/$b)" ]] ); then
+          is_change=true
+          if [[ $change_label != *BACKUP* ]]; then
+            [[ ! -z $change_label ]] && change_label+="|"
+            change_label+="BACKUP"
+          fi
+          if ! git branch -a | grep -q $r/$b; then # {{{
+            if $check_new_branches; then
+              if [[ $change_label != *NEW* ]]; then
+                [[ ! -z $change_label ]] && change_label+="|"
+                change_label+="NEW($b)"
+              fi
             fi
-          fi
-          # }}}
-        elif $display_status; then # {{{
-          if $display_full; then
-            commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}..${CGold}${b}${COff}\ngit lgf $r/$b~..$b"
-          else
-            commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}: $(($(git lgf $r/$b..$b | wc -l)+1)) commit(s) ahead"
-          fi
-        fi # }}}
-      fi
+            # }}}
+          elif $display_status; then # {{{
+            if $display_full; then
+              commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}..${CGold}${b}${COff}\ngit lgf $r/$b~..$b"
+            else
+              commands+="\necho Changes: $CGreen$r$COff/${CGold}${b}${COff}: $(($(git lgf $r/$b..$b | wc -l)+1)) commit(s) ahead"
+            fi
+          fi # }}}
+        fi;; # }}}
+    esac
     done # }}}
   done # }}}
   if $is_change; then # {{{
@@ -216,8 +219,11 @@ backup() { # {{{
           continue
         fi
       fi # }}}
-      local ex_params=
-      [[ "$(git branch | grep "^\*" | cut -c3-)" != 'master' ]] && ex_params="$param_force"
+      local ex_params= cur_branch="$(git branch | grep "^\*" | cut -c3-)"
+      case $cur_branch in
+      main | master | trunk);;
+      *) ex_params="$param_force";;
+      esac
       case $r in
       origin|_backup*|local|tom) # {{{
         if ! $verbose; then
@@ -293,5 +299,3 @@ gitst) # {{{
   done
   $clean || exit 1;; # }}}
 esac
-
-

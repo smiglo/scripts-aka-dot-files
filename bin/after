@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+if [[ $1 == '@@' ]]; then # {{{
+  case $3 in
+  -d | --delay) echo "1 30 1m 5m 1h";;
+  --pane) echo "PANE";;
+  --pid) echo "PID";;
+  *) compl-get-args <$0;;
+  esac
+  exit 0
+fi # }}}
+
+get-pid-from-pane() { # {{{
+  local pane=$1 pid=
+  local pidPane="$(tmux display-message -t "$pane" -pF '#{pane_pid}')"
+  [[ -n $pidPane ]] || eval $(die -s=$silent -r "cannot get pid for '$pane'")
+  if $IS_MAC; then
+    pid="$(pgrep -P $pidPane | head -n1)"
+  else
+    pid="$(ps -g $pidPane -o "pid=" | sed -n 2p)"
+  fi
+  [[ -n $pid ]] || eval $(die -s=$silent -r "cannot get child process of $pidPane in '$pane'")
+  echo "$pid"
+} # }}}
+
+import-module time-tools
+
+pid=
+delay=1
+mustExist=false
+silent=true
+while [[ ! -z $1 ]]; do # {{{
+  case $1 in
+  -d | --delay) # {{{
+    delay=$2;
+    shift;; # }}}
+  --must-exist) # {{{
+    mustExist=true;; # }}}
+  --get-pid) # {{{
+    get-pid-from-pane ${2:-.1} || exit 1
+    exit 0;; # }}}
+  --pane) # {{{
+    pid=$(get-pid-from-pane $2) || pid=-1
+    shift;; # }}}
+  --pid) # {{{
+    pid="$2"; shift;; # }}}
+  -v) # {{{
+    silent=false;; # }}}
+  *) # {{{
+    [[ -z $pid ]] || break
+    pid=$(get-pid-from-pane $1) || pid=-1;; # }}}
+  esac; shift
+done # }}}
+delay=$(time2s $delay -o s)
+
+(( pid > 0 )) || ! $mustExist || exit 1
+if [[ -n $pid ]] && (( pid > 0 )); then # {{{
+  if $IS_MAC; then
+    pidCmd="ps xa -o pid= | grep -q '^\s*${pid}$'"
+  else
+    pidCmd="pgrep --quiet -p $pid"
+  fi
+  while eval "$pidCmd" >/dev/null 2>&1; do
+    sleep $delay
+  done
+fi # }}}
+
+(( $# )) || exit 0
+exec "$@"

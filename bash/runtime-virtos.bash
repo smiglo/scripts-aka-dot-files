@@ -12,7 +12,7 @@ if $IS_DOCKER; then # {{{
   export BASH_PHISTORY_FILE=$RUNTIME_PATH/phistory.no-git
   if $BASHRC_FULL_START; then # {{{
     [[ -e $HOME/.ssh ]] || mkdir -p $HOME/.ssh >/dev/null
-    [[ ! -e /home/host/.ssh/authorized_keys || -e $HOME/.ssh/authorized_keys ]] || ln -sf /home/host/.ssh/authorized_keys $HOME/.ssh/
+    [[ ! -e $HOST/.ssh/authorized_keys || -e $HOME/.ssh/authorized_keys ]] || ln -sf $HOST/.ssh/authorized_keys $HOME/.ssh/
     if [[ ! -s $KEEP_PASS_MASTER_KEY ]] && ${KEEP_PASS_MASTER_KEY_SET:-false}; then # {{{
       keep-pass --set-master-key
     fi # }}}
@@ -26,9 +26,9 @@ elif $IS_WSL; then # {{{
   :
 fi # }}}
 if $BASHRC_FULL_START; then # {{{
-  if [[ -e /home/host ]]; then
+  if [[ -e $HOST ]]; then
     for i in $bindList; do
-      s="/home/host/$i" d=$i
+      s="$HOST/$i" d=$i
       [[ $i == *:* ]] && s=${i%%:*} && d=${i#*:}
       [[ -e $s && ! -e $HOME/$d ]] || continue
       if [[ $d == */* ]]; then
@@ -38,7 +38,7 @@ if $BASHRC_FULL_START; then # {{{
     done
     unset i s d
   else
-    echoe -s "/home/host not exist"
+    echoe -s "$HOST not exist"
   fi
 fi # }}}
 unset bindList

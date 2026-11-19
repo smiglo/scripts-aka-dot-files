@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# vim: fdl=0
+
+declare -A confFiles=(
+  [shared]="$SHARABLE_PATH/.gd-sync.conf"
+  [global]="$APPS_CFG_PATH/gd-sync.conf"
+  [local]="./.gd-sync.conf"
+)
+confFile="${confFiles[global]}"
+[[ -e ${confFiles[local]} ]] && confFile="${confFiles[local]}"
+file=
+remotePath=
+verbose=1
+gdDir=
+
+conf-load() { # {{{
+  declare -Ag gdFile=()
+  declare -A sourced=()
+  local k= confF= confOrder="$1"
+  if [[ -z $confOrder ]]; then
+    if [[ -e ${confFiles[local]} ]]; then
+      confOrder="local"
+    else
+      confOrder="shared global"
+    fi
+  fi
+  confOrder+=" FILE-DIR"
+  if [[ -e ${confFiles[local]} ]]; then
+    confOrder="local FILE-DIR"
+  fi
+  local gdsyncInLocal=false
+  for k in $confOrder; do
+    case $k in
+    FILE-DIR)
+      [[ -n $file ]] || continue
+      confF="$(realpath "$(dirname "$file")/${confFiles[local]}")";;
+    *)
+      confF="$(realpath "${confFiles[$k]}")";;
+    esac
+    [[ -e $confF ]] || continue
+    if [[ $k == local ]]; then
+      gdsyncInLocal="$( declare -A gdFile=(); source $confF; [[ -v gdFile[.gd-sync.conf] ]] && echo true || echo false)"
+    fi
+    [[ -v sourced[$confF] ]] && continue
+    sourced[$confF]=
+    source $confF
+  done
+  if ! $gdsyncInLocal; then
+    unset gdFile[.gd-sync.conf]
+  fi
+} # }}}
+get-remote-location() { # {{{
+  local key="${1##*/}"
+  [[ -n $key ]] || return 1
+  local remotePath="${gdFile[$key]}"
+  if [[ -z $remotePath && -n $gdDir ]]; then
+    remotePath="${gdDir%/}/"
+  fi
+  if [[ -z $remotePath && -n $GDSYNC_DEFAULT_REMOTE ]]; then
+    remotePath="${GDSYNC_DEFAULT_REMOTE%/}/"
+  fi
+  [[ -n $remotePath ]] || return 1
+  [[ $remotePath == */ ]] && remotePath+="$key"
+  echo "$remotePath"
+} # }}}
+
+conf-load
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  --add)
+    echo "@@-f";;
+  -f | --file)
+    echo "@@-f";;
+  get)
+    if [[ ! -z $GDSYNC_DEFAULT_REMOTE ]]; then
+      rclone lsjson ${GDSYNC_DEFAULT_REMOTE%/}/ | jq -r '.[] | select(.IsDir == false) | .Name'
+    fi
+    if [[ -z $gdDir ]]; then
+      echo "${!gdFile[@]}"
+    else
+      rclone lsjson $gdDir | jq -r '.[] | select(.IsDir == false) | .Name'
+    fi;;
+  cmp | \
+  --get-remote-for)
+    echo "@@-f";;
+  put)
+    if [[ -z $gdDir ]]; then
+      ret="$(for i in ${!gdFile[@]}; do [[ -e $i ]] && echo "$i"; done)"
+    else
+      ret="@@-f"
+    fi
+    echo "${ret:----}";;
+  -r | --remote)
+    rclone listremotes;;
+  *)
+    prev="${@: -2}"
+    case ${prev%% *} in
+    --add)
+      rclone listremotes;;
+    *)
+      compl-get-args <$0;;
+    esac
+  esac
+  exit 0
+fi # }}}
+
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -s) verbose=0;;
+  -v) ((verbose+=1));;
+  --shared) confFile="${confFiles[shared]}";;
+  --global) confFile="${confFiles[global]}";;
+  --local)  confFile="${confFiles[local]}";;
+  --get-remote-for) # {{{
+    get-remote-location ${file:-$2} || exit 1
+    exit 0;; # }}}
+  --add) # {{{
+    [[ -z $file ]] && file="$2" && shift
+    [[ -z $remotePath ]] && remotePath="$2" && shift
+    [[ -n $file && -n $remotePath ]] || die -s=!$((verbose>=1)) "wrong arguments: [$file] / [$remotePath]"
+    key="${file##*/}"
+    [[ $remotePath == */ ]] && remotePath+="$key"
+    [[ -e $confFile ]] && sed -i '/^gdFile\['"$key"'\]=/d' $confFile
+    echo "gdFile[$key]=\"$remotePath\"">>$confFile;; # }}}
+  -f | --file) # {{{
+    file="$2"; shift;; # }}}
+  -r | --remote) # {{{
+    remotePath="$2"; shift;; # }}}
+  *) # {{{
+    if [[ -z $file ]]; then # {{{
+      file="$2"; shift
+      [[ -z $file ]] && file="$(for i in ${!gdFile[@]}; do [[ -e $i ]] && echo "$i"; done | fzf -1 -0)"
+      [[ -n $file ]] || die -s=!$((verbose>=1)) "file is missing"
+    fi # }}}
+    conf-load
+    if [[ -z $remotePath ]]; then # {{{
+      remotePath=$(get-remote-location "$file")
+      [[ -n $remotePath ]] || die -s=!$((verbose>=1)) "cannot find entry for $file"
+    fi # }}}
+    [[ $remotePath == */ ]] && remotePath+="${file##*/}"
+    ;;& # }}}
+  cmp) # {{{
+    if [[ ! -e $file ]]; then
+      rclone copyto $remotePath $file
+      echoe $((verbose>=1)) "retrieved"
+    else
+      fRemote="$file.tmp"
+      [[ -e $fRemote ]] && rm -f "$fRemote"
+      rclone copyto $remotePath $fRemote
+      [[ -e $fRemote ]] || die -s=!$((verbose>0)) "cannot retrieve $file from $remotePath"
+      if ! diff -q $file $fRemote; then
+        sum="$(sha1sum $fRemote)"
+        if vimdiff $file $fRemote && [[ "$(sha1sum $fRemote)" != "$sum" ]]; then
+          rclone copyto $fRemote $remotePath
+        fi
+      else
+        echoe $((verbose>=1)) "the same"
+      fi
+      rm -f $fRemote
+    fi
+    file= remotePath=;; # }}}
+  get) # {{{
+    echoe $((verbose>=2)) "rclone copyto $remotePath $file"
+    rclone copyto $remotePath $file
+    file= remotePath=;; # }}}
+  put) # {{{
+    echoe $((verbose>=2)) "rclone copyto $file $remotePath"
+    rclone copyto $file $remotePath
+    file= remotePath=;; # }}}
+  *) # {{{
+    die -s=!$((verbose>=1)) "unknown mode: $1";; # }}}
+  esac; shift || true
+done # }}}

@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
 # vim: fdl=0
 
-import-module echor
-
 _share() { # @@ # {{{
-  local share_path="$SHARE_PATH"
-  if [[ -z $share_path ]]; then
-    if [[ ! -z $SHARABLE_PATH && -e $SHARABLE_PATH ]]; then
-      share_path="$SHARABLE_PATH/shares"
-    else
-      share_path="$APPS_CFG_PATH/shares"
-    fi
-  fi
+  local share_path="$SHARABLE_PATH/shares"
   local mode=list
   if [[ ! -t 0 ]]; then
     mode=put
@@ -38,9 +29,8 @@ _share() { # @@ # {{{
     esac
     return 0
   fi # }}}
-  echormf -M +?
   local direct=false clean=false copyMode=cp cfgFile=".shr.cfg" short=true dry= i=
-  local name= toInclude= toExclude fName=
+  local name= toInclude= toExclude fName= dbgLvl=0
   local rsyncP="-ahtpH --no-whole-file --modify-window=2 --no-v --no-progress --info=progress2"
   while [[ ! -z $1 ]]; do # {{{
     case $1 in
@@ -60,6 +50,7 @@ _share() { # @@ # {{{
     -i | --include) toInclude+=" $2"; shift;;
     -e | --exclude) toExclude+=" $2"; shift;;
     -N)       dry=echo;;
+    -v)       dbgLvl=1;;
     -)        direct=true;;
     --)       direct=true; clean=true;;
     -n)       name=$2; shift;;
@@ -74,17 +65,17 @@ _share() { # @@ # {{{
   if [[ -z $name ]]; then # {{{
     if [[ ! -z $nameStored ]]; then
       name="$nameStored"
-      echormf 1 "Using stored share: $name"
+      echoe $dbgLvl "Using stored share: $name"
     else
       case $mode in
       put) # {{{
         [[ -z $name ]] && name="$(date +$DATE_FMT)";; # }}}
       get | list | vim | cd | edit-cfg) # {{{
         [[ -z $name ]] && name=$(get-file-list --pwd $share_path -t -1 '*')
-        [[ -z $name ]] && echor "No shares are present" && return 1
+        [[ -z $name ]] && eval $(die "No shares are present")
         ;; # }}}
       esac
-      echormf 1 "Using auto-detected share: $name"
+      echoe $dbgLvl "Using auto-detected share: $name"
     fi
   fi # }}}
   [[ -z $fName ]] && fName=$share_path/$name
@@ -138,7 +129,7 @@ _share() { # @@ # {{{
           in="$(echo -e "$out")"
         fi # }}}
       fi # }}}
-      [[ -z $in ]] && echor "No input" && return 0;; # }}}
+      [[ -z $in ]] && eval $(die "No input");; # }}}
     esac
     if $direct; then # {{{
       fName+="/notes.txt"
@@ -157,14 +148,14 @@ _share() { # @@ # {{{
       local list= cnt=0
       while read i; do
         [[ -z $i ]] && continue
-        [[ ! -e $i ]] && echor "Src: [$i] not exists, skipping" && continue
+        [[ ! -e $i ]] && eval $(die -c "Src: [$i] not exists, skipping")
         list+="$i "
         cnt=$((cnt+1))
       done < <(echo "$in" | sort -f)
-      [[ -z $list ]] && echor "Nothing to put" && return 1
-      echormf 1 "To put: $(echo $list | sort -f | tr '\n' ' ')"
+      [[ -z $list ]] && eval $(die "Nothing to put")
+      echoe $dbgLvl "To put: $(echo $list | sort -f | tr '\n' ' ')"
       if [[ $cnt -gt 15 ]]; then
-        progress --wait 10s --key --msg "$(echor -1 "Copy all $cnt files?")" </dev/tty || return 0
+        progress --wait 10s --key --msg "$(echoe -f "Copy all $cnt files?" 2>&1)" </dev/tty || return 0
       fi
       case $copyMode in
       cp)    $dry cp -a --parents $list $fName/;;
@@ -173,7 +164,7 @@ _share() { # @@ # {{{
     fi # }}}
     ;; # }}}
   get | list) # {{{
-    [[ ! -e $fName ]] && echor "Src: [$name] not exists" && return 1
+    [[ ! -e $fName ]] && eval $(die "Src: [$name] not exists")
     case $mode in
     list) # {{{
       find $fName -path '*/*.git' -prune -o -type f | { if $short; then sed 's|.*/'$(basename $fName)'/||'; else cat -; fi; } | sort -f
@@ -184,7 +175,7 @@ _share() { # @@ # {{{
       (
         cd $fName
         local list="$(find . -path './*.git' -prune -o -print | cut -c3- )"
-        echormf 1 "To get: $(echo "$list" | sort -f | tr '\n' ' ' | sed 's/^ *//')"
+        echoe $dbgLvl "To get: $(echo "$list" | sort -f | tr '\n' ' ' | sed 's/^ *//')"
         case $copyMode in
         cp)    $dry cp -a --parents $list $p/;;
         rsync) $dry rsync $rsyncP $list $p/;;
@@ -208,4 +199,3 @@ _share() { # @@ # {{{
   return 0
 } # }}}
 _share "$@"
-

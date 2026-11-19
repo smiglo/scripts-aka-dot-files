@@ -118,4 +118,3 @@ h = os.getenv("GDB_DB_O_VAR")
 if h:
   gdb.execute("dashboard variables -output /dev/pts/" + h)
 end
-

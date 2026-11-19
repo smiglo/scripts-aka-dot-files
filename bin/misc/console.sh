@@ -59,6 +59,7 @@ if [[ -z $port ]]; then # {{{
   if [[ -n $STB_TTY ]]; then port="$STB_TTY"
   elif [[ -n $DEV_USB_SERIAL ]]; then  port="$(get-file-list -1 "$DEV_USB_SERIAL")"
   fi
+  [[ -e $port ]] || { echoe "default port '$port' not found', looking for other"; port=""; }
   if [[ -z $port ]]; then # {{{
     if $IS_MAC; then
       port="$(get-file-list -1 '/dev/tty.usbserial*')"

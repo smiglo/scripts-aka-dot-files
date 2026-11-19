@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+remoteF="${VIM_REMOTE_FILES:-$APPS_CFG_PATH/stb/vim-remotes}"
+
+# API
+set-src() { # {{{
+  echo
+} # }}}
+compl-src() { # {{{
+  echo "HOST"
+} # }}}
+check-ping() { # {{{
+  return 0
+} # }}}
+
+pluginF=$($BASH_PATH/env-ext.sh get-plugins vim-remote | tail -n1)
+[[ -e $pluginF ]] && source $pluginF
+
+src="$(set-src)"
+
+if [[ $1 == '@@' ]]; then # @@:new # {{{
+  case $2 in
+  -s | --src) compl-src;;
+  --edit-f) echo "---";;
+  -f | --file)
+    [[ $@ =~ (-s|--src)\ ([^ ]+)\ ? ]] && src=${BASH_REMATCH[1]}
+    path="${cur:-/}"
+    ssh -o 'Batchmode yes' $src command ls -aF1d "$path*" 2>/dev/null;;
+  *)
+    echo "-s --src --edit-f -f --file"
+    if [[ -e $remoteF ]]; then
+      source $remoteF
+      echo "${!remoteFiles[*]}"
+    fi;;
+  esac
+  exit 0
+fi # }}}
+
+args=()
+while [[ -n $1 ]]; do # {{{
+  case $1 in
+  -s | --src) src="$2"; shift;;
+  -f | --file) args+=( $2 ); shift;;
+  --edit-f)
+    vim $remoteF
+    exit 0;;
+  *) args=( "$@" ); break;;
+  esac; shift
+done # }}}
+
+(( ${#args[@]} )) || die "no files to open"
+
+[[ -n $src ]] || die "src not set"
+check-ping "$src" || die "no ping to $src"
+
+declare -A remoteFiles=()
+[[ -e $remoteF ]] && source $remoteF
+
+now=$EPOCHSECONDS
+for i in ${!args[*]}; do # {{{
+  if [[ ! -v remoteFiles[${args[$i]}] || -n ${remoteFiles[${args[$i]}]} ]]; then
+    remoteFiles[${args[$i]}]=$now
+  fi
+  args[i]="scp://$src/${args[i]}"
+done # }}}
+
+(
+  echo "declare -A remoteFiles=()"
+  for i in ${!remoteFiles[*]}; do
+    echo "${remoteFiles[$i]:-0} remoteFiles[$i]=${remoteFiles[$i]}"
+  done \
+  | sort -k1,1nr \
+  | awk -v n=${VIM_REMOTE_LAST_N:-15} '$1 > 0 { if (++c <= n) print } $1 == 0 { print }' \
+  | cut -d' ' -f2- \
+  | sort
+) >$remoteF
+
+vim "${args[@]}"

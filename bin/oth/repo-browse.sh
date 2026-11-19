@@ -107,10 +107,10 @@ _repo-browse() { # @@ # {{{
     if ! $addMaster; then
       if $clean || ! $allDirty; then
         case $br in
-        master) [[ $i != tmp/* && $i != tb-* ]] && continue;;
+        master | main | trunk) [[ $i != tmp/* && $i != tb-* ]] && continue;;
         devel | next | origin/* | HEAD) continue;;
         tb/mods) $clean && continue;;
-        *) [[ "$br" =~ master(~[0-9]*)? || ( ! -z $REPO_BROWSE_MASTER_BRANCH && "$br" =~ $REPO_BROWSE_MASTER_BRANCH ) ]] && continue;;
+        *) [[ "$br" =~ (master|main|trunk)(~[0-9]*)? || ( ! -z $REPO_BROWSE_MASTER_BRANCH && "$br" =~ $REPO_BROWSE_MASTER_BRANCH ) ]] && continue;;
         esac
       fi
     fi
@@ -135,4 +135,3 @@ _repo-browse() { # @@ # {{{
   unset git_preview
 } # }}}
 _repo-browse "$@"
-

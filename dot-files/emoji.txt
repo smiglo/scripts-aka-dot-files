@@ -1,0 +1,81 @@
+➙ :arrow:
+✗ :nok:
+✓ :ok:
+🗴 :nok2:
+🗸 :ok2:
+❢ :excl:
+
+🙃 :upside:
+😃 :smile:
+🤪 :freak:
+😊 :smile:
+😁 :smile:
+😅 :smile:
+😂 :rotfl:
+🤣 :rotfl:
+🤯 :blow:
+🥳 :party:
+🫣 :hide:
+😉 :wink: mrug
+🙄 :hmm:
+🤩 :star-eyes:
+🤗 :happy:
+😍 :love:
+🥰 :love:
+😘 :cmok:
+😡 :angry:
+🥵 :sweat:
+😢 :cry:
+😳 :dont-know: hmm
+😱 :scream:
+🤓 :nerd:
+🤠 :cowboy:
+🥸 :nerd:
+🧐 :hmm:
+😎 :sun-glasses:
+🫪" :hmm:
+
+🤦 :facepalm:
+🤷 :dont-know:
+🤞 :fingers-crossed:
+👏 :klaszczenie:
+👍 :ok:
+🫵 :finger:
+👋 :wave:
+💪 :sila:
+
+🎉 :party:
+🏦 :bank:
+💸 :money-fly:
+🔥 :fire: wazne
+👀 :looking:
+🍄 :amanita:
+🌸 :flower:
+💐 :flower:
+⭐️ :star:
+🍿 :popcorn:
+🍺 :beer:
+🍻 :beer:
+🍷 :wine:
+🍾 :champagne:
+🚀 :rocket:
+🛸 :ufo:
+🌋 :vulcan:
+🏖️  :holiday:
+🏝️  :holiday:
+⏳ :time:
+🔋 :battery:
+🪫 :battery:
+💊 :pill:
+🎁 :gift:
+💛 :heart:
+🏡 :home:
+⚛  :high-cpu:
+☢  :radio-active:
+
+❌ :not:
+💯 :100:
+❗️ :red-excl:
+❓ :red-?:
+✅ :done:
+💤 :wait:

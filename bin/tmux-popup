@@ -6,7 +6,8 @@ popupPath="${TMUX_POPUP_PATH:-$APPS_CFG_PATH/tmux/popup}"
 if [[ $1 == '@@' ]]; then # {{{
   case $3 in
   --title) echo "TITLE";;
-  *) echo "-E -EE -e -t --title -c CMD --no-wait --no-show"
+  --src) echo "@@-d";;
+  *) echo "-E -EE -e -t --title -c CMD --no-wait --no-show --src"
     declare -A TMUX_POPUP_CMD
     [[ -e $popupPath/.cmds ]] && source $popupPath/.cmds
     echo "n r ${!TMUX_POPUP_CMD[*]}";;
@@ -17,14 +18,13 @@ fi # }}}
 [[ -n $TMUX ]] || exit 1
 [[ $TMUX_VERSION -gt 30 ]] || die "tmux >= 3.0 is required (vs $(tmux -V))"
 
-import-module echor
-
 [[ -e $popupPath ]] || mkdir -p $popupPath >/dev/null
-tp=$TMUX_PANE cmd= params= silent=false showCmd=true name= addWait= isInteractive=true
+tp=$TMUX_PANE cmd= params= silent=false showCmd=true name= addWait= isInteractive=true srcDir=
 while [[ ! -z $1 ]]; do # {{{
   case $1 in
   -E) params="$1"; addWait=false;;
   -EE | -e) params="$1";;
+  --src) srcDir="$2"; shift;;
   --no-i) isInteractive=false;;
   -t) tp=$2; shift;;
   -c) shift; cmd="${@:-help}"; shift $#;;
@@ -54,8 +54,7 @@ if [[ ! -z $cmd ]]; then # {{{
     showCmd=false
     params="-EE"
     declare -p TMUX_POPUP_CMD >$TMP_MEM_PATH/tmux-popup.sh
-    cat >>$TMP_MEM_PATH/tmux-popup.sh <<'EOF'
-import-module echor
+    cat <<'EOF' >>$TMP_MEM_PATH/tmux-popup.sh
 err=0
 addWait=false
 waitTimeout="-t5"
@@ -74,7 +73,7 @@ elif [[ $c =~ " # ".*@W ]]; then addWait=true
 fi
 c="${c%% # *}"
 eval "$c" || exit 1
-waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s -n1 $waitTimeout; }"
+waitCmd="{ echo; echoe -m popup -n \"press a key...\"; read -s -n1 $waitTimeout; }"
 $addWait && eval $waitCmd
 exit 0
 EOF
@@ -109,17 +108,17 @@ EOF
   if false; then :
   elif [[ $c =~ " # ".*@NC ]]; then showCmd=false
   fi
-  waitCmd="{ echo; echorm --name popup -n 0 \"press a key...\"; read -s -n1 $waitTimeout; }"
+  waitCmd="{ echo; echoe -m popup -n \"press a key...\"; read -s -n1 $waitTimeout; }"
   c="${c%% # *}"
   cmd="$shell -i"
   cmd+=" -c '"
   case $showCmd in
-  true) cmd+="(echorm --name popup 0 \"${c//\"/\\\"}\"; echo; );";;
+  true) cmd+="(echoe -m popup \"${c//\"/\\\"}\"; echo; );";;
   false) ;;
-  *) cmd+="(echorm --name popup 0 \"${showCmd//\"/\\\"}\"; echo; );";;
+  *) cmd+="(echoe -m popup \"${showCmd//\"/\\\"}\"; echo; );";;
   esac
   cmd+=" $c; err=\$?;"
-  cmd+=" (( \$err == 0 || \$err == 255 )) || { ( echorm --name popup 0 \"\$(cl err fail)\" ); };"
+  cmd+=" (( \$err == 0 || \$err == 255 )) || { ( echoe -m popup \"\$(cl err fail)\" ); };"
   $addWait && cmd+=" (( \$err == 0 )) && $waitCmd;"
   cmd+=" (( \$err == 0 || \$err == 255 ));"
   cmd+="'"
@@ -130,18 +129,22 @@ else
   [[ -z $params ]] && params="-E"
 fi # }}}
 [[ $params == '-e' ]] && params=
-p="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
+[[ -n $srcDir ]] || srcDir="$(tmux display-message -t $tp -p -F '#{pane_current_path}')"
 d="$popupPath/mem"
 mkdir -p $TMP_MEM_PATH/${popupPath//\//-} >/dev/null
 [[ -e $d ]] || ln -sf $TMP_MEM_PATH/${popupPath//\//-} $d
 [[ -e $popupPath/notes.txt ]] || touch $popupPath/notes.txt
 [[ -e $d/notes.txt ]] || ln -sf $popupPath/notes.txt $d/notes.txt
 env_src="$(tmux display-message -p -t $tp -F '#{pid}.#{s/^\$//:#{session_id}}.#{window_id}')"
-tmux display-popup -t $tp $params -d "$p" -w 75% -h 75% -T " ${name:-popup} " \
+tmux display-popup -t $tp $params -d "$srcDir" -w 75% -h 75% -T " ${name:-popup} " \
   -e "TMUX_POPUP=true" \
   -e "TMUX_POPUP_SILENT=$silent" \
+  -e "ENV_SNAPSHOT_SRC=$env_src" \
   -e "DISPLAY=$DISPLAY" \
-  -e "s=$p" \
+  -e PS1_CFG_ADD_GIT=true \
+  -e PS1_CFG_ADD_SPLIT=false \
+  -e PS1_CFG_ADD_TIME_CURRENT=false \
+  -e "s=$srcDir" \
   -e "d=$d" \
   -e "spane=$TMUX_PANE" \
   "$cmd"
